@@ -23,7 +23,10 @@ export const createPool = () => {
         password,
         database: database || "postgres",
         max: 10,
-        connectionTimeoutMillis: 15000,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 20000,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
       });
     } else {
       const databaseUrl = process.env.DATABASE_URL || process.env.SQL_DATABASE_URL;
@@ -34,18 +37,21 @@ export const createPool = () => {
           connectionString: databaseUrl,
           ssl: isLocal ? false : { rejectUnauthorized: false },
           max: 10,
-          connectionTimeoutMillis: 15000,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 20000,
+          keepAlive: true,
+          keepAliveInitialDelayMillis: 10000,
         });
       } else {
         console.warn("[Database] Both SQL_HOST and DATABASE_URL are missing.");
         global._postgresPool = new Pool({
-          connectionTimeoutMillis: 5000,
+          connectionTimeoutMillis: 10000,
         });
       }
     }
 
     global._postgresPool.on("error", (err) => {
-      console.error("Unexpected error on idle SQL pool client:", err);
+      console.warn("[Database] Recoverable notification on idle SQL pool client:", err?.message || err);
     });
   }
 

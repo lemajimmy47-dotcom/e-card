@@ -14,8 +14,9 @@ function hasConnectionError(error: any): boolean {
   const msg = String(error.message || "").toLowerCase();
   const causeMsg = error.cause ? String(error.cause.message || "").toLowerCase() : "";
   const stackMsg = String(error.stack || "").toLowerCase();
+  const code = String(error.code || error.cause?.code || "").toLowerCase();
   
-  const searchStr = `${msg} ${causeMsg} ${stackMsg}`;
+  const searchStr = `${msg} ${causeMsg} ${stackMsg} ${code}`;
   
   return (
     searchStr.includes("connection terminated") ||
@@ -25,24 +26,35 @@ function hasConnectionError(error: any): boolean {
     searchStr.includes("connection closed") ||
     searchStr.includes("unexpected termination") ||
     searchStr.includes("ssl syscall error") ||
-    searchStr.includes("broken pipe")
+    searchStr.includes("broken pipe") ||
+    searchStr.includes("failed query") ||
+    searchStr.includes("socket has been ended") ||
+    searchStr.includes("ehostunreach") ||
+    searchStr.includes("57p01") ||
+    searchStr.includes("admin_shutdown") ||
+    searchStr.includes("enotfound") ||
+    searchStr.includes("econnrefused")
   );
 }
 
-async function executeQuery<T>(label: string, queryFn: () => Promise<T>, retries = 3): Promise<T> {
+async function executeQuery<T>(label: string, queryFn: () => Promise<T>, retries = 4): Promise<T> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await queryFn();
     } catch (error: any) {
       const isConnectionDrop = hasConnectionError(error);
 
-      if (isConnectionDrop && attempt < retries) {
-        console.warn(`[CloudSQL] ${label} attempt ${attempt} unreachable: ${error.message || error}. Retrying...`);
-        await wait(attempt * 1500); // Exponential backoff: 1.5s, 3.0s
+      if (attempt < retries) {
+        const errorDetail = error.cause?.message || error.message || String(error);
+        const preview = typeof errorDetail === "string" ? errorDetail.split("\n")[0].substring(0, 80) : "";
+        console.warn(`[CloudSQL] ${label} attempt ${attempt} reconnecting (${preview}). Retrying in ${attempt * 1000}ms...`);
+        await wait(attempt * 1000);
         continue;
       }
       
-      console.warn(`[CloudSQL] ${label} unavailable: ${error.message || error}`);
+      const errMsg = error.cause?.message || error.message || String(error);
+      const preview = typeof errMsg === "string" ? errMsg.split("\n")[0].substring(0, 100) : "";
+      console.warn(`[CloudSQL] ${label} unavailable: ${preview}`);
       throw new Error(`Database operation '${label}' failed. Please try again later.`, { cause: error });
     }
   }
@@ -53,6 +65,7 @@ export async function ensureTablesExist(): Promise<void> {
   await executeQuery("ensureTablesExist", async () => {
     console.log("[CloudSQL] Verifying and provisioning database tables if not present...");
     
+    // Execute core DDL in a single consolidated transaction for atomicity and speed
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "events" (
         "id" text PRIMARY KEY,
@@ -82,9 +95,7 @@ export async function ensureTablesExist(): Promise<void> {
         "contribution_deadline" text,
         "created_at" timestamp DEFAULT now()
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "guests" (
         "id" text PRIMARY KEY,
         "event_id" text REFERENCES "events"("id") ON DELETE CASCADE,
@@ -114,9 +125,7 @@ export async function ensureTablesExist(): Promise<void> {
         "custom_fields" jsonb,
         "tags" jsonb
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "save_the_dates" (
         "id" text PRIMARY KEY,
         "event_id" text REFERENCES "events"("id") ON DELETE CASCADE,
@@ -125,9 +134,7 @@ export async function ensureTablesExist(): Promise<void> {
         "image_url" text,
         "created_at" text
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "save_the_date_recipients" (
         "id" text PRIMARY KEY,
         "save_the_date_id" text REFERENCES "save_the_dates"("id") ON DELETE CASCADE,
@@ -135,9 +142,7 @@ export async function ensureTablesExist(): Promise<void> {
         "sent_at" text,
         "status" text DEFAULT 'Pending'
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "template_settings" (
         "id" text PRIMARY KEY,
         "image_url" text NOT NULL,
@@ -157,9 +162,7 @@ export async function ensureTablesExist(): Promise<void> {
         "card_type_color" text,
         "orientation" text DEFAULT 'portrait'
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "sms_gateway_settings" (
         "id" text PRIMARY KEY,
         "provider" text DEFAULT 'simulation',
@@ -172,9 +175,7 @@ export async function ensureTablesExist(): Promise<void> {
         "custom_headers" text DEFAULT '{}',
         "custom_body" text DEFAULT '{\n  "to": "{to}",\n  "message": "{message}"\n}'
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "committee_members" (
         "id" text PRIMARY KEY,
         "name" text NOT NULL,
@@ -184,18 +185,14 @@ export async function ensureTablesExist(): Promise<void> {
         "permission_level" text DEFAULT 'Summary Access',
         "token" text
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "committee_roles" (
         "id" text PRIMARY KEY,
         "name" text NOT NULL,
         "permission_level" text NOT NULL,
         "description" text
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "audit_logs" (
         "id" text PRIMARY KEY,
         "timestamp" text NOT NULL,
@@ -204,9 +201,7 @@ export async function ensureTablesExist(): Promise<void> {
         "details" text NOT NULL,
         "ip_address" text
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "user_account" (
         "id" text PRIMARY KEY,
         "username" text,
@@ -216,9 +211,7 @@ export async function ensureTablesExist(): Promise<void> {
         "transactions" jsonb,
         "active_event_id" text
       );
-    `);
 
-    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "uwalemi_state" (
         "id" text PRIMARY KEY,
         "data" jsonb NOT NULL,
@@ -228,10 +221,12 @@ export async function ensureTablesExist(): Promise<void> {
 
     // Ensure extra columns exist if upgrading from older schemas
     try {
-      await db.execute(sql`ALTER TABLE "user_account" ADD COLUMN IF NOT EXISTS "active_event_id" text;`);
-      await db.execute(sql`ALTER TABLE "template_settings" ADD COLUMN IF NOT EXISTS "orientation" text DEFAULT 'portrait';`);
-      await db.execute(sql`ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "custom_fields" jsonb;`);
-      await db.execute(sql`ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "tags" jsonb;`);
+      await db.execute(sql`
+        ALTER TABLE "user_account" ADD COLUMN IF NOT EXISTS "active_event_id" text;
+        ALTER TABLE "template_settings" ADD COLUMN IF NOT EXISTS "orientation" text DEFAULT 'portrait';
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "custom_fields" jsonb;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "tags" jsonb;
+      `);
     } catch (colErr) {
       console.warn("[CloudSQL] Column migration notice:", colErr);
     }
