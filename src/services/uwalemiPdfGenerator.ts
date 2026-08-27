@@ -1988,16 +1988,20 @@ export const generatePaymentReceiptPDF = (receiptData: {
   referenceNo?: string;
   receivedBy?: string;
   note?: string;
+  statusType?: 'paid' | 'partial';
+  balanceRemaining?: number;
+  breakdownItems?: { label: string; amount: string; status: string }[];
 }): jsPDF => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [148, 210] }); // A5 size portrait
+  const isPartial = receiptData.statusType === 'partial';
 
   // Border Frame
-  doc.setDrawColor(5, 150, 105);
+  doc.setDrawColor(isPartial ? 217 : 5, isPartial ? 119 : 150, isPartial ? 6 : 105);
   doc.setLineWidth(1);
   doc.roundedRect(6, 6, 136, 198, 4, 4, 'S');
 
   // Top header block
-  doc.setFillColor(5, 150, 105);
+  doc.setFillColor(isPartial ? 180 : 5, isPartial ? 83 : 150, isPartial ? 9 : 105);
   doc.rect(6, 6, 136, 24, 'F');
 
   doc.setFont('helvetica', 'bold');
@@ -2015,12 +2019,12 @@ export const generatePaymentReceiptPDF = (receiptData: {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
-  doc.text('RISITI RASMI YA MALIPO (PAYMENT RECEIPT)', 74, 40.5, { align: 'center' });
+  doc.text(isPartial ? 'RISITI YA MALIPO YA NUSU / SEHEMU' : 'RISITI RASMI YA MALIPO (PAYMENT RECEIPT)', 74, 40.5, { align: 'center' });
 
   // Receipt Meta
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.setTextColor(5, 150, 105);
+  doc.setTextColor(isPartial ? 180 : 5, isPartial ? 83 : 150, isPartial ? 9 : 105);
   doc.text(`Na. ya Risiti: ${receiptData.receiptNo}`, 14, 50);
 
   doc.setFont('helvetica', 'normal');
@@ -2028,21 +2032,28 @@ export const generatePaymentReceiptPDF = (receiptData: {
   doc.setTextColor(0, 0, 0);
   doc.text(`Tarehe: ${receiptData.paymentDate}`, 134, 50, { align: 'right' });
 
+  const tableBody: any[] = [
+    ['Namba ya Mjumbe', receiptData.memberNo],
+    ['Jina la Mjumbe', receiptData.memberName],
+    ['Simu ya Mjumbe', receiptData.memberPhone || '-'],
+    ['Aina ya Malipo', receiptData.paymentType],
+    ['Madhumuni / Kipindi', receiptData.periodOrTitle],
+    ['Njia ya Malipo', receiptData.paymentMethod],
+    ['Namba ya Kumbukumbu', receiptData.referenceNo || 'KUTOKA MFUMONI'],
+    ['Kiasi Kilicholipwa', formatTZS(receiptData.amount)]
+  ];
+
+  if (typeof receiptData.balanceRemaining === 'number') {
+    tableBody.push(['Salio Linalobaki', receiptData.balanceRemaining > 0 ? formatTZS(receiptData.balanceRemaining) : 'TZS 0 (Hakuna Deni)']);
+  }
+
+  tableBody.push(['Mpokeaji / Mweka Hazina', receiptData.receivedBy || 'Uongozi wa UWALEMI']);
+
   // Details Table
   autoTable(doc, {
     startY: 54,
     head: [['MAELEZO YA MALIPO', 'TAARIFA KAMILI']],
-    body: [
-      ['Namba ya Mjumbe', receiptData.memberNo],
-      ['Jina la Mjumbe', receiptData.memberName],
-      ['Simu ya Mjumbe', receiptData.memberPhone || '-'],
-      ['Aina ya Malipo', receiptData.paymentType],
-      ['Madhumuni / Kipindi', receiptData.periodOrTitle],
-      ['Njia ya Malipo', receiptData.paymentMethod],
-      ['Namba ya Kumbukumbu', receiptData.referenceNo || 'KUTOKA MFUMONI'],
-      ['Kiasi Kilicholipwa', formatTZS(receiptData.amount)],
-      ['Mpokeaji / Mweka Hazina', receiptData.receivedBy || 'Uongozi wa UWALEMI']
-    ],
+    body: tableBody,
     theme: 'grid',
     headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 7.5 },
@@ -2053,29 +2064,49 @@ export const generatePaymentReceiptPDF = (receiptData: {
     didParseCell: (data) => {
       if (data.row.index === 7) {
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.fillColor = [236, 253, 245];
-        data.cell.styles.textColor = [4, 120, 87];
+        data.cell.styles.fillColor = isPartial ? [254, 243, 199] : [236, 253, 245];
+        data.cell.styles.textColor = isPartial ? [180, 83, 9] : [4, 120, 87];
         data.cell.styles.fontSize = 9;
       }
     }
   });
 
-  // Stamp Badge (PAID / IMELIPWA)
+  // If breakdown items exist
   // @ts-ignore
-  const stampY = doc.lastAutoTable.finalY + 8;
-  doc.setDrawColor(5, 150, 105);
+  let currentY = doc.lastAutoTable.finalY + 4;
+  if (receiptData.breakdownItems && receiptData.breakdownItems.length > 0) {
+    autoTable(doc, {
+      startY: currentY,
+      head: [['MWEZI / KIPINDI', 'KIASI', 'HALI']],
+      body: receiptData.breakdownItems.map(b => [b.label, b.amount, b.status]),
+      theme: 'plain',
+      headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: 7, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 7 },
+      columnStyles: {
+        0: { cellWidth: 55 },
+        1: { cellWidth: 35, fontStyle: 'bold' },
+        2: { cellWidth: 30 }
+      }
+    });
+    // @ts-ignore
+    currentY = doc.lastAutoTable.finalY + 4;
+  }
+
+  // Stamp Badge (PAID / NUSU)
+  const stampY = currentY + 4;
+  doc.setDrawColor(isPartial ? 217 : 5, isPartial ? 119 : 150, isPartial ? 6 : 105);
   doc.setLineWidth(1.5);
   doc.roundedRect(44, stampY, 60, 16, 3, 3, 'S');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(5, 150, 105);
-  doc.text('IMELIPWA • PAID', 74, stampY + 8, { align: 'center' });
+  doc.setFontSize(11);
+  doc.setTextColor(isPartial ? 180 : 5, isPartial ? 83 : 150, isPartial ? 9 : 105);
+  doc.text(isPartial ? 'MALIPO YA NUSU • PARTIAL' : 'IMELIPWA • PAID', 74, stampY + 7.5, { align: 'center' });
   doc.setFontSize(6.5);
-  doc.text('IMETHIBITISHWA NA MFUMO WA UWALEMI', 74, stampY + 13, { align: 'center' });
+  doc.text('IMETHIBITISHWA NA MFUMO WA UWALEMI', 74, stampY + 12.5, { align: 'center' });
 
   // Signatures
-  const sigY = stampY + 28;
+  const sigY = Math.min(stampY + 22, 185);
   doc.setDrawColor(148, 163, 184);
   doc.setLineWidth(0.5);
   doc.line(18, sigY, 58, sigY);

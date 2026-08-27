@@ -2881,7 +2881,17 @@ async function startServer() {
 
       const db = await readDBLatest();
       const uwalemiState = db.uwalemiState || {};
-      const smsConfig = uwalemiState.groupSettings?.smsConfig || { provider: 'simulation', senderId: 'UWALEMI' };
+      const globalSmsSettings = db.smsGatewaySettings || {};
+      const configuredSms = uwalemiState.groupSettings?.smsConfig;
+      
+      // Inherit or fallback to global SMS settings if not explicitly configured in UWALEMI
+      const smsConfig = {
+        provider: configuredSms?.provider || globalSmsSettings?.provider || 'simulation',
+        apiKey: configuredSms?.apiKey || (globalSmsSettings?.provider === 'meseji' ? globalSmsSettings?.apiKey : '') || '',
+        senderId: configuredSms?.senderId || (globalSmsSettings?.provider === 'meseji' ? globalSmsSettings?.senderId : 'UWALEMI') || 'UWALEMI',
+        baseUrl: configuredSms?.baseUrl || (globalSmsSettings?.provider === 'meseji' ? globalSmsSettings?.url : 'https://meseji.co.tz/api/v1/sms/send') || 'https://meseji.co.tz/api/v1/sms/send',
+        secretKey: configuredSms?.secretKey || globalSmsSettings?.apiSecret || ''
+      };
 
       const logs: any[] = [];
       let deliveredCount = 0;
@@ -3031,111 +3041,32 @@ async function startServer() {
 
         let status: 'delivered' | 'sent' | 'simulated' | 'failed' = 'simulated';
 
-        if (smsConfig.provider === 'meseji' && smsConfig.apiKey) {
-          try {
-            let cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
-            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
-
-            const mesejiUrl = smsConfig.baseUrl || "https://meseji.co.tz/api/v1/sms/send";
-            const mesejiRes = await fetch(mesejiUrl, {
-              method: "POST",
-              headers: {
-                "x-api-key": smsConfig.apiKey.trim(),
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-              },
-              body: JSON.stringify({
-                contacts: cleanPhone,
-                message: formattedMsg,
-                sender_id: (smsConfig.senderId || 'MESEJI').trim()
-              })
-            });
-
-            if (mesejiRes.ok) {
-              status = 'delivered';
-              deliveredCount++;
-            } else {
-              const errBody = await mesejiRes.text();
-              console.warn("[UWALEMI Meseji SMS] API Error:", errBody);
-              status = 'failed';
-            }
-          } catch (mesejiErr) {
-            console.error("[UWALEMI Meseji SMS] Fetch failed:", mesejiErr);
-            status = 'failed';
-          }
-        } else if (smsConfig.provider === 'beem' && smsConfig.apiKey && smsConfig.secretKey) {
-          try {
-            // Clean phone to 255XXXXXXXXX
-            let cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
-            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
-
-            const beemPayload = {
-              source_addr: smsConfig.senderId || 'UWALEMI',
-              schedule_time: '',
-              encoding: 0,
-              message: formattedMsg,
-              recipients: [
-                { recipient_id: 1, dest_addr: cleanPhone }
-              ]
-            };
-
-            const beemAuth = Buffer.from(`${smsConfig.apiKey}:${smsConfig.secretKey}`).toString('base64');
-            const beemRes = await fetch("https://apisms.beem.africa/v1/send", {
-              method: "POST",
-              headers: {
-                "Authorization": `Basic ${beemAuth}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify(beemPayload)
-            });
-
-            if (beemRes.ok) {
-              status = 'delivered';
-              deliveredCount++;
-            } else {
-              console.warn("[UWALEMI Beem SMS] API returned non-OK:", await beemRes.text());
-              status = 'failed';
-            }
-          } catch (beemErr) {
-            console.error("[UWALEMI Beem SMS] Fetch failed:", beemErr);
-            status = 'failed';
-          }
-        } else if (smsConfig.provider === 'nextsms' && smsConfig.apiKey && smsConfig.secretKey) {
-          try {
-            let cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
-            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
-
-            const nextAuth = Buffer.from(`${smsConfig.apiKey}:${smsConfig.secretKey}`).toString('base64');
-            const nextRes = await fetch("https://messaging-service.co.tz/api/sms/v1/text/single", {
-              method: "POST",
-              headers: {
-                "Authorization": `Basic ${nextAuth}`,
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-              },
-              body: JSON.stringify({
-                from: smsConfig.senderId || 'UWALEMI',
-                to: cleanPhone,
-                text: formattedMsg
-              })
-            });
-
-            if (nextRes.ok) {
-              status = 'delivered';
-              deliveredCount++;
-            } else {
-              status = 'failed';
-            }
-          } catch (nextErr) {
-            status = 'failed';
-          }
-        } else {
-          // Simulation mode
+        if (smsConfig.provider === 'simulation') {
           status = 'simulated';
           deliveredCount++;
+        } else {
+          try {
+            // Build the gateway settings object to leverage the resilient sendSMS handler
+            const gatewaySettings: any = {
+              provider: smsConfig.provider || 'meseji',
+              apiKey: smsConfig.apiKey || '',
+              apiSecret: smsConfig.secretKey || '',
+              senderId: smsConfig.senderId || 'MESEJI',
+              url: smsConfig.baseUrl || (smsConfig.provider === 'meseji' ? 'https://meseji.co.tz/api/v1/sms/send' : undefined)
+            };
+
+            let cleanPhone = phone.replace(/[^0-9]/g, '');
+            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
+            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
+
+            await dispatchSMS(cleanPhone, formattedMsg, 'sms', gatewaySettings);
+            status = 'delivered';
+            deliveredCount++;
+          } catch (smsErr: any) {
+            console.warn("[UWALEMI SMS Dispatch] Gateway error:", smsErr?.message || smsErr);
+            // Fallback status marked as simulated or failed with descriptive trace
+            status = 'failed';
+          }
         }
 
         logs.push({
@@ -3277,102 +3208,30 @@ Lema, Nguvu Moja!`;
 
         let status: 'delivered' | 'sent' | 'simulated' | 'failed' = 'simulated';
 
-        if (smsConfig.provider === 'meseji' && smsConfig.apiKey) {
-          try {
-            let cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
-            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
-
-            const mesejiUrl = smsConfig.baseUrl || "https://meseji.co.tz/api/v1/sms/send";
-            const res = await fetch(mesejiUrl, {
-              method: "POST",
-              headers: {
-                "x-api-key": smsConfig.apiKey.trim(),
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-              },
-              body: JSON.stringify({
-                contacts: cleanPhone,
-                message: formattedMsg,
-                sender_id: (smsConfig.senderId || 'MESEJI').trim()
-              })
-            });
-
-            if (res.ok) {
-              status = 'delivered';
-              deliveredCount++;
-            } else {
-              status = 'failed';
-            }
-          } catch (e) {
-            status = 'failed';
-          }
-        } else if (smsConfig.provider === 'beem' && smsConfig.apiKey && smsConfig.secretKey) {
-          try {
-            let cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
-            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
-
-            const beemPayload = {
-              source_addr: smsConfig.senderId || 'UWALEMI',
-              schedule_time: '',
-              encoding: 0,
-              message: formattedMsg,
-              recipients: [{ recipient_id: 1, dest_addr: cleanPhone }]
-            };
-
-            const beemAuth = Buffer.from(`${smsConfig.apiKey}:${smsConfig.secretKey}`).toString('base64');
-            const res = await fetch("https://apisms.beem.africa/v1/send", {
-              method: "POST",
-              headers: {
-                "Authorization": `Basic ${beemAuth}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify(beemPayload)
-            });
-
-            if (res.ok) {
-              status = 'delivered';
-              deliveredCount++;
-            } else {
-              status = 'failed';
-            }
-          } catch (e) {
-            status = 'failed';
-          }
-        } else if (smsConfig.provider === 'nextsms' && smsConfig.apiKey && smsConfig.secretKey) {
-          try {
-            let cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
-            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
-
-            const nextAuth = Buffer.from(`${smsConfig.apiKey}:${smsConfig.secretKey}`).toString('base64');
-            const res = await fetch("https://messaging-service.co.tz/api/sms/v1/text/single", {
-              method: "POST",
-              headers: {
-                "Authorization": `Basic ${nextAuth}`,
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-              },
-              body: JSON.stringify({
-                from: smsConfig.senderId || 'UWALEMI',
-                to: cleanPhone,
-                text: formattedMsg
-              })
-            });
-
-            if (res.ok) {
-              status = 'delivered';
-              deliveredCount++;
-            } else {
-              status = 'failed';
-            }
-          } catch (e) {
-            status = 'failed';
-          }
-        } else {
+        if (smsConfig.provider === 'simulation') {
           status = 'simulated';
           deliveredCount++;
+        } else {
+          try {
+            const gatewaySettings: any = {
+              provider: smsConfig.provider || 'meseji',
+              apiKey: smsConfig.apiKey || '',
+              apiSecret: smsConfig.secretKey || '',
+              senderId: smsConfig.senderId || 'MESEJI',
+              url: smsConfig.baseUrl || (smsConfig.provider === 'meseji' ? 'https://meseji.co.tz/api/v1/sms/send' : undefined)
+            };
+
+            let cleanPhone = phone.replace(/[^0-9]/g, '');
+            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
+            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
+
+            await dispatchSMS(cleanPhone, formattedMsg, 'sms', gatewaySettings);
+            status = 'delivered';
+            deliveredCount++;
+          } catch (smsErr: any) {
+            console.warn("[UWALEMI Auto Reminder SMS] Error:", smsErr?.message || smsErr);
+            status = 'failed';
+          }
         }
 
         logs.push({

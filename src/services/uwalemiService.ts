@@ -573,6 +573,7 @@ export async function sendUwalemiSms(payload: {
 /**
  * Utumaji wa stakabadhi kiotomatiki mara tu ada au mchango unaporekodiwa.
  * Hukagua kama autoSendReceipts imewashwa kwenye Mipangilio ya SMS.
+ * Inasaidia stakabadhi za miezi mingi na malipo ya sehemu (partial payment).
  */
 export async function triggerAutoReceiptSms(params: {
   state: UwalemiState;
@@ -583,6 +584,20 @@ export async function triggerAutoReceiptSms(params: {
   receiptNo: string;
   paymentDate?: string;
   paymentMethod?: string;
+  isPartial?: boolean;
+  expectedAmount?: number;
+  monthBalance?: number;
+  monthsCovered?: string[];
+  multiMonthBreakdown?: {
+    monthName: string;
+    year: number;
+    paid: number;
+    expected: number;
+    isPartial: boolean;
+    balance: number;
+  }[];
+  totalDebtAfter?: number;
+  customMessage?: string;
 }): Promise<{ triggered: boolean; success: boolean; message: string }> {
   const autoSend = params.state.groupSettings?.smsConfig?.autoSendReceipts;
   if (!autoSend) {
@@ -597,14 +612,71 @@ export async function triggerAutoReceiptSms(params: {
   const dateStr = params.paymentDate || new Date().toISOString().split('T')[0];
   const methodStr = params.paymentMethod || 'M-Pesa / M-Koba';
   
-  const customMessage = `STAKABADHI YA MALIPO - UWALEMI
-Habari ${params.member.fullName || 'Mwanachama'}, tumepokea malipo yako ya TZS ${params.amount.toLocaleString()} ya ${params.purpose}.
+  let customMessage = params.customMessage;
+
+  if (!customMessage) {
+    const memberName = params.member.fullName || 'Mwanachama';
+    const amountStr = `TZS ${params.amount.toLocaleString()}`;
+    const debtStr = typeof params.totalDebtAfter === 'number' 
+      ? (params.totalDebtAfter > 0 ? `TZS ${params.totalDebtAfter.toLocaleString()}` : '0 (Umekamilisha Ada ✓)')
+      : undefined;
+
+    if (params.paymentType === 'ada') {
+      if (params.multiMonthBreakdown && params.multiMonthBreakdown.length > 1) {
+        // Multi-Month payment message
+        const monthsList = params.multiMonthBreakdown.map(m => {
+          if (m.isPartial) {
+            return `• ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (Nusu, salio TZS ${m.balance.toLocaleString()})`;
+          }
+          return `• ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (Kamili ✓)`;
+        }).join('\n');
+
+        customMessage = `STAKABADHI YA MALIPO YA ADA - UWALEMI
+Habari ${memberName}, tumepokea malipo yako ya ${amountStr} ya Ada ya Miezi (${params.multiMonthBreakdown.length}):
+${monthsList}
+
+Risiti: ${params.receiptNo}
+Tarehe: ${dateStr}
+Njia: ${methodStr}${debtStr ? `\nSalio la Deni Lililobaki: ${debtStr}` : ''}
+
+Asante kwa kutimiza wajibu wako.
+Lema, Nguvu Moja!`;
+      } else if (params.isPartial) {
+        // Single Partial Payment message
+        const expStr = params.expectedAmount ? `TZS ${params.expectedAmount.toLocaleString()}` : '';
+        const balStr = params.monthBalance ? `TZS ${params.monthBalance.toLocaleString()}` : '';
+        customMessage = `STAKABADHI YA MALIPO YA NUSU - UWALEMI
+Habari ${memberName}, tumepokea malipo yako ya ${amountStr} kwa ajili ya ${params.purpose}.
+• Kiasi Kilicholipwa: ${amountStr}
+${expStr ? `• Ada Inayotakiwa: ${expStr}\n` : ''}${balStr ? `• Salio Linalobaki la Mwezi: ${balStr}\n` : ''}${debtStr ? `• Jumla ya Deni Lililobaki: ${debtStr}\n` : ''}Risiti: ${params.receiptNo}
+Tarehe: ${dateStr}
+Njia: ${methodStr}
+
+Asante kwa kuendelea kulipia ada yako.
+Lema, Nguvu Moja!`;
+      } else {
+        // Standard Full Payment message
+        customMessage = `STAKABADHI YA MALIPO YA ADA - UWALEMI
+Habari ${memberName}, tumepokea malipo yako ya ${amountStr} kwa ajili ya ${params.purpose}.
+Risiti: ${params.receiptNo}
+Tarehe: ${dateStr}
+Njia: ${methodStr}${debtStr ? `\nSalio la Deni Lililobaki: ${debtStr}` : ''}
+
+Asante kwa kutimiza wajibu wako kwa UWALEMI.
+Lema, Nguvu Moja!`;
+      }
+    } else {
+      // Emergency fund or fines
+      customMessage = `STAKABADHI YA MALIPO - UWALEMI
+Habari ${memberName}, tumepokea malipo yako ya ${amountStr} ya ${params.purpose}.
 Risiti: ${params.receiptNo}
 Tarehe: ${dateStr}
 Njia: ${methodStr}
 
 Asante kwa kutimiza wajibu wako kwa UWALEMI.
 Lema, Nguvu Moja!`;
+    }
+  }
 
   const result = await sendUwalemiSms({
     recipients: [{

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { UwalemiState, UwalemiMember, UwalemiMonthlyPayment } from '../../types/uwalemi';
 import { 
   Calendar, 
@@ -21,11 +21,22 @@ import {
   CheckCheck,
   RotateCcw,
   Calculator,
-  CalendarDays
+  CalendarDays,
+  Layers,
+  ArrowRight,
+  Receipt,
+  Info,
+  ShieldCheck,
+  Coins
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { generatePaymentReceiptPDF } from '../../services/uwalemiPdfGenerator';
-import { sortMembersByLeadership, getDefaultFeeForMonth, triggerAutoReceiptSms } from '../../services/uwalemiService';
+import { 
+  sortMembersByLeadership, 
+  getDefaultFeeForMonth, 
+  triggerAutoReceiptSms,
+  calculateMemberFeeDebt 
+} from '../../services/uwalemiService';
 
 interface Props {
   state: UwalemiState;
@@ -64,9 +75,28 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
   // View & Bulk Modes
   const [viewMode, setViewMode] = useState<'single' | 'matrix'>('single');
   const [isRecordModalOpen, setIsRecordModalOpen] = useState<boolean>(false);
+  const [recordMode, setRecordMode] = useState<'smart' | 'single'>('smart');
   const [isBulkModalOpen, setIsBulkModalOpen] = useState<boolean>(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [viewingReceipt, setViewingReceipt] = useState<UwalemiMonthlyPayment | null>(null);
+  const [viewingMultiReceipt, setViewingMultiReceipt] = useState<{
+    member: UwalemiMember;
+    amount: number;
+    paymentDate: string;
+    paymentMethod: string;
+    referenceNo: string;
+    receiptNo: string;
+    months: {
+      year: number;
+      month: number;
+      monthName: string;
+      paid: number;
+      expected: number;
+      isPartial: boolean;
+      balance: number;
+    }[];
+    totalDebtAfter: number;
+  } | null>(null);
 
   // Custom Confirmation Dialog States
   const [wholeYearConfirmOpen, setWholeYearConfirmOpen] = useState(false);
@@ -137,21 +167,131 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     paymentMethod: string;
     referenceNo: string;
     note: string;
+    isTopUp: boolean;
   }>({
     memberId: '',
     year: currentYear,
     month: currentMonth,
     amount: getDefaultFeeForMonth(currentYear, currentMonth),
     paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'M-Pesa',
+    paymentMethod: 'M-Pesa (Lipa Namba)',
     referenceNo: '',
-    note: ''
+    note: '',
+    isTopUp: true
   });
 
   const members = sortMembersByLeadership(state.members || []);
   const monthlyPayments = state.monthlyPayments || [];
 
   const monthNamesSw = ['Januari', 'Februari', 'Machi', 'Aprili', 'Mei', 'Juni', 'Julai', 'Agosti', 'Septemba', 'Oktoba', 'Novemba', 'Desemba'];
+
+  // Current selected member in modal
+  const selectedModalMember = useMemo(() => {
+    return members.find(m => m.id === paymentForm.memberId);
+  }, [members, paymentForm.memberId]);
+
+  // Selected member debt info
+  const selectedMemberDebtInfo = useMemo(() => {
+    if (!selectedModalMember) return null;
+    return calculateMemberFeeDebt(selectedModalMember, state);
+  }, [selectedModalMember, state]);
+
+  // Smart allocation calculation for entered amount across unpaid/partial months
+  const smartAllocation = useMemo(() => {
+    if (!selectedModalMember || Number(paymentForm.amount) <= 0) {
+      return { months: [], totalAllocated: 0, remainder: 0, debtAfter: selectedMemberDebtInfo?.feeDebt || 0 };
+    }
+
+    let available = Number(paymentForm.amount);
+    const resultMonths: {
+      year: number;
+      month: number;
+      monthName: string;
+      expected: number;
+      previouslyPaid: number;
+      amountAllocated: number;
+      newTotalPaid: number;
+      isPartial: boolean;
+      balanceRemaining: number;
+    }[] = [];
+
+    const startYear = selectedModalMember.joinDate ? new Date(selectedModalMember.joinDate).getFullYear() : 2024;
+    const currentY = new Date().getFullYear();
+    const currentM = new Date().getMonth() + 1;
+
+    // First scan all past/current unpaid or partially paid months
+    for (let y = Math.min(startYear, 2024); y <= currentY; y++) {
+      const endM = y === currentY ? currentM : 12;
+      for (let m = 1; m <= endM; m++) {
+        const exp = getDefaultFeeForMonth(y, m, selectedModalMember.monthlyFeeAmount);
+        const existing = monthlyPayments.find(p => p.memberId === selectedModalMember.id && Number(p.year) === y && Number(p.month) === m);
+        const prevPaid = existing ? Number(existing.paidAmount) || 0 : 0;
+        const needed = Math.max(0, exp - prevPaid);
+        if (needed > 0 && available > 0) {
+          const alloc = Math.min(needed, available);
+          const newTotal = prevPaid + alloc;
+          const isPart = newTotal < exp;
+          const bal = exp - newTotal;
+          resultMonths.push({
+            year: y,
+            month: m,
+            monthName: monthNamesSw[m - 1],
+            expected: exp,
+            previouslyPaid: prevPaid,
+            amountAllocated: alloc,
+            newTotalPaid: newTotal,
+            isPartial: isPart,
+            balanceRemaining: bal
+          });
+          available -= alloc;
+        }
+      }
+    }
+
+    // If still amount left, advance into upcoming future months
+    if (available > 0) {
+      let nextY = currentY;
+      let nextM = currentM + 1;
+      while (available > 0 && nextY <= currentY + 1) {
+        if (nextM > 12) {
+          nextM = 1;
+          nextY += 1;
+        }
+        const exp = getDefaultFeeForMonth(nextY, nextM, selectedModalMember.monthlyFeeAmount);
+        const existing = monthlyPayments.find(p => p.memberId === selectedModalMember.id && Number(p.year) === nextY && Number(p.month) === nextM);
+        const prevPaid = existing ? Number(existing.paidAmount) || 0 : 0;
+        const needed = Math.max(0, exp - prevPaid);
+        const alloc = Math.min(needed > 0 ? needed : exp, available);
+        const newTotal = prevPaid + alloc;
+        const isPart = newTotal < exp;
+        const bal = exp - newTotal;
+        resultMonths.push({
+          year: nextY,
+          month: nextM,
+          monthName: monthNamesSw[nextM - 1],
+          expected: exp,
+          previouslyPaid: prevPaid,
+          amountAllocated: alloc,
+          newTotalPaid: newTotal,
+          isPartial: isPart,
+          balanceRemaining: bal
+        });
+        available -= alloc;
+        nextM += 1;
+      }
+    }
+
+    const totalAllocated = Number(paymentForm.amount) - available;
+    const currentFeeDebt = selectedMemberDebtInfo?.feeDebt || 0;
+    const debtAfter = Math.max(0, currentFeeDebt - totalAllocated);
+
+    return {
+      months: resultMonths,
+      totalAllocated,
+      remainder: available,
+      debtAfter
+    };
+  }, [selectedModalMember, paymentForm.amount, selectedMemberDebtInfo, monthlyPayments, monthNamesSw]);
 
   // Payments for selected year and month
   const currentMonthRecords = monthlyPayments.filter(p => Number(p.year) === Number(selectedYear) && Number(p.month) === Number(selectedMonth));
@@ -204,51 +344,159 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     const member = members.find(m => m.id === paymentForm.memberId);
     if (!member) return;
 
-    const expected = getDefaultFeeForMonth(paymentForm.year, paymentForm.month, member.monthlyFeeAmount);
-    const paid = Number(paymentForm.amount);
-    const status: 'paid' | 'partial' | 'unpaid' = (paid >= expected && expected > 0) || (expected === 0 && paid === 0) ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
-    const receiptNo = `UWL-REC-${paymentForm.year}${String(paymentForm.month).padStart(2, '0')}-${member.memberNo.replace('UWL-', '')}`;
+    const paidAmount = Number(paymentForm.amount);
+    if (paidAmount <= 0) {
+      alert('Tafadhali weka kiasi halali kilicholipwa.');
+      return;
+    }
 
-    const newPayment: UwalemiMonthlyPayment = {
-      id: `uwl-fee-${member.id}-${paymentForm.year}-${paymentForm.month}`,
-      memberId: member.id,
-      memberNo: member.memberNo,
-      memberName: member.fullName,
-      year: Number(paymentForm.year),
-      month: Number(paymentForm.month),
-      expectedAmount: expected,
-      paidAmount: paid,
-      paymentDate: paymentForm.paymentDate,
-      paymentMethod: paymentForm.paymentMethod,
-      referenceNo: paymentForm.referenceNo,
-      status,
-      receiptNo,
-      note: paymentForm.note
-    };
+    if (recordMode === 'smart' && smartAllocation.months.length > 0) {
+      // Smart Multi-Month / Lump Sum Allocation
+      let updatedPayments = [...monthlyPayments];
+      const masterReceiptNo = `UWL-REC-${paymentForm.year}${String(paymentForm.month).padStart(2, '0')}-${member.memberNo.replace('UWL-', '')}-${Date.now().toString().slice(-4)}`;
 
-    // Remove existing if any, then add
-    const updatedPayments = monthlyPayments.filter(
-      p => !(p.memberId === member.id && Number(p.year) === Number(paymentForm.year) && Number(p.month) === Number(paymentForm.month))
-    );
-    updatedPayments.push(newPayment);
+      smartAllocation.months.forEach(alloc => {
+        const pStatus: 'paid' | 'partial' | 'unpaid' = alloc.newTotalPaid >= alloc.expected ? 'paid' : alloc.newTotalPaid > 0 ? 'partial' : 'unpaid';
+        const singleReceiptNo = `UWL-REC-${alloc.year}${String(alloc.month).padStart(2, '0')}-${member.memberNo.replace('UWL-', '')}`;
+        
+        const newP: UwalemiMonthlyPayment = {
+          id: `uwl-fee-${member.id}-${alloc.year}-${alloc.month}`,
+          memberId: member.id,
+          memberNo: member.memberNo,
+          memberName: member.fullName,
+          year: alloc.year,
+          month: alloc.month,
+          expectedAmount: alloc.expected,
+          paidAmount: alloc.newTotalPaid,
+          paymentDate: paymentForm.paymentDate,
+          paymentMethod: paymentForm.paymentMethod,
+          referenceNo: paymentForm.referenceNo,
+          status: pStatus,
+          receiptNo: singleReceiptNo,
+          note: paymentForm.note || `Malipo ya ada (${alloc.monthName} ${alloc.year})`
+        };
 
-    const updatedState = { ...state, monthlyPayments: updatedPayments };
-    await onSaveState(updatedState);
-    setIsRecordModalOpen(false);
-    setViewingReceipt(newPayment);
+        updatedPayments = updatedPayments.filter(
+          p => !(p.memberId === member.id && Number(p.year) === alloc.year && Number(p.month) === alloc.month)
+        );
+        updatedPayments.push(newP);
+      });
 
-    // Tuma Stakabadhi ya SMS Kiotomatiki (kama imewashwa kwenye Mipangilio ya SMS)
-    if (state.groupSettings?.smsConfig?.autoSendReceipts && paid > 0) {
-      triggerAutoReceiptSms({
-        state,
+      const updatedState = { ...state, monthlyPayments: updatedPayments };
+      await onSaveState(updatedState);
+      setIsRecordModalOpen(false);
+
+      // Open Multi-Month Receipt Viewer
+      setViewingMultiReceipt({
         member,
-        paymentType: 'ada',
-        amount: paid,
-        purpose: `Ada ya mwezi wa ${monthNamesSw[Number(paymentForm.month) - 1]} ${paymentForm.year}`,
-        receiptNo,
+        amount: paidAmount,
         paymentDate: paymentForm.paymentDate,
-        paymentMethod: paymentForm.paymentMethod
-      }).catch(err => console.warn('[Auto Receipt SMS Error]:', err));
+        paymentMethod: paymentForm.paymentMethod,
+        referenceNo: paymentForm.referenceNo,
+        receiptNo: masterReceiptNo,
+        months: smartAllocation.months.map(m => ({
+          year: m.year,
+          month: m.month,
+          monthName: m.monthName,
+          paid: m.amountAllocated,
+          expected: m.expected,
+          isPartial: m.isPartial,
+          balance: m.balanceRemaining
+        })),
+        totalDebtAfter: smartAllocation.debtAfter
+      });
+
+      // Trigger Automated Receipt SMS
+      if (state.groupSettings?.smsConfig?.autoSendReceipts) {
+        triggerAutoReceiptSms({
+          state,
+          member,
+          paymentType: 'ada',
+          amount: paidAmount,
+          purpose: smartAllocation.months.length === 1 
+            ? `Ada ya mwezi wa ${smartAllocation.months[0].monthName} ${smartAllocation.months[0].year}` 
+            : `Ada ya Miezi (${smartAllocation.months.length})`,
+          receiptNo: masterReceiptNo,
+          paymentDate: paymentForm.paymentDate,
+          paymentMethod: paymentForm.paymentMethod,
+          isPartial: smartAllocation.months.length === 1 ? smartAllocation.months[0].isPartial : false,
+          expectedAmount: smartAllocation.months.length === 1 ? smartAllocation.months[0].expected : undefined,
+          monthBalance: smartAllocation.months.length === 1 ? smartAllocation.months[0].balanceRemaining : undefined,
+          multiMonthBreakdown: smartAllocation.months.map(m => ({
+            monthName: m.monthName,
+            year: m.year,
+            paid: m.amountAllocated,
+            expected: m.expected,
+            isPartial: m.isPartial,
+            balance: m.balanceRemaining
+          })),
+          totalDebtAfter: smartAllocation.debtAfter
+        }).catch(err => console.warn('[Auto Receipt SMS Error]:', err));
+      }
+    } else {
+      // Single Specific Month Mode
+      const expected = getDefaultFeeForMonth(paymentForm.year, paymentForm.month, member.monthlyFeeAmount);
+      const existingPayment = monthlyPayments.find(
+        p => p.memberId === member.id && Number(p.year) === Number(paymentForm.year) && Number(p.month) === Number(paymentForm.month)
+      );
+      const prevPaid = existingPayment ? Number(existingPayment.paidAmount) || 0 : 0;
+      
+      const totalPaidThisMonth = paymentForm.isTopUp ? prevPaid + paidAmount : paidAmount;
+      const status: 'paid' | 'partial' | 'unpaid' = (totalPaidThisMonth >= expected && expected > 0) || (expected === 0 && totalPaidThisMonth === 0) 
+        ? 'paid' 
+        : totalPaidThisMonth > 0 
+          ? 'partial' 
+          : 'unpaid';
+      
+      const receiptNo = `UWL-REC-${paymentForm.year}${String(paymentForm.month).padStart(2, '0')}-${member.memberNo.replace('UWL-', '')}`;
+
+      const newPayment: UwalemiMonthlyPayment = {
+        id: `uwl-fee-${member.id}-${paymentForm.year}-${paymentForm.month}`,
+        memberId: member.id,
+        memberNo: member.memberNo,
+        memberName: member.fullName,
+        year: Number(paymentForm.year),
+        month: Number(paymentForm.month),
+        expectedAmount: expected,
+        paidAmount: totalPaidThisMonth,
+        paymentDate: paymentForm.paymentDate,
+        paymentMethod: paymentForm.paymentMethod,
+        referenceNo: paymentForm.referenceNo,
+        status,
+        receiptNo,
+        note: paymentForm.note || `Ada ya mwezi wa ${monthNamesSw[paymentForm.month - 1]} ${paymentForm.year}`
+      };
+
+      const updatedPayments = monthlyPayments.filter(
+        p => !(p.memberId === member.id && Number(p.year) === Number(paymentForm.year) && Number(p.month) === Number(paymentForm.month))
+      );
+      updatedPayments.push(newPayment);
+
+      const updatedState = { ...state, monthlyPayments: updatedPayments };
+      await onSaveState(updatedState);
+      setIsRecordModalOpen(false);
+      setViewingReceipt(newPayment);
+
+      // Compute remaining fee debt after saving
+      const debtAfter = Math.max(0, (selectedMemberDebtInfo?.feeDebt || 0) - paidAmount);
+
+      // Trigger Automated Receipt SMS
+      if (state.groupSettings?.smsConfig?.autoSendReceipts && paidAmount > 0) {
+        triggerAutoReceiptSms({
+          state,
+          member,
+          paymentType: 'ada',
+          amount: paidAmount,
+          purpose: `Ada ya mwezi wa ${monthNamesSw[Number(paymentForm.month) - 1]} ${paymentForm.year}`,
+          receiptNo,
+          paymentDate: paymentForm.paymentDate,
+          paymentMethod: paymentForm.paymentMethod,
+          isPartial: status === 'partial',
+          expectedAmount: expected,
+          monthBalance: Math.max(0, expected - totalPaidThisMonth),
+          totalDebtAfter: debtAfter
+        }).catch(err => console.warn('[Auto Receipt SMS Error]:', err));
+      }
     }
   };
 
@@ -1131,96 +1379,304 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
 
       {/* MODAL: RECORD PAYMENT */}
       {isRecordModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl my-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl my-8">
+            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-emerald-400" />
-                Rekodi Malipo ya Ada ya Mwezi
-              </h3>
-              <button onClick={() => setIsRecordModalOpen(false)} className="text-slate-400 hover:text-white">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-emerald-400" />
+                  Rekodi Malipo ya Ada ya Mwezi
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Inasaidia malipo kamili, malipo ya nusu/pungufu, na malipo ya miezi mingi mara moja.
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsRecordModalOpen(false)} 
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSavePayment} className="space-y-3.5 text-xs">
+            {/* Mode Selector Tabs */}
+            <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setRecordMode('smart')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  recordMode === 'smart'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-900/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                Ugawaji Kiotomatiki (Smart)
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecordMode('single')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  recordMode === 'single'
+                    ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-900/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5 text-sky-300" />
+                Mwezi Mahsusi (Single)
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePayment} className="space-y-4 text-xs">
+              {/* Member Selection */}
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">Mwanachama *</label>
+                <label className="text-slate-300 font-semibold block mb-1">Mwanachama Mlipaji *</label>
                 <select
                   required
                   value={paymentForm.memberId}
                   onChange={(e) => {
                     const mId = e.target.value;
                     const mem = members.find(m => m.id === mId);
+                    const defAmt = getDefaultFeeForMonth(paymentForm.year, paymentForm.month, mem?.monthlyFeeAmount);
                     setPaymentForm({
                       ...paymentForm,
                       memberId: mId,
-                      amount: getDefaultFeeForMonth(paymentForm.year, paymentForm.month, mem?.monthlyFeeAmount)
+                      amount: defAmt
                     });
                   }}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:border-emerald-500 focus:outline-none"
                 >
-                  <option value="">-- Chagua Mjumbe --</option>
+                  <option value="">-- Chagua Mwanachama --</option>
                   {members.map(m => (
                     <option key={m.id} value={m.id}>
-                      {m.memberNo} - {m.fullName} ({m.role})
+                      {m.memberNo} - {m.fullName} ({m.role}) - Ada: TZS {m.monthlyFeeAmount ? m.monthlyFeeAmount.toLocaleString() : (state.groupSettings?.monthlyFeeDefault || 20000).toLocaleString()}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Mwezi</label>
-                  <select
-                    value={paymentForm.month}
-                    onChange={(e) => {
-                      const newM = Number(e.target.value);
-                      const mem = members.find(m => m.id === paymentForm.memberId);
-                      setPaymentForm({
-                        ...paymentForm,
-                        month: newM,
-                        amount: getDefaultFeeForMonth(paymentForm.year, newM, mem?.monthlyFeeAmount)
-                      });
-                    }}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
-                  >
-                    {monthNamesSw.map((name, idx) => (
-                      <option key={idx + 1} value={idx + 1}>{name}</option>
-                    ))}
-                  </select>
+              {/* Member Debt & Financial Status Banner */}
+              {selectedModalMember && selectedMemberDebtInfo && (
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-mono font-bold text-xs">
+                        {selectedModalMember.memberNo.slice(-3)}
+                      </div>
+                      <div>
+                        <div className="font-bold text-white text-xs">{selectedModalMember.fullName}</div>
+                        <div className="text-[10px] text-slate-400">{selectedModalMember.phone || 'Hakuna namba ya simu'}</div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-[10px] text-slate-400">Deni la Ada Hivi Sasa:</div>
+                      <div className={`text-xs font-mono font-bold ${selectedMemberDebtInfo.feeDebt > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {selectedMemberDebtInfo.feeDebt > 0 ? `TZS ${selectedMemberDebtInfo.feeDebt.toLocaleString()}` : 'Hakuna Deni (✓)'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedMemberDebtInfo.breakdown && selectedMemberDebtInfo.breakdown.length > 0 && (
+                    <div className="text-[10.5px] text-slate-400 bg-slate-900/90 rounded-xl p-2 border border-slate-800/50 flex items-center justify-between gap-2">
+                      <span>Anadaiwa miezi ({selectedMemberDebtInfo.breakdown.length}): <strong className="text-slate-300">{selectedMemberDebtInfo.breakdown.slice(0, 3).map(m => `${monthNamesSw[m.month - 1].slice(0, 3)} ${m.year}`).join(', ')}{selectedMemberDebtInfo.breakdown.length > 3 ? ` na mengineyo ${selectedMemberDebtInfo.breakdown.length - 3}` : ''}</strong></span>
+                      {recordMode === 'smart' && selectedMemberDebtInfo.feeDebt > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPaymentForm({ ...paymentForm, amount: selectedMemberDebtInfo.feeDebt })}
+                          className="px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 text-amber-300 text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer"
+                        >
+                          Lipa Deni Lote
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Single Month Specific Controls */}
+              {recordMode === 'single' && (
+                <div className="bg-slate-950/60 border border-slate-800/70 p-3.5 rounded-2xl space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-slate-300 font-semibold block mb-1">Mwezi Unaolipiwa</label>
+                      <select
+                        value={paymentForm.month}
+                        onChange={(e) => {
+                          const newM = Number(e.target.value);
+                          const mem = members.find(m => m.id === paymentForm.memberId);
+                          setPaymentForm({
+                            ...paymentForm,
+                            month: newM,
+                            amount: getDefaultFeeForMonth(paymentForm.year, newM, mem?.monthlyFeeAmount)
+                          });
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      >
+                        {monthNamesSw.map((name, idx) => (
+                          <option key={idx + 1} value={idx + 1}>{name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-slate-300 font-semibold block mb-1">Mwaka</label>
+                      <input
+                        type="number"
+                        value={paymentForm.year}
+                        onChange={(e) => {
+                          const newY = Number(e.target.value);
+                          const mem = members.find(m => m.id === paymentForm.memberId);
+                          setPaymentForm({
+                            ...paymentForm,
+                            year: newY,
+                            amount: getDefaultFeeForMonth(newY, paymentForm.month, mem?.monthlyFeeAmount)
+                          });
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="isTopUp"
+                      checked={paymentForm.isTopUp}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, isTopUp: e.target.checked })}
+                      className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-900 cursor-pointer"
+                    />
+                    <label htmlFor="isTopUp" className="text-slate-300 text-[11px] cursor-pointer">
+                      Jumlisha kiasi hiki kwenye malipo yaliyokuwepo awali kwa mwezi huu (Top-up)
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Amount Input and Quick Preset Chips */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-semibold block">Kiasi Kilicholipwa (TZS) *</label>
+                  {selectedModalMember && (
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Ada ya Kawaida: TZS {getDefaultFeeForMonth(paymentForm.year, paymentForm.month, selectedModalMember.monthlyFeeAmount).toLocaleString()}
+                    </span>
+                  )}
                 </div>
 
-                <div>
-                  <label className="text-slate-300 font-semibold block mb-1">Mwaka</label>
+                <div className="relative">
                   <input
                     type="number"
-                    value={paymentForm.year}
-                    onChange={(e) => {
-                      const newY = Number(e.target.value);
-                      const mem = members.find(m => m.id === paymentForm.memberId);
-                      setPaymentForm({
-                        ...paymentForm,
-                        year: newY,
-                        amount: getDefaultFeeForMonth(newY, paymentForm.month, mem?.monthlyFeeAmount)
-                      });
-                    }}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono"
+                    required
+                    min="1"
+                    value={paymentForm.amount || ''}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: Number(e.target.value) })}
+                    placeholder="Weka kiasi, mf. 5,000, 10,000, 20,000, 60,000..."
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-white font-mono text-base font-bold text-emerald-400 focus:outline-none"
                   />
+                </div>
+
+                {/* Quick Action Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <span className="text-[10px] text-slate-500 mr-1 flex items-center gap-1">
+                    <Coins className="w-3 h-3" /> Viwango:
+                  </span>
+                  {[
+                    { label: '5,000 (Nusu)', val: 5000 },
+                    { label: '10,000 (Nusu)', val: 10000 },
+                    { label: '15,000', val: 15000 },
+                    { label: '20,000 (Kamili)', val: 20000 },
+                    { label: '40,000 (Miezi 2)', val: 40000 },
+                    { label: '60,000 (Miezi 3)', val: 60000 }
+                  ].map(preset => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => setPaymentForm({ ...paymentForm, amount: preset.val })}
+                      className={`px-2.5 py-1 rounded-lg text-[10.5px] font-mono font-semibold transition-all cursor-pointer ${
+                        paymentForm.amount === preset.val
+                          ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/60'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div>
-                <label className="text-slate-300 font-semibold block mb-1">Kiasi Kilicholipwa (TZS) *</label>
-                <input
-                  type="number"
-                  required
-                  value={paymentForm.amount}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: Number(e.target.value) })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-base font-bold text-emerald-400"
-                />
-              </div>
+              {/* Dynamic Live Allocation & Breakdown Preview */}
+              {recordMode === 'smart' && smartAllocation.months.length > 0 && (
+                <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Mfumo Utakavyogawa Malipo Haya ({smartAllocation.months.length} Miezi):
+                    </span>
+                    <span className="font-mono text-[11px] text-slate-300">
+                      Jumla: <strong>TZS {smartAllocation.totalAllocated.toLocaleString()}</strong>
+                    </span>
+                  </div>
 
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {smartAllocation.months.map((m, idx) => (
+                      <div 
+                        key={idx} 
+                        className="bg-slate-950/80 border border-slate-800 rounded-xl p-2 flex items-center justify-between text-[11px]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-white">{m.monthName} {m.year}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[9.5px] font-bold ${
+                            !m.isPartial 
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          }`}>
+                            {!m.isPartial ? '✓ Kamili' : `⚠ Nusu (Salio: TZS ${m.balanceRemaining.toLocaleString()})`}
+                          </span>
+                        </div>
+
+                        <div className="text-right font-mono">
+                          <span className="text-emerald-400 font-bold">+TZS {m.amountAllocated.toLocaleString()}</span>
+                          <span className="text-slate-500 text-[10px] block">Inayotakiwa: TZS {m.expected.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Summary After Payment */}
+                  <div className="border-t border-emerald-500/20 pt-2 flex items-center justify-between text-[11px] text-slate-300">
+                    <span>Salio la Deni Baada ya Malipo:</span>
+                    <span className={`font-mono font-bold ${smartAllocation.debtAfter > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {smartAllocation.debtAfter > 0 ? `TZS ${smartAllocation.debtAfter.toLocaleString()}` : 'TZS 0 (Umelipa Yote ✓)'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Single Mode Status Hint */}
+              {recordMode === 'single' && selectedModalMember && Number(paymentForm.amount) > 0 && (
+                <div className={`p-3 rounded-2xl border text-xs space-y-1 ${
+                  Number(paymentForm.amount) < getDefaultFeeForMonth(paymentForm.year, paymentForm.month, selectedModalMember.monthlyFeeAmount)
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                }`}>
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Info className="w-4 h-4" />
+                    {Number(paymentForm.amount) < getDefaultFeeForMonth(paymentForm.year, paymentForm.month, selectedModalMember.monthlyFeeAmount)
+                      ? 'Malipo ya Nusu / Pungufu (Partial Payment)'
+                      : 'Malipo Kamili ya Ada (Full Payment)'}
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Ada ya {monthNamesSw[paymentForm.month - 1]} {paymentForm.year} ni TZS {getDefaultFeeForMonth(paymentForm.year, paymentForm.month, selectedModalMember.monthlyFeeAmount).toLocaleString()}. 
+                    {Number(paymentForm.amount) < getDefaultFeeForMonth(paymentForm.year, paymentForm.month, selectedModalMember.monthlyFeeAmount) && (
+                      <span> Salio linalobaki kwa mwezi huu litakuwa <strong>TZS {(getDefaultFeeForMonth(paymentForm.year, paymentForm.month, selectedModalMember.monthlyFeeAmount) - Number(paymentForm.amount)).toLocaleString()}</strong>.</span>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* Payment Meta: Date, Method, Reference */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-300 font-semibold block mb-1">Tarehe ya Malipo</label>
@@ -1255,23 +1711,36 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                   type="text"
                   value={paymentForm.referenceNo}
                   onChange={(e) => setPaymentForm({ ...paymentForm, referenceNo: e.target.value })}
-                  placeholder="Mfano: QZ89XX9923"
+                  placeholder="Mfano: QZ89XX9923 au Namba ya Simu"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono"
                 />
               </div>
 
+              {/* Automated SMS Notice */}
+              <div className="bg-sky-950/40 border border-sky-500/20 rounded-xl p-3 flex items-start gap-2 text-[11px] text-sky-300">
+                <Send className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-white">Stakabadhi ya SMS Kiotomatiki:</span>
+                  <p className="text-slate-300 mt-0.5">
+                    Mwanachama atapokea ujumbe mfupi (SMS) moja kwa moja kwenye namba yake ya simu ukieleza kiasi alicholipa, mwezi husika, kama ni malipo ya nusu (pamoja na salio lililobaki), au mchanganuo wa miezi aliyolipa.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
               <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsRecordModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
                 >
                   Ghairi
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-900/30 cursor-pointer flex items-center gap-1.5"
                 >
+                  <CheckCheck className="w-4 h-4" />
                   Hifadhi na Toa Stakabadhi
                 </button>
               </div>
@@ -1280,7 +1749,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         </div>
       )}
 
-      {/* MODAL: PRINTABLE OFFICIAL RECEIPT */}
+      {/* MODAL: SINGLE PAYMENT OFFICIAL RECEIPT */}
       {viewingReceipt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white text-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
@@ -1290,7 +1759,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">{state.groupSettings.groupName || 'UWALEMI'}</h2>
               <p className="text-xs text-slate-600 italic mt-0.5">"{state.groupSettings.slogan || 'Kusaidiana Katika Shida na Raha'}"</p>
               <div className="mt-2 inline-block bg-slate-100 text-slate-800 font-mono text-[11px] font-bold px-3 py-1 rounded-full border border-slate-300">
-                STAKABADHI YA ADA YA MWEZI
+                {viewingReceipt.status === 'partial' ? 'STAKABADHI YA MALIPO YA NUSU' : 'STAKABADHI YA ADA YA MWEZI'}
               </div>
             </div>
 
@@ -1313,6 +1782,10 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                 <span className="font-semibold text-slate-900">{monthNamesSw[viewingReceipt.month - 1]} {viewingReceipt.year}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-slate-500">Ada Inayotakiwa:</span>
+                <span className="font-mono text-slate-900">TZS {viewingReceipt.expectedAmount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-slate-500">Njia ya Malipo:</span>
                 <span className="font-semibold text-slate-900">{viewingReceipt.paymentMethod}</span>
               </div>
@@ -1325,13 +1798,27 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
             </div>
 
             {/* Amount Box */}
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-center">
-              <span className="text-[11px] text-emerald-800 font-semibold uppercase tracking-wider block">Kiasi Kilichopokelewa</span>
-              <span className="text-2xl font-black text-emerald-900 font-mono">
+            <div className={`border rounded-xl p-3.5 text-center ${
+              viewingReceipt.status === 'partial' 
+                ? 'bg-amber-50 border-amber-200' 
+                : 'bg-emerald-50 border-emerald-200'
+            }`}>
+              <span className={`text-[11px] font-semibold uppercase tracking-wider block ${
+                viewingReceipt.status === 'partial' ? 'text-amber-800' : 'text-emerald-800'
+              }`}>
+                Kiasi Kilichopokelewa
+              </span>
+              <span className={`text-2xl font-black font-mono ${
+                viewingReceipt.status === 'partial' ? 'text-amber-900' : 'text-emerald-900'
+              }`}>
                 TZS {viewingReceipt.paidAmount.toLocaleString()}
               </span>
-              <span className="text-[10px] text-emerald-700 block mt-0.5">
-                {viewingReceipt.status === 'paid' ? '✓ Malipo Yamekamilika' : '⚠ Malipo ya Nusu'}
+              <span className={`text-[10px] block mt-0.5 font-semibold ${
+                viewingReceipt.status === 'paid' ? 'text-emerald-700' : 'text-amber-700'
+              }`}>
+                {viewingReceipt.status === 'paid' 
+                  ? '✓ Malipo Yamekamilika' 
+                  : `⚠ Malipo ya Nusu (Salio Linalobaki: TZS ${Math.max(0, viewingReceipt.expectedAmount - viewingReceipt.paidAmount).toLocaleString()})`}
               </span>
             </div>
 
@@ -1360,7 +1847,9 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                       paymentDate: viewingReceipt.paymentDate || new Date().toISOString().split('T')[0],
                       paymentMethod: viewingReceipt.paymentMethod || 'M-Pesa',
                       referenceNo: viewingReceipt.referenceNo,
-                      receivedBy: 'Mweka Hazina wa UWALEMI'
+                      receivedBy: 'Mweka Hazina wa UWALEMI',
+                      statusType: viewingReceipt.status === 'partial' ? 'partial' : 'paid',
+                      balanceRemaining: Math.max(0, viewingReceipt.expectedAmount - viewingReceipt.paidAmount)
                     });
                     doc.save(`Risiti_${viewingReceipt.receiptNo || viewingReceipt.memberNo}_${viewingReceipt.month}_${viewingReceipt.year}.pdf`);
                   } catch (err) {
@@ -1382,7 +1871,8 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               </button>
               <button
                 onClick={() => {
-                  const msg = `STAKABADHI YA ADA YA UWALEMI\nNamba: ${viewingReceipt.receiptNo}\nMjumbe: ${viewingReceipt.memberName} (${viewingReceipt.memberNo})\nAda ya: ${monthNamesSw[viewingReceipt.month - 1]} ${viewingReceipt.year}\nKiasi: TZS ${viewingReceipt.paidAmount.toLocaleString()}\nTarehe: ${viewingReceipt.paymentDate}\n\nAhsante kwa kulipa ada yako ya UWALEMI!`;
+                  const rem = Math.max(0, viewingReceipt.expectedAmount - viewingReceipt.paidAmount);
+                  const msg = `STAKABADHI YA ADA YA UWALEMI\nNamba: ${viewingReceipt.receiptNo}\nMjumbe: ${viewingReceipt.memberName} (${viewingReceipt.memberNo})\nAda ya: ${monthNamesSw[viewingReceipt.month - 1]} ${viewingReceipt.year}\nKiasi Kilicholipwa: TZS ${viewingReceipt.paidAmount.toLocaleString()}\nHali: ${viewingReceipt.status === 'paid' ? 'IMEKAMILIKA (PAID)' : `MALIPO YA NUSU (Salio: TZS ${rem.toLocaleString()})`}\nTarehe: ${viewingReceipt.paymentDate}\n\nAhsante kwa kuwajibika na kujenga UWALEMI!`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                 }}
                 className="flex-1 min-w-[110px] inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold cursor-pointer"
@@ -1392,6 +1882,160 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               </button>
               <button
                 onClick={() => setViewingReceipt(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold cursor-pointer"
+              >
+                Funga
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MULTI-MONTH OFFICIAL RECEIPT */}
+      {viewingMultiReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white text-slate-900 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            {/* Header of Receipt */}
+            <div className="text-center border-b-2 border-dashed border-slate-300 pb-4">
+              <div className="text-xs font-bold uppercase tracking-widest text-emerald-800">KIKUNDI CHA KIJAMII CHA</div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">{state.groupSettings.groupName || 'UWALEMI'}</h2>
+              <p className="text-xs text-slate-600 italic mt-0.5">"{state.groupSettings.slogan || 'Kusaidiana Katika Shida na Raha'}"</p>
+              <div className="mt-2 inline-block bg-emerald-100 text-emerald-900 font-mono text-[11px] font-bold px-3 py-1 rounded-full border border-emerald-300">
+                STAKABADHI YA MALIPO YA ADA (MIEZI {viewingMultiReceipt.months.length})
+              </div>
+            </div>
+
+            {/* Receipt Details */}
+            <div className="space-y-2 text-xs border-b-2 border-dashed border-slate-300 pb-3">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Namba ya Stakabadhi:</span>
+                <span className="font-mono font-bold text-slate-900">{viewingMultiReceipt.receiptNo}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Tarehe ya Malipo:</span>
+                <span className="font-semibold text-slate-900">{viewingMultiReceipt.paymentDate}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Mjumbe:</span>
+                <span className="font-bold text-slate-900">{viewingMultiReceipt.member.fullName} ({viewingMultiReceipt.member.memberNo})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Njia ya Malipo:</span>
+                <span className="font-semibold text-slate-900">{viewingMultiReceipt.paymentMethod}</span>
+              </div>
+              {viewingMultiReceipt.referenceNo && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Kumbukumbu ya Muamala:</span>
+                  <span className="font-mono text-slate-900">{viewingMultiReceipt.referenceNo}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Breakdown Table */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block">Mchanganuo wa Miezi Iliyolipiwa:</span>
+              <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-200/80 text-slate-700 font-bold text-[10px] uppercase">
+                    <tr>
+                      <th className="py-2 px-3">Mwezi</th>
+                      <th className="py-2 px-3 text-right">Kiasi</th>
+                      <th className="py-2 px-3 text-right">Hali</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {viewingMultiReceipt.months.map((m, idx) => (
+                      <tr key={idx}>
+                        <td className="py-2 px-3 font-medium text-slate-900">{m.monthName} {m.year}</td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-800">TZS {m.paid.toLocaleString()}</td>
+                        <td className="py-2 px-3 text-right">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            !m.isPartial ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {!m.isPartial ? '✓ Kamili' : `⚠ Nusu (Salio: ${m.balance.toLocaleString()})`}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Total Amount Box */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+              <span className="text-[11px] text-emerald-800 font-semibold uppercase tracking-wider block">Jumla Iliyolipwa</span>
+              <span className="text-2xl font-black text-emerald-900 font-mono">
+                TZS {viewingMultiReceipt.amount.toLocaleString()}
+              </span>
+              <span className="text-[10.5px] text-slate-600 block mt-0.5">
+                Salio la Deni Baada ya Malipo: <strong className="text-slate-900 font-mono">TZS {viewingMultiReceipt.totalDebtAfter.toLocaleString()}</strong>
+              </span>
+            </div>
+
+            {/* Footer */}
+            <div className="text-center text-[10px] text-slate-500 space-y-0.5">
+              <p>Imethibitishwa na Mfumo wa UWALEMI Treasury.</p>
+              <p className="font-medium text-slate-700">Ahsante kwa kuwajibika na kujenga kikundi chetu.</p>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex flex-wrap gap-2 pt-2">
+              <button
+                onClick={() => {
+                  try {
+                    const doc = generatePaymentReceiptPDF({
+                      receiptNo: viewingMultiReceipt.receiptNo,
+                      groupName: state.groupSettings?.groupName || 'UWALEMI',
+                      slogan: state.groupSettings?.slogan,
+                      memberNo: viewingMultiReceipt.member.memberNo,
+                      memberName: viewingMultiReceipt.member.fullName,
+                      memberPhone: viewingMultiReceipt.member.phone,
+                      paymentType: 'Ada ya Kila Mwezi (Miezi Mingi)',
+                      periodOrTitle: `Miezi ${viewingMultiReceipt.months.length} (${viewingMultiReceipt.months.map(m => `${m.monthName.slice(0, 3)} ${m.year}`).join(', ')})`,
+                      amount: viewingMultiReceipt.amount,
+                      paymentDate: viewingMultiReceipt.paymentDate,
+                      paymentMethod: viewingMultiReceipt.paymentMethod,
+                      referenceNo: viewingMultiReceipt.referenceNo,
+                      receivedBy: 'Mweka Hazina wa UWALEMI',
+                      balanceRemaining: viewingMultiReceipt.totalDebtAfter,
+                      breakdownItems: viewingMultiReceipt.months.map(m => ({
+                        label: `${m.monthName} ${m.year}`,
+                        amount: `TZS ${m.paid.toLocaleString()}`,
+                        status: !m.isPartial ? 'Kamili' : `Nusu (Salio: ${m.balance.toLocaleString()})`
+                      }))
+                    });
+                    doc.save(`Risiti_${viewingMultiReceipt.receiptNo}_${viewingMultiReceipt.member.memberNo}.pdf`);
+                  } catch (err) {
+                    console.error(err);
+                    alert('Hitilafu katika kutengeneza PDF ya risiti.');
+                  }
+                }}
+                className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-900/30 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                Pakua PDF
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex-1 min-w-[100px] inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                Chapisha
+              </button>
+              <button
+                onClick={() => {
+                  const monthsList = viewingMultiReceipt.months.map(m => `• ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (${!m.isPartial ? 'Kamili' : `Nusu, Salio: TZS ${m.balance.toLocaleString()}`})`).join('\n');
+                  const msg = `STAKABADHI YA ADA YA UWALEMI\nNamba: ${viewingMultiReceipt.receiptNo}\nMjumbe: ${viewingMultiReceipt.member.fullName} (${viewingMultiReceipt.member.memberNo})\nJumla Iliyolipwa: TZS ${viewingMultiReceipt.amount.toLocaleString()}\nTarehe: ${viewingMultiReceipt.paymentDate}\n\nMchanganuo:\n${monthsList}\n\nSalio la Deni Linalobaki: TZS ${viewingMultiReceipt.totalDebtAfter.toLocaleString()}\n\nAhsante kwa kuwajibika na kujenga UWALEMI!`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                }}
+                className="flex-1 min-w-[110px] inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold cursor-pointer"
+              >
+                <Share2 className="w-4 h-4" />
+                WhatsApp
+              </button>
+              <button
+                onClick={() => setViewingMultiReceipt(null)}
                 className="px-4 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold cursor-pointer"
               >
                 Funga
