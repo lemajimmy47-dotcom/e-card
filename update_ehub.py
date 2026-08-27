@@ -1,0 +1,101 @@
+import re
+
+with open("server.ts", "r") as f:
+    content = f.read()
+
+target = """        const method = "GET";
+        const path = "/api/v1/wallet/balance";
+        const body = "";
+        const payload = timestamp + "\\n" + method + "\\n" + path + "\\n" + body;
+        const signature = crypto.createHmac("sha256", apiSecret)
+          .update(payload)
+          .digest("hex");
+        const response = await fetch("https://sms.ehub.co.tz" + path, {
+          method: "GET",
+          headers: {
+            "Authorization": "Bearer " + apiKey,
+            "X-Timestamp": timestamp.toString(),
+            "X-Signature": signature,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "EventCard-App/1.0"
+          }
+        });
+        const dataText = await response.text();
+        let parsed = null;
+        try {
+          parsed = JSON.parse(dataText);
+        } catch { }
+        let balance = "N/A";
+        if (parsed && parsed.success && parsed.data) {
+          if (typeof parsed.data.sms_balance !== "undefined") {
+            balance = String(parsed.data.sms_balance);
+          } else if (typeof parsed.data.balance !== "undefined") {
+            balance = String(parsed.data.balance);
+          }
+        }"""
+
+replacement = """        const method = "GET";
+        let path = "/api/v1/wallet/balance";
+        let body = "";
+        let payload = timestamp + "\\n" + method + "\\n" + path + "\\n" + body;
+        let signature = crypto.createHmac("sha256", apiSecret)
+          .update(payload)
+          .digest("hex");
+        let response = await fetch("https://sms.ehub.co.tz" + path, {
+          method: "GET",
+          headers: {
+            "Authorization": "Bearer " + apiKey,
+            "X-Timestamp": timestamp.toString(),
+            "X-Signature": signature,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "EventCard-App/1.0"
+          }
+        });
+
+        if (response.status === 404 || response.status === 401) {
+             path = "/api/v1/sms/balance";
+             payload = timestamp + "\\n" + method + "\\n" + path + "\\n" + body;
+             signature = crypto.createHmac("sha256", apiSecret)
+               .update(payload)
+               .digest("hex");
+             const response2 = await fetch("https://sms.ehub.co.tz" + path, {
+               method: "GET",
+               headers: {
+                 "Authorization": "Bearer " + apiKey,
+                 "X-Timestamp": timestamp.toString(),
+                 "X-Signature": signature,
+                 "Accept": "application/json",
+                 "Content-Type": "application/json",
+                 "User-Agent": "EventCard-App/1.0"
+               }
+             });
+             if (response2.ok) {
+                 response = response2;
+             }
+        }
+
+        const dataText = await response.text();
+        let parsed = null;
+        try {
+          parsed = JSON.parse(dataText);
+        } catch { }
+        let balance = "N/A";
+        if (parsed) {
+          const sources = [parsed, parsed.data, parsed.wallet, parsed.response].filter(Boolean);
+          for (const source of sources) {
+            if (source.sms_balance !== undefined) { balance = String(source.sms_balance); break; }
+            if (source.balance !== undefined) { balance = String(source.balance); break; }
+            if (source.credit !== undefined) { balance = String(source.credit); break; }
+            if (source.credits !== undefined) { balance = String(source.credits); break; }
+            if (source.amount !== undefined) { balance = String(source.amount); break; }
+          }
+        }"""
+
+if target in content:
+    with open("server.ts", "w") as f:
+        f.write(content.replace(target, replacement))
+    print("Success")
+else:
+    print("Target not found")

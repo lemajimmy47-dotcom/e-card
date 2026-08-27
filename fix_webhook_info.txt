@@ -1,0 +1,13 @@
+Safi sana! Hongera kwa kufanikiwa kuunganisha Webhooks.
+
+Kuhusu swala la kadi kuonyesha imetumwa vizuri ("Imetumia" au "Imefika") kwenye mfumo lakini mgeni haoni kwenye WhatsApp yake, haya ni mambo mawili yanayosababisha hilo kulingana na picha uliyonitumia:
+
+1. **App yako iko kwenye "Development Mode" (Haijapublishiwa)**:
+Kama unavyoona kwenye picha yako, Meta wameandika: *"Apps will only be able to receive test webhooks... unless the app has been published."* Hii inamaanisha Meta wanazuia ripoti za kweli za "Delivery" na "Read" kuja kwenye mfumo wetu kwa sababu App yako bado haipo "Live". Hii ndio maana unaweza kutuma kadi, mfumo ukaandika "Imetumwa", lakini usipate mrejesho kama kweli "Imefika" au "Imesomwa". 
+* **Suluhisho:** Kule juu kabisa kwenye Meta Developer Dashboard (pembeni ya jina la App yako), kuna kitufe cha **"App Mode: Development"**. Kibonyeze kisha ubadilishe iwe **"Live"**. Hili litaruhusu Webhooks zifanye kazi 100%.
+
+2. **Template ya "Save the Date" (hifadhi_tarehe)**:
+Ili ujumbe wa Save the Date ufike kwa mgeni, ni lazima uwe umetengeneza Template yenye jina hilo kule kwenye *WhatsApp Manager* na iwe imepitishwa (Approved). Ikiwa template hiyo haijapitishwa, au inatumia format tofauti, Meta wataipokea lakini wataizuia isifike kwa mgeni.
+* **Suluhisho:** Nenda kwenye WhatsApp Manager -> Message Templates. Hakikisha umetengeneza template inayoitwa **hifadhi_tarehe** na imepata alama ya kijani (Approved). 
+
+Jaribu kuweka App iwe "Live" kisha tuma tena kwa mgeni mmoja ili tuone kama Webhook italeta majibu sahihi!

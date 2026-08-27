@@ -1,0 +1,6 @@
+{
+  "name": "EVENTCARD",
+  "description": "Mfumo wa kisasa wa kidijitali wa kutengeneza, kuhakiki, na kusambaza kadi za mialiko ya matukio mbalimbali kwa urahisi.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

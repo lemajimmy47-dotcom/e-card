@@ -1,0 +1,45 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "12345",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "123456",
+              "phone_number_id": "123456"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Test User"
+                },
+                "wa_id": "255653578184"
+              }
+            ],
+            "messages": [
+              {
+                "context": {
+                  "from": "255743788734",
+                  "id": "wamid.HBgMMjU1NjUzNTc4MTg0FQIAERgSOEY3N0JGNzlBOTBGRThDOENGAA=="
+                },
+                "from": "255653578184",
+                "from_user_id": "TZ.1339468747566882",
+                "id": "wamid.HBgMMjU1NjUzNTc4MTg0FQIAEhggQUNBNzQxMDk3QUU4NDk3RkNBM0M4REZGMjZCOTkyNTcA",
+                "timestamp": "1783411729",
+                "type": "button",
+                "button": {
+                  "payload": "Hapana, Nina Udhuru.",
+                  "text": "Hapana, Nina Udhuru."
+                }
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}

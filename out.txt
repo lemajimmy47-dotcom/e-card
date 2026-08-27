@@ -1,0 +1,456 @@
+src/components/CommitteeDashboard.tsx:74:      { id: 'file-1', name: 'Bajeti_Kamati_Rasmi.xlsx', size: '142 KB', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', category: 'spreadsheet', uploadedAt: '12/06/2026 14:15' },
+src/components/CommitteeDashboard.tsx:493:      alert(isEn ? "All guests have active pledges!" : "Wageni wote tayari wana ahadi!");
+src/components/CommitteeDashboard.tsx:542:    const headers = ["ID", "Namba ya Kadi (Code)", "Jina la Mgeni", "Namba ya Simu", "Aina ya Kadi (Card Type)", "Muda wa Kuingia (Check-in Time)", "RSVP Status", "Idadi ya Wageni (Companions)"];
+src/components/CommitteeDashboard.tsx:854:      reportTitleSw = "Mahudhurio ya Wageni Walioingia";
+src/components/CommitteeDashboard.tsx:857:      reportTitleSw = "Hali ya RSVP na Idadi ya Ujumbe Uliotumwa";
+src/components/CommitteeDashboard.tsx:882:    const dateLabel = " • Tarehe: ";
+src/components/CommitteeDashboard.tsx:1084:        head: [isEn ? ['S/N', 'Payer (Guest Name)', 'Phone', 'Amount (TZS)', 'Date', 'Ref', 'SMS', 'WA'] : ['S/N', 'Mlipaji (Guest Name)', 'Simu', 'Kiasi (TZS)', 'Tarehe', 'Ref', 'SMS', 'WA']],
+src/components/CommitteeDashboard.tsx:1181:          : ['S/N', 'Mchangiaji (Guest Name)', 'Namba ya Simu', 'Kiasi Kilicholipwa (TZS)', 'SMS', 'WA']],
+src/components/CommitteeDashboard.tsx:1258:        `${unpledgedList.length} ${isEn ? 'Guests' : 'Wageni'}`,
+src/components/CommitteeDashboard.tsx:1268:          : ['S/N', 'Jina la Mgeni', 'Simu ya Mkononi', 'Viungo vya Usajili (Link)', 'SMS', 'WA']],
+src/components/CommitteeDashboard.tsx:1314:          : ['S/N', 'Muda (Time)', 'Jina la Mgeni', 'Namba ya Simu', 'Aina ya Kadi', 'Hali ya Skani', 'SMS', 'WA']],
+src/components/CommitteeDashboard.tsx:1358:        { label: "BADO MAJIBU (PENDING)", value: `${countPending} Wageni`, color: [15, 23, 42] }
+src/components/CommitteeDashboard.tsx:1404:          : ['S/N', 'Jina la Mgeni', 'Simu', 'Aina ya Kadi', 'Hali ya RSVP', 'Watu RSVP', 'SMS', 'WA']],
+src/components/CommitteeDashboard.tsx:1445:      : "Jina la Mgeni,Simu,Hali ya Ahadi,Kiasi cha Ahadi(TZS),Kiasi Kilicholipwa(TZS),Salio la Deni(TZS)\n";
+src/components/CommitteeDashboard.tsx:1523:      setPinError(isEn ? 'Incorrect PIN code' : 'Nywila sio sahihi. Namba za kujaribu: 1234, 2222, 3333, au 4444');
+src/components/CommitteeDashboard.tsx:1532:          {isEn ? "Committee Module Secured" : "Bodi ya Kamati Imefungwa"}
+src/components/CommitteeDashboard.tsx:1595:              { tag: 'Committee Member', label: isEn ? 'Committee Member' : 'Mjumbe wa Kamati' }
+src/components/CommitteeDashboard.tsx:1628:              {activeRole === 'Treasurer' && (isEn ? "Logged in as Mweka Hazina (Treasurer - Payments Access Only)" : "Umeingia kama Mweka Hazina (Hazina - Ruhusa ya Kuongeza Malipo tu, Hakuna kufuta)")}
+src/components/CommitteeDashboard.tsx:1629:              {activeRole === 'Secretary' && (isEn ? "Logged in as Katibu (Secretary - Viewer Access with Pledges & Lists)" : "Umeingia kama Katibu wa Kamati (Secretary - Kuona data pekee, Hakuna kuhariri)")}
+src/components/CommitteeDashboard.tsx:1630:              {activeRole === 'Committee Member' && (isEn ? "Logged in as Committee Member (Summary Dashboard Only - Personal logs hidden)" : "Umeingia kama Mjumbe wa Kamati (Summary tu - Taarifa za kifedha za mtu mmoja mmoja zimefichwa)")}
+src/components/CommitteeDashboard.tsx:1633:              {activeRole === 'Event Owner' && (isEn ? "✓ Modify targets • ✓ Manage committee members • ✓ Record payments • ✓ Deep analytics • ✓ Public progress manager" : "✓ Badilisha Malengo • ✓ Ongeza Wanakamati • ✓ Sajili malipo yote • ✓ Utendaji wa log na Ripoti")}
+src/components/CommitteeDashboard.tsx:1634:              {activeRole === 'Treasurer' && (isEn ? "✓ Record payment amounts • ✓ Print/download reports • ✗ Cannot delete records • ✗ Cannot change committee members" : "✓ Sajili malipo mapya • ✓ Pakua Ripoti • ✗ Huwezi kufuta muamala wowote • ✗ Huwezi kubadili wajumbe")}
+src/components/CommitteeDashboard.tsx:1635:              {activeRole === 'Secretary' && (isEn ? "✓ Read-only guests & pledges • ✓ Export reports • ✗ Cannot add payments • ✗ Cannot modify system setups" : "✓ Tazama wageni na ahadi zao • ✓ Pakua Ripoti • ✗ Huwezi kuongeza malipo wala kuandikisha data")}
+src/components/CommitteeDashboard.tsx:1636:              {activeRole === 'Committee Member' && (isEn ? "✓ Summary widgets & charts only • ✗ Restricted from viewing detailed names, individual payment logs, or contact numbers" : "✓ Tazama asilimia na chati tu • ✗ Umezuiliwa kuona majina, simu au kiasi kimoja kimoja cha mtu kukulinda siri")}
+src/components/CommitteeDashboard.tsx:1654:          { id: 'dashboard', label: isEn ? 'Dashboard Summary' : 'Mwanzo wa Kamati', icon: Layers },
+src/components/CommitteeDashboard.tsx:1656:          { id: 'reports', label: isEn ? 'Committee Reports' : 'Ripoti za Kamati', icon: Printer },
+src/components/CommitteeDashboard.tsx:1658:          { id: 'contributions', label: isEn ? 'Contribution Module' : 'Michango & Kadi', icon: Coins },
+src/components/CommitteeDashboard.tsx:1773:              <span className="text-[9.5px] font-mono text-slate-400 uppercase font-bold">{isEn ? "Total Guests" : "Wageni Wote"}</span>
+src/components/CommitteeDashboard.tsx:1775:              <p className="text-[9px] text-slate-500 italic">{isEn ? "Guests loaded in directory" : "Wageni wote walioalikwa"}</p>
+src/components/CommitteeDashboard.tsx:1779:              <span className="text-[9.5px] font-mono text-cyan-400 uppercase font-bold">{isEn ? "Contributors Count" : "Idadi Waliotoa Ahadi"}</span>
+src/components/CommitteeDashboard.tsx:1789:              <span className="text-[9.5px] font-mono text-amber-400 uppercase font-bold">{isEn ? "Total Pledged" : "Jumla ya Ahadi TZS"}</span>
+src/components/CommitteeDashboard.tsx:1795:              <span className="text-[9.5px] font-mono text-emerald-400 uppercase font-bold">{isEn ? "Total Collected" : "Jumla ya Malipo TZS"}</span>
+src/components/CommitteeDashboard.tsx:1994:                  <span>{isEn ? "Committee Alert & Event Notification Dispatch Logs" : "Mfumo wa Taarifa Maalum za Kamati (Notifications)"}</span>
+src/components/CommitteeDashboard.tsx:2030:                  {isEn ? "No notifications registered." : "Hakuna taarifa yoyote mpya ya mabadiliko ya michango kwa sasa."}
+src/components/CommitteeDashboard.tsx:2187:              { id: 'Summary', name: isEn ? '1. Summary Ledger' : '1. Muhtasari wa Michango' },
+src/components/CommitteeDashboard.tsx:2193:              { id: 'Attendance', name: isEn ? '7. Attendance Log' : '7. Mahudhurio ya Wageni' },
+src/components/CommitteeDashboard.tsx:2194:              { id: 'RSVP_Report', name: isEn ? '8. RSVP & Messages' : '8. RSVP & Ujumbe' },
+src/components/CommitteeDashboard.tsx:2228:                      Jumla SMS Zilizotumwa: <strong className="text-blue-400 font-black">{totalSmsSent}</strong>
+src/components/CommitteeDashboard.tsx:2231:                      Jumla WA Zilizotumwa: <strong className="text-emerald-400 font-black">{totalWhatsappSent}</strong>
+src/components/CommitteeDashboard.tsx:2316:                      <p className="font-semibold uppercase tracking-wider text-slate-400">{isEn ? 'Exported/Printed Date:' : 'Tarehe ya Kuchapishwa:'}</p>
+src/components/CommitteeDashboard.tsx:2329:                      <span>{isEn ? 'Event Date:' : 'Tarehe ya Sherehe:'}</span>
+src/components/CommitteeDashboard.tsx:2382:                            <th className="py-2.5 px-4 border-r border-slate-200 text-center print-border-gray uppercase tracking-wider">{isEn ? 'Count' : 'Idadi'}</th>
+src/components/CommitteeDashboard.tsx:2383:                            <th className="py-2.5 px-4 border-r border-slate-200 text-right print-border-gray uppercase tracking-wider">{isEn ? 'Total Pledged' : 'Jumla ya Ahadi'}</th>
+src/components/CommitteeDashboard.tsx:2427:                            <th className="py-2.5 px-3 border-r border-slate-200 print-border-gray uppercase tracking-wider">{isEn ? 'Guest Full Name' : 'Jina la Mgeni'}</th>
+src/components/CommitteeDashboard.tsx:2552:                        <th className="py-3.5 px-4 font-black">Tarehe</th>
+src/components/CommitteeDashboard.tsx:2575:                                <p className="mt-2">Hakuna malipo yaliyosajiliwa bado kwenye mfumo.</p>
+src/components/CommitteeDashboard.tsx:2639:                      <tr><td colSpan={7} className="py-6 text-center text-slate-500">Mungu ni mwema! Hakuna mtu anayedaiwa sasa hivi.</td></tr>
+src/components/CommitteeDashboard.tsx:2692:                          <td className="py-2 px-3 text-slate-400">{g.phone || 'Hakuna simu'}</td>
+src/components/CommitteeDashboard.tsx:2730:                      <tr><td colSpan={5} className="py-6 text-center text-slate-500">Hakuna ahadi ya mchango iliyoandikishwa bado.</td></tr>
+src/components/CommitteeDashboard.tsx:2751:                  <h4 className="font-extrabold text-xs uppercase text-slate-300 font-mono">7. Orodha ya Wageni Walioingia (Check-ins)</h4>
+src/components/CommitteeDashboard.tsx:2766:                      <th className="py-2 px-3">Muda (Time)</th>
+src/components/CommitteeDashboard.tsx:2767:                      <th className="py-2 px-3">Jina la Mgeni</th>
+src/components/CommitteeDashboard.tsx:2776:                      <tr><td colSpan={6} className="py-10 text-center text-slate-500 italic uppercase tracking-widest text-[9px]">Skani bado hazijaanza. Hakuna mahudhurio ya kuonyesha.</td></tr>
+src/components/CommitteeDashboard.tsx:2798:                  <h4 className="font-extrabold text-xs uppercase text-slate-300 font-mono">6. Orodha ya Wageni ambao Bado Hawajaonyesha Ahadi Yoyote</h4>
+src/components/CommitteeDashboard.tsx:2811:                      <th className="py-2 px-3">Jina la Mgeni</th>
+src/components/CommitteeDashboard.tsx:2820:                      <tr><td colSpan={5} className="py-6 text-center text-slate-500">Safi sana! Wageni wote wameshasajili ahadi zao.</td></tr>
+src/components/CommitteeDashboard.tsx:2825:                          <td className="py-2 px-3 text-slate-400">{g.phone || 'Hakuna namba ya simu'}</td>
+src/components/CommitteeDashboard.tsx:2869:                        <p className="text-xl font-mono font-black text-slate-200 mt-2">{countPending} Wageni</p>
+src/components/CommitteeDashboard.tsx:2874:                    <h4 className="font-extrabold text-xs uppercase text-slate-300 font-mono">8. RSVP & Ujumbe (Zilizotumwa kwa Mgeni Mmoja Mmoja)</h4>
+src/components/CommitteeDashboard.tsx:2875:                    <span className="text-[10px] font-bold font-mono text-slate-400 uppercase">Jumla: {guests.length} Wageni Waliosajiliwa</span>
+src/components/CommitteeDashboard.tsx:2945:                {isEn ? "Invitations Dispatch Center" : "Sajili Mjumbe wa Kamati"}
+src/components/CommitteeDashboard.tsx:2954:                <label className="font-bold text-slate-300 block uppercase font-mono text-[9.5px]" htmlFor="member-fullname">{isEn ? "Full Name:" : "Jina Kamili la Mjumbe:"}</label>
+src/components/CommitteeDashboard.tsx:2993:                <label className="font-bold text-slate-300 block uppercase font-mono text-[9.5px]">{isEn ? "Position & Responsibility:" : "Nafasi kwenye Kamati (Position):"}</label>
+src/components/CommitteeDashboard.tsx:3150:                      const msg = `Ahlan! Karibu kwenye Portal ya Kamati ya sherehe yetu.\n\nBofya link hii kuingia: ${window.location.origin}/?portal=committee&eventId=${event.id}\n\nPIN ya Mweka Hazina: 2222\nPIN ya Katibu: 3333\nPIN ya Mjumbe wa kawaida: 4444\n\nTafadhali tumia nywila (PIN) inayoendana na cheo chako kuzuia muingiliano.`;
+src/components/CommitteeDashboard.tsx:3152:                      alert(isEn ? 'Copied to clipboard' : 'Ujumbe umenakiliwa! Sasa unaweza kwenda ku-paste (kubandika) Whatsapp kwa wanakamati!');
+src/components/CommitteeDashboard.tsx:3157:                    {isEn ? "Copy Access Message for WhatsApp" : "Nakili Ujumbe kwa ajili ya WhatsApp"}
+src/components/CommitteeDashboard.tsx:3286:                {isEn ? "Secure Shared repository" : "Hifadhi ya Faili na Nyaraka Pamoja"}
+src/components/CommitteeDashboard.tsx:3404:                      <h4 className="text-xs font-black text-white uppercase">{isEn ? "No Files Found" : "Hakuna Faili Lililopatikana"}</h4>
+src/components/CommitteeDashboard.tsx:3406:                        {isEn ? "No files stored under this category yet. Upload a document from the panel on the left." : "Hakuna nyaraka au picha iliyohifadhiwa hapa kwa sasa. Pakia document kutoka upande wa kushoto."}
+src/components/CommitteeDashboard.tsx:3469:                                      const textContent = `HARUSI SYSTEM FILE ARCHIVE\n============================\nDefault Seeded Record Details\n----------------------------\nFaili: ${file.name}\nUkubwa: ${file.size}\nIdara: ${badgeLabel}\nTukio: ${event.name}\nTarehe: ${file.uploadedAt}\n\n[Hifadhi imefanikiwa kwa usahihi katika mfumo wa makusanyo]`;
+src/components/CommitteeDashboard.tsx:3524:                {isEn ? "Record Contribution Payment Piece" : "Kamati: Sajili Malipo ya Mchango"}
+src/components/CommitteeDashboard.tsx:3591:                  {isEn ? "Submit Payment" : "Sajili Matokeo"}
+src/components/BackupManager.tsx:58:            {isEn ? "Data Backup & Recovery (JSON)" : "Hifadhi ya Ndani ya Data (Backup)"}
+src/components/BackupManager.tsx:78:              {isEn ? "Guest Profiles" : "Wageni Wote (Guests)"}
+src/components/BackupManager.tsx:84:              {isEn ? "Active Event" : "Tukio Linalosimamiwa"}
+src/components/BackupManager.tsx:87:              {eventDetails ? eventDetails.name : (isEn ? "None Selected" : "Hakuna tukio")}
+src/components/GuestPledgeSubmissionPage.tsx:522:                    <span className="text-slate-400 uppercase">{isEn ? 'Name:' : 'Jina:'}</span>
+src/components/ContributionManager.tsx:205:  const [tplPledge1En, setTplPledge1En] = useState<string>(() => event.smsTemplates?.pledge1En || safeLocalStorage.getItem(`kadi_tpl_pledge1_en_${event.id}`) || `Hello {Mgeni},\n\nWe kindly request you to confirm your pledge contribution for the event "{Tukio}".\n\nThank you very much!`);
+src/components/ContributionManager.tsx:208:    const oldDefault1 = `Habari {Mgeni},\n\nTunakuomba kutumbukiza na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\n\nTafadhali bofya hapa kuandikisha:\n{Kiungo}\n\nAsante sana!`;
+src/components/ContributionManager.tsx:209:    const oldDefault2 = `Habari {Mgeni},\n\nTunakuomba kutumbukiza na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\n\nAsante sana!,`;
+src/components/ContributionManager.tsx:210:    const oldDefault3 = `Habari {Mgeni},\n\nTunakuomba kutumbukiza na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\nTafadhali bofya hapa kuandikisha:\n{Kiungo}\n\nAsante sana!,`;
+src/components/ContributionManager.tsx:211:    const oldDefault4 = `Habari {Mgeni},\n\nTunakuomba kuweka na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\nTafadhali bofya kitufe kilicho hapa chini kujiandikisha au kuweka ahadi yako:\n\nAsante sana!`;
+src/components/ContributionManager.tsx:212:    const newDefault = `Habari {Mgeni},\n\nTunakuomba kuweka na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\nTafadhali bofya kitufe kilicho hapa chini kujiandikisha au kuweka ahadi yako:\n{Kiungo}\n\nAsante sana!`;
+src/components/ContributionManager.tsx:219:  const [tplPledge2En, setTplPledge2En] = useState<string>(() => event.smsTemplates?.pledge2En || safeLocalStorage.getItem(`kadi_tpl_pledge2_en_${event.id}`) || `Dear {Mgeni},\n\nWe would be honored by your support in planning our upcoming event "{Tukio}".\n\nThank you deeply.`);
+src/components/ContributionManager.tsx:220:  const [tplPledge2Sw, setTplPledge2Sw] = useState<string>(() => event.smsTemplates?.pledge2Sw || safeLocalStorage.getItem(`kadi_tpl_pledge2_sw_${event.id}`) || `Ndugu {Mgeni},\n\nTunapokea kwa furaha ahadi za michango kwa ajili ya maandalizi ya tukio la {Tukio}.\n\nAsante muno.`);
+src/components/ContributionManager.tsx:222:  const [tplRem1En, setTplRem1En] = useState<string>(() => event.smsTemplates?.rem1En || safeLocalStorage.getItem(`kadi_tpl_rem1_en_${event.id}`) || `Hello {Mgeni},\n\nFriendly reminder regarding your contribution pledge for "{Tukio}".\n\nPledged: TZS {Ahadi}\n- Paid: TZS {Paid}\n- Balance Due: TZS {Balance}\n\nWishing you all the best, thank you!`);
+src/components/ContributionManager.tsx:223:  const [tplRem1Sw, setTplRem1Sw] = useState<string>(() => event.smsTemplates?.rem1Sw || safeLocalStorage.getItem(`kadi_tpl_rem1_sw_${event.id}`) || `Habari {Mgeni},\n\nKumbusho la kirafiki kuhusu mchango wako wa {Tukio}.\n\nAhadi: TZS {Ahadi}\n- Uliyolipa: TZS {Paid}\n- Salio lako: TZS {Balance}\n\nTunakutakia heri, Asante!`);
+src/components/ContributionManager.tsx:225:  const [tplRem2En, setTplRem2En] = useState<string>(() => event.smsTemplates?.rem2En || safeLocalStorage.getItem(`kadi_tpl_rem2_en_${event.id}`) || `Dear {Mgeni},\n\nThis is a respectful reminder to complete your pending outstanding contribution balance to support our event "{Tukio}".\n\nBalance Due: TZS {Balance}\n\nThank you sincerely for your generosity.`);
+src/components/ContributionManager.tsx:226:  const [tplRem2Sw, setTplRem2Sw] = useState<string>(() => event.smsTemplates?.rem2Sw || safeLocalStorage.getItem(`kadi_tpl_rem2_sw_${event.id}`) || `Ndugu {Mgeni},\n\nTunakukumbusha kwa heshima kabisa kukamilisha ahadi yako ya mchango kwa ajili ya kufanikisha tukio la {Tukio}.\n\nSalio linalobaki: TZS {Balance}\n\nAsante sana kwa ukarimu wako.`);
+src/components/ContributionManager.tsx:228:  const [tplThanks1En, setTplThanks1En] = useState<string>(() => event.smsTemplates?.thanks1En || safeLocalStorage.getItem(`kadi_tpl_thanks1_en_${event.id}`) || `Hello {Mgeni},\n\nWe would like to thank you with immense gratitude for fully completing your contribution pledge for our event "{Tukio}".\n\nThank you so much and God bless you!`);
+src/components/ContributionManager.tsx:229:  const [tplThanks1Sw, setTplThanks1Sw] = useState<string>(() => event.smsTemplates?.thanks1Sw || safeLocalStorage.getItem(`kadi_tpl_thanks1_sw_${event.id}`) || `Habari {Mgeni},\n\nTunakushukuru kwa upendo mkubwa kwa kukamilisha mchango wako kikamilifu kwa ajili ya kufanikisha tukio letu la {Tukio}.\n\nAsante sana na Mungu akubariki!`);
+src/components/ContributionManager.tsx:231:  const [tplThanks2En, setTplThanks2En] = useState<string>(() => event.smsTemplates?.thanks2En || safeLocalStorage.getItem(`kadi_tpl_thanks2_en_${event.id}`) || `Dear {Mgeni},\n\nWe have successfully recorded your contribution in full.\n\nYour presence and priceless support are deeply appreciated as they play a huge role in making "{Tukio}" a reality.\n\nBlessings to you!`);
+src/components/ContributionManager.tsx:232:  const [tplThanks2Sw, setTplThanks2Sw] = useState<string>(() => event.smsTemplates?.thanks2Sw || safeLocalStorage.getItem(`kadi_tpl_thanks2_sw_${event.id}`) || `Ndugu {Mgeni},\n\nTujasajili and tumepokea mchango wako kikamilifu.\n\nTunathamini sana mchango wako na support yako ya hali ya juu katika kufanikisha tukio letu la {Tukio}.\n\nUbarikiwe sana muno!`);
+src/components/ContributionManager.tsx:253:    setTplPledge1En(event.smsTemplates?.pledge1En || safeLocalStorage.getItem(`kadi_tpl_pledge1_en_${event.id}`) || `Hello {Mgeni},\n\nWe kindly request you to confirm your pledge contribution for the event "{Tukio}".\n\nThank you very much!`);
+src/components/ContributionManager.tsx:256:    const oldDefault1sw = `Habari {Mgeni},\n\nTunakuomba kutumbukiza na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\n\nTafadhali bofya hapa kuandikisha:\n{Kiungo}\n\nAsante sana!`;
+src/components/ContributionManager.tsx:257:    const oldDefault2sw = `Habari {Mgeni},\n\nTunakuomba kutumbukiza na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\n\nAsante sana!,`;
+src/components/ContributionManager.tsx:258:    const oldDefault3sw = `Habari {Mgeni},\n\nTunakuomba kutumbukiza na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\nTafadhali bofya hapa kuandikisha:\n{Kiungo}\n\nAsante sana!,`;
+src/components/ContributionManager.tsx:259:    const oldDefault4sw = `Habari {Mgeni},\n\nTunakuomba kuweka na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\nTafadhali bofya kitufe kilicho hapa chini kujiandikisha au kuweka ahadi yako:\n\nAsante sana!`;
+src/components/ContributionManager.tsx:260:    const newDefaultSw1 = `Habari {Mgeni},\n\nTunakuomba kuweka na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\nTafadhali bofya kitufe kilicho hapa chini kujiandikisha au kuweka ahadi yako:\n{Kiungo}\n\nAsante sana!`;
+src/components/ContributionManager.tsx:267:    setTplPledge2En(event.smsTemplates?.pledge2En || safeLocalStorage.getItem(`kadi_tpl_pledge2_en_${event.id}`) || `Dear {Mgeni},\n\nWe would be honored by your support in planning our upcoming event "{Tukio}".\n\nThank you deeply.`);
+src/components/ContributionManager.tsx:268:    setTplPledge2Sw(event.smsTemplates?.pledge2Sw || safeLocalStorage.getItem(`kadi_tpl_pledge2_sw_${event.id}`) || `Ndugu {Mgeni},\n\nTunapokea kwa furaha ahadi za michango kwa ajili ya maandalizi ya tukio la {Tukio}.\n\nAsante muno.`);
+src/components/ContributionManager.tsx:270:    setTplRem1En(event.smsTemplates?.rem1En || safeLocalStorage.getItem(`kadi_tpl_rem1_en_${event.id}`) || `Hello {Mgeni},\n\nFriendly reminder regarding your contribution pledge for "{Tukio}".\n\nPledged: TZS {Ahadi}\n- Paid: TZS {Paid}\n- Balance Due: TZS {Balance}\n\nWishing you all the best, thank you!`);
+src/components/ContributionManager.tsx:271:    setTplRem1Sw(event.smsTemplates?.rem1Sw || safeLocalStorage.getItem(`kadi_tpl_rem1_sw_${event.id}`) || `Habari {Mgeni},\n\nKumbusho la kirafiki kuhusu mchango wako wa {Tukio}.\n\nAhadi: TZS {Ahadi}\n- Uliyolipa: TZS {Paid}\n- Salio lako: TZS {Balance}\n\nTunakutakia heri, Asante!`);
+src/components/ContributionManager.tsx:273:    setTplRem2En(event.smsTemplates?.rem2En || safeLocalStorage.getItem(`kadi_tpl_rem2_en_${event.id}`) || `Dear {Mgeni},\n\nThis is a respectful reminder to complete your pending outstanding contribution balance to support our event "{Tukio}".\n\nBalance Due: TZS {Balance}\n\nThank you sincerely for your generosity.`);
+src/components/ContributionManager.tsx:274:    setTplRem2Sw(event.smsTemplates?.rem2Sw || safeLocalStorage.getItem(`kadi_tpl_rem2_sw_${event.id}`) || `Ndugu {Mgeni},\n\nTunakukumbusha kwa heshima kabisa kukamilisha ahadi yako ya mchango kwa ajili ya kufanikisha tukio la {Tukio}.\n\nSalio linalobaki: TZS {Balance}\n\nAsante sana kwa ukarimu wako.`);
+src/components/ContributionManager.tsx:276:    setTplThanks1En(event.smsTemplates?.thanks1En || safeLocalStorage.getItem(`kadi_tpl_thanks1_en_${event.id}`) || `Hello {Mgeni},\n\nWe would like to thank you with immense gratitude for fully completing your contribution pledge for our event "{Tukio}".\n\nThank you so much and God bless you!`);
+src/components/ContributionManager.tsx:277:    setTplThanks1Sw(event.smsTemplates?.thanks1Sw || safeLocalStorage.getItem(`kadi_tpl_thanks1_sw_${event.id}`) || `Habari {Mgeni},\n\nTunakushukuru kwa upendo mkubwa kwa kukamilisha mchango wako kikamilifu kwa ajili ya kufanikisha tukio letu la {Tukio}.\n\nAsante sana na Mungu akubariki!`);
+src/components/ContributionManager.tsx:279:    setTplThanks2En(event.smsTemplates?.thanks2En || safeLocalStorage.getItem(`kadi_tpl_thanks2_en_${event.id}`) || `Dear {Mgeni},\n\nWe have successfully recorded your contribution in full.\n\nYour presence and priceless support are deeply appreciated as they play a huge role in making "{Tukio}" a reality.\n\nBlessings to you!`);
+src/components/ContributionManager.tsx:280:    setTplThanks2Sw(event.smsTemplates?.thanks2Sw || safeLocalStorage.getItem(`kadi_tpl_thanks2_sw_${event.id}`) || `Ndugu {Mgeni},\n\nTujasajili and tumepokea mchango wako kikamilifu.\n\nTunathamini sana mchango wako na support yako ya hali ya juu katika kufanikisha tukio letu la {Tukio}.\n\nUbarikiwe sana muno!`);
+src/components/ContributionManager.tsx:414:                  {isEn ? 'No pending guests for this category' : 'Hakuna mgeni aliebaki kwenye kundi hili'}
+src/components/ContributionManager.tsx:976:      .replace(/{Tukio}/g, eventName)
+src/components/ContributionManager.tsx:1043:        alert(isEn ? 'No candidates selected for WhatsApp sending. Please check guests first.' : 'Hakuna watu walioteuliwa kwa ajili ya WhatsApp. Tafadhali chagua wageni kwanza.');
+src/components/ContributionManager.tsx:1124:        setSendLogs(prev => [`[✓ ${sendingChannel.toUpperCase()}] Ujumbe kwa ${g.name} umetumwa kikamilifu.`, ...prev]);
+src/components/ContributionManager.tsx:1171:        : `Zoezi la kutuma kikundi limekamilika. Zilizofanikiwa: ${sentSuccessfully}, Zilizoshindwa: ${failedCount}. Tafadhali angalia sehemu ya 'Kituo cha Ujumbe' kwa kupitia logi za hitilafu!`
+src/components/ContributionManager.tsx:1176:        : `Ujumbe wote ${sentSuccessfully} imetumwa vyema kwa mafanikio kupitia ${sendingChannel}!`
+src/components/ContributionManager.tsx:1256:            ? `Hello {Mgeni},\n\nWe kindly request you to confirm your pledge contribution for the event "{Tukio}".\n\nThank you very much!`
+src/components/ContributionManager.tsx:1257:            : `Habari {Mgeni},\n\nTunakuomba kuweka na kuthibitisha ahadi yako ya mchango kwa ajili ya tukio la {Tukio}.\nTafadhali bofya kitufe kilicho hapa chini kujiandikisha au kuweka ahadi yako:\n{Kiungo}\n\nAsante sana!`
+src/components/ContributionManager.tsx:1262:            ? `Dear {Mgeni},\n\nWe would be honored by your support in planning our upcoming event "{Tukio}".\n\nThank you deeply.`
+src/components/ContributionManager.tsx:1263:            : `Ndugu {Mgeni},\n\nTunapokea kwa furaha ahadi za michango kwa ajili ya maandalizi ya tukio la {Tukio}.\n\nAsante muno.`
+src/components/ContributionManager.tsx:1270:            ? `Hello {Mgeni},\n\nFriendly reminder regarding your contribution pledge for "{Tukio}".\n\nPledged: TZS {Ahadi}\n- Paid: TZS {Paid}\n- Balance Due: TZS {Balance}\n\nWishing you all the best, thank you!`
+src/components/ContributionManager.tsx:1271:            : `Habari {Mgeni},\n\nKumbusho la kirafiki kuhusu mchango wako wa {Tukio}.\n\nAhadi: TZS {Ahadi}\n- Uliyolipa: TZS {Paid}\n- Salio lako: TZS {Balance}\n\nTunakutakia heri, Asante!`
+src/components/ContributionManager.tsx:1276:            ? `Dear {Mgeni},\n\nThis is a respectful reminder to complete your pending outstanding contribution balance to support our event "{Tukio}".\n\nBalance Due: TZS {Balance}\n\nThank you sincerely for your generosity.`
+src/components/ContributionManager.tsx:1277:            : `Ndugu {Mgeni},\n\nTunakukumbusha kwa heshima kabisa kukamilisha ahadi yako ya mchango kwa ajili ya kufanikisha tukio la {Tukio}.\n\nSalio linalobaki: TZS {Balance}\n\nAsante sana kwa ukarimu wako.`
+src/components/ContributionManager.tsx:1284:            ? `Hello {Mgeni},\n\nWe would like to thank you with immense gratitude for fully completing your contribution pledge for our event "{Tukio}".\n\nThank you so much and God bless you!`
+src/components/ContributionManager.tsx:1285:            : `Habari {Mgeni},\n\nTunakushukuru kwa upendo mkubwa kwa kukamilisha mchango wako kikamilifu kwa ajili ya kufanikisha tukio letu la {Tukio}.\n\nAsante sana na Mungu akubariki!`
+src/components/ContributionManager.tsx:1290:            ? `Dear {Mgeni},\n\nWe have successfully recorded your contribution in full.\n\nYour presence and priceless support are deeply appreciated as they play a huge role in making "{Tukio}" a reality.\n\nBlessings to you!`
+src/components/ContributionManager.tsx:1291:            : `Ndugu {Mgeni},\n\nTujasajili na tumepokea mchango wako kikamilifu.\n\nTunathamini sana mchango wako na support yako ya hali ya juu katika kufanikisha tukio letu la {Tukio}.\n\nUbarikiwe sana muno!`
+src/components/ContributionManager.tsx:1434:          { tag: '{Mgeni}', label: isEn ? 'Guest Name' : 'Jina la Mgeni' },
+src/components/ContributionManager.tsx:1435:          { tag: '{Tukio}', label: isEn ? 'Event Name' : 'Jina la Tukio' },
+src/components/ContributionManager.tsx:1444:          { tag: '{Mgeni}', label: isEn ? 'Guest Name' : 'Jina la Mgeni' },
+src/components/ContributionManager.tsx:1445:          { tag: '{Tukio}', label: isEn ? 'Event Name' : 'Jina la Tukio' },
+src/components/ContributionManager.tsx:1456:          { tag: '{Mgeni}', label: isEn ? 'Guest Name' : 'Jina la Mgeni' },
+src/components/ContributionManager.tsx:1457:          { tag: '{Tukio}', label: isEn ? 'Event Name' : 'Jina la Tukio' }
+src/components/ContributionManager.tsx:1679:      ctx.fillText(`Kamati ya Maandalizi: ${evt.hostName || "Ndugu na Marafiki"}`, w / 2, h * 0.93);
+src/components/ContributionManager.tsx:1911:        setSendLogs(prev => [`[✓ SMS] Ujumbe umetumwa kwa ${g.name}`, ...prev]);
+src/components/ContributionManager.tsx:1961:      setSendLogs(prev => [`[✓ WhatsApp] Ujumbe umetumwa kwa ${g.name}`, ...prev]);
+src/components/ContributionManager.tsx:1996:    downloadReportPDF(isEn ? 'Full Contributions Ledger' : 'Daftari Kamili la Michango', guests);
+src/components/ContributionManager.tsx:2154:              action: `Upakiaji Mkubwa wa CSV: Wageni wapya ${i + 1} hadi ${Math.min(i + batch.length, totalToUpload)} kati ya ${totalToUpload}`,
+src/components/ContributionManager.tsx:2197:        onUpdateGuests(currentMerged, `Mipakio Mkubwa CSV: Wageni ${totalToUpload} wakaandikishwa michango yao`, true);
+src/components/ContributionManager.tsx:2221:      : 'Jina la Mgeni,Idadi ya Simu,Mchango ulioahidiwa,Kiasi Kilicholipwa,Salio linalodaiwa,Hali ya Ahadi\n';
+src/components/ContributionManager.tsx:2266:      doc.text(`${isEn ? 'Total Pledges' : 'Jumla Ya Ahadi'}:`, 14, 40);
+src/components/ContributionManager.tsx:2273:      doc.text(`${isEn ? 'Total Collected' : 'Jumla Ya Makusanyo'}:`, 14, 46);
+src/components/ContributionManager.tsx:2295:        : [['Jina la Mgeni', 'Simu', 'Kundi', 'Ahadi (TZS)', 'Malipo (TZS)', 'Deni (TZS)', 'Hali']];
+src/components/ContributionManager.tsx:2349:            {isEn ? "Contributions Management Module" : "Moduli ya Kusimamia Michango"}
+src/components/ContributionManager.tsx:2363:              Usiogope! Huduma hii ni hiari (opt-in) na haitaingilia mfumo wako wa kadi za kawaida za mwaliko kama huitumii. Ukiiwezesha kwa ajili ya <strong>"{event.name || 'Tukio hili'}"</strong>, utakuwa na uwezo wa:
+src/components/ContributionManager.tsx:2407:            {isEn ? "Enable Contributions System Now" : "Wezesha Mfumo wa Michango Sasa"}
+src/components/ContributionManager.tsx:2456:                  {isEn ? "Uploading Contributions in Batches..." : "Inapakia Michango Kwenye Database..."}
+src/components/ContributionManager.tsx:2496:              {isEn ? `Active Ceremony: ${event.name || '[Untitled]'}` : `Tukio hai: {event.name || '[Bila Jina]'}`}
+src/components/ContributionManager.tsx:2501:            {isEn ? "Contributions Terminal" : "Usimamizi wa Michango"}
+src/components/ContributionManager.tsx:2508:              title={isEn ? "Select Event" : "Chagua Tukio"}
+src/components/ContributionManager.tsx:2514:                <option key={ev.id} value={ev.id} className="bg-slate-900 border-none text-[10px]">{ev.name || 'Bila Jina'}</option>
+src/components/ContributionManager.tsx:2537:          { id: 'message-center', label: isEn ? 'Message Center' : 'Kituo cha Ujumbe', icon: Send },
+src/components/ContributionManager.tsx:2601:          title={isEn ? "Sync / Edit SMS credits" : "Sawazisha / Hariri mikopo ya SMS"}
+src/components/ContributionManager.tsx:2618:                {isEn ? "All Guests on Event" : "Wageni Wote kwenye Event"}
+src/components/ContributionManager.tsx:2622:                {isEn ? "Total number of guests in database" : "Idadi ya jumla waliopo kwenye database"}
+src/components/ContributionManager.tsx:2629:                {isEn ? "Total Pledged Amount" : "Jumla ya Ahadi"}
+src/components/ContributionManager.tsx:2640:                {isEn ? "Total Paid Amount" : "Jumla ya Malipo"}
+src/components/ContributionManager.tsx:2847:                    <th className="py-3.5 px-4 font-bold">{isEn ? 'Name' : 'Jina'}</th>
+src/components/ContributionManager.tsx:2861:                        {isEn ? 'No guests found matching filters.' : 'Hakuna mgeni aliyepatikana kwa vigezo hivi.'}
+src/components/ContributionManager.tsx:2874:                          <td className="py-3.5 px-4 font-mono text-slate-400">{g.phone || (isEn ? 'None' : 'Hakuna')}</td>
+src/components/ContributionManager.tsx:2913:                                title={isEn ? "Edit Guest Info" : "Hariri Mgeni"}
+src/components/ContributionManager.tsx:2921:                                title={isEn ? "Add / Edit Pledge Amount" : "Ongeza / Hariri Ahadi"}
+src/components/ContributionManager.tsx:3068:                  { label: isEn ? 'Event Name' : 'Jina la Sherehe / Harusi', prefix: 'eventName', flag: 'showEventName' },
+src/components/ContributionManager.tsx:3069:                  { label: isEn ? 'Guest Name' : 'Jina la Mgeni', prefix: 'guestName', flag: 'showGuestName' },
+src/components/ContributionManager.tsx:3178:                      <span>{isEn ? 'Save Guest Name Layout' : 'Hifadhi Mpangilio' }</span>
+src/components/ContributionManager.tsx:3187:                {isEn ? "All adjustments are dynamically stored to local cache for this event." : "Marekebisho yako yanahifadhiwa moja kwa moja kwenye cache kulingana na kiolezo hiki cha Tukio."}
+src/components/ContributionManager.tsx:3288:                      Kamati ya Maandalizi: {event.hostName || "Ndugu na Marafiki"}
+src/components/ContributionManager.tsx:3346:                  <span>⚡</span> {isEn ? "Select Message Template (SMS/WhatsApp):" : "Chagua Kiolezo cha Ujumbe (SMS/WhatsApp):"}
+src/components/ContributionManager.tsx:3379:                          {tpl.text('[Jina]', event.name || '[Tukio]', '[Kiungo]')}
+src/components/ContributionManager.tsx:3392:                      <span>✏️</span> {isEn ? "Customize Chosen Message Template" : "Hariri Kiolezo cha Ujumbe Kilichochaguliwa"}
+src/components/ContributionManager.tsx:3408:                      title={isEn ? "Save changes manually" : "Hifadhi mabadiliko sasa"}
+src/components/ContributionManager.tsx:3410:                      💾 {isEn ? "Save" : "Hifadhi"}
+src/components/ContributionManager.tsx:3453:                    <span>{isEn ? "Characters:" : "Idadi ya Herufi:"} {getActiveTemplateValues().value.length}</span>
+src/components/ContributionManager.tsx:3588:                <strong className="text-amber-400">Sheria Maalum ya Kiratibu:</strong> Ujumbe wa kundi hili huenda peke yake kama SMS/Chat bila kuambatana na kadi wala pledge link, ili kuepuka usumbufu na kuleta kumbusho lililo jikita kwenye salio tu.</>
+src/components/ContributionManager.tsx:3595:                  <span>⏰</span> {isEn ? "Select Message Template (SMS/WhatsApp):" : "Chagua Kiolezo cha Ujumbe (SMS/WhatsApp):"}
+src/components/ContributionManager.tsx:3628:                          {tpl.text('[Jina]', event.name || '[Tukio]', 100000, 40000, 60000)}
+src/components/ContributionManager.tsx:3641:                      <span>✏️</span> {isEn ? "Customize Chosen Message Template" : "Hariri Kiolezo cha Ujumbe Kilichochaguliwa"}
+src/components/ContributionManager.tsx:3657:                      title={isEn ? "Save changes manually" : "Hifadhi mabadiliko sasa"}
+src/components/ContributionManager.tsx:3659:                      💾 {isEn ? "Save" : "Hifadhi"}
+src/components/ContributionManager.tsx:3702:                    <span>{isEn ? "Characters:" : "Idadi ya Herufi:"} {getActiveTemplateValues().value.length}</span>
+src/components/ContributionManager.tsx:3819:              {isEn ? "Gratitude & Thank You Dispatch" : "Kutuma Kadi / Ujumbe wa Shukrani (Thank You)"}
+src/components/ContributionManager.tsx:3836:                  <span>💖</span> {isEn ? "Select Message Template (SMS/WhatsApp):" : "Chagua Kiolezo cha Ujumbe (SMS/WhatsApp):"}
+src/components/ContributionManager.tsx:3869:                          {tpl.text('[Jina]', event.name || '[Tukio]')}
+src/components/ContributionManager.tsx:3882:                      <span>✏️</span> {isEn ? "Customize Chosen Message Template" : "Hariri Kiolezo cha Ujumbe Kilichochaguliwa"}
+src/components/ContributionManager.tsx:3898:                      title={isEn ? "Save changes manually" : "Hifadhi mabadiliko sasa"}
+src/components/ContributionManager.tsx:3900:                      💾 {isEn ? "Save" : "Hifadhi"}
+src/components/ContributionManager.tsx:3943:                    <span>{isEn ? "Characters:" : "Idadi ya Herufi:"} {getActiveTemplateValues().value.length}</span>
+src/components/ContributionManager.tsx:3989:                  : (isEn ? `Send Gratitude Message (${selectedGuests.length})` : `Tuma Ujumbe wa Shukrani (${selectedGuests.length})`)
+src/components/ContributionManager.tsx:3996:                    <span>{isEn ? "Sending Gratitude Messages..." : "Inasambaza Shukrani za Michango..."}</span>
+src/components/ContributionManager.tsx:4089:                  <th className="py-3 px-4 font-bold">{isEn ? 'Content' : 'Ujumbe'}</th>
+src/components/ContributionManager.tsx:4090:                  <th className="py-3 px-4 font-bold">{isEn ? 'Time' : 'Muda'}</th>
+src/components/ContributionManager.tsx:4144:                <p className="text-[10px] text-slate-400 uppercase font-bold font-mono">{isEn ? "Total Pledges" : "Jumla ya Ahadi"}</p>
+src/components/ContributionManager.tsx:4251:                    <h4 className="font-black text-white text-xs uppercase">{isEn ? "Contributions Ledger" : "Daftari la Michango"}</h4>
+src/components/ContributionManager.tsx:4313:                  <h3 className="text-xs font-black text-white uppercase font-mono tracking-wider">{isEn ? "Recent Activity" : "Mwenendo wa Hivi Karibuni"}</h3>
+src/components/ContributionManager.tsx:4339:                      <p className="text-[10px] font-mono uppercase">{isEn ? "No recent logs" : "Hakuna kumbukumbu za sasa"}</p>
+src/components/ContributionManager.tsx:4373:              {editingGuestId ? (isEn ? "Edit Contributor Info" : "Hariri Taarifa za Mgeni") : (isEn ? "Add New Contributor" : "Mgeni Mpya wa Ahadi")}
+src/components/ContributionManager.tsx:4378:                  {isEn ? "Guest Full Name" : "Jina Kamili la Mgeni"} <span className="text-rose-500">*</span>
+src/components/ContributionManager.tsx:4392:                  {isEn ? "Phone Number (Optional)" : "Namba ya Simu (Si Lazima)"}
+src/components/ContributionManager.tsx:4460:                  {editingGuestId ? (isEn ? "Save Changes" : "Hifadhi Taarifa") : (isEn ? "Add Guest" : "Ongeza")}
+src/components/ContributionManager.tsx:4473:              {isEn ? "Add / Edit Guest Pledge Amount" : "Ongeza / Hariri Ahadi ya Mchango"}
+src/components/ContributionManager.tsx:4476:              {isEn ? "Guest Name" : "Jina la Mgeni"}: <span className="text-white font-bold">{targetGuest.name}</span>
+src/components/ContributionManager.tsx:4504:                {isEn ? "Save" : "Hifadhi"}
+src/components/ContributionManager.tsx:4517:                {isEn ? "Record New Payment Piece" : "Sajili Malipo Mapya"}
+src/components/ContributionManager.tsx:4561:                    {isEn ? "Payment Date:" : "Tarehe:"}
+src/components/ContributionManager.tsx:4622:                    {isEn ? "No contribution logs found for this guest." : "Hakuna historia yoyote ya malipo kwa sasa ya mgeni huyu."}
+src/components/ContributionManager.tsx:4642:                <h4 className="font-bold text-[10px] text-blue-400 uppercase font-mono tracking-widest">{isEn ? "- Messaging Logs -" : "- Historia Ya Ujumbe -"}</h4>
+src/components/ContributionManager.tsx:4658:                    {isEn ? "No SMS or WhatsApp logs." : "Hakuna log yoyote ya sms/whatsapp."}
+src/components/ContributionManager.tsx:4748:                      <p className="text-[10px] text-slate-450 font-mono font-semibold uppercase">{isEn ? 'Phone' : 'Namba'}: <span className="text-white">{activeSendTarget.guest.phone || 'N/A'}</span></p>
+src/components/ContributionManager.tsx:4787:                          {isEn ? "Compiled Message Text (Sample Preview):" : "Ujumbe Utakaoambatana na Kadi:"}
+src/components/ContributionManager.tsx:4797:                        {isEn ? "Message text to be sent:" : "Ujumbe utakaotumwa:"}
+src/components/ContributionManager.tsx:4913:                  {isEn ? "Message Sent Successfully!" : "Ujumbe Umetumwa!"}
+src/components/ContributionManager.tsx:4918:                    : `Ujumbe wako wa ${smsSuccessPopup.channel} umetumwa kikamilifu kwa mteja sasa hivi kupitia gateway yetu.`
+src/components/ContributionManager.tsx:5165:                          <span className="text-[9px] font-mono text-slate-500 uppercase block">{isEn ? "Phone Number" : "Nambari ya Simu"}</span>
+src/components/ContributionManager.tsx:5174:                        💬 {isEn ? "WhatsApp Message Body" : "Maandishi ya Ujumbe (Speech Bubble Preview)"}
+src/components/ContributionManager.tsx:5258:                    : "Hongera! Wageni wote uliowachagua wamekamilishiwa utumaji vizuri na kumbukumbu zote zimesajiliwa kwenye orodha yetu kuu."
+src/components/RSVPResponses.tsx:73:      'Sitaweza kuhudhuria kutokana na safari ya kikazi ya ghafla. Poleni sana.',
+src/components/RSVPResponses.tsx:159:            <p className="text-lg font-extrabold text-emerald-400 mt-0.5">{countAttending} Wageni</p>
+src/components/RSVPResponses.tsx:181:            <p className="text-lg font-extrabold text-amber-400 mt-0.5">{countMaybe} Wageni</p>
+src/components/RSVPResponses.tsx:272:            <label className="font-bold text-slate-300 block text-[9px] uppercase font-mono tracking-wider">Tafuta Jina / Simu / Code</label>
+src/components/RSVPResponses.tsx:383:                <th className="px-5 py-3 text-center whitespace-nowrap">Wageni wanaokuja</th>
+src/components/RSVPResponses.tsx:392:                    Hakuna wageni waliopatikana kwa ajili ya kufuatilia RSVP.
+src/components/RSVPResponses.tsx:481:                <p className="text-[10px] text-slate-350 italic mt-0.5">Karibu sana kujibu mwaliko wa sherehe sasa.</p>
+src/components/RSVPResponses.tsx:513:                      ✕ Sitaweza
+src/components/RSVPResponses.tsx:550:                  <label className="font-semibold text-slate-300 block" htmlFor="companions-comment">Ujumbe maalum wa Pongezi kwa Waandaji (Pongezi/Ombi)</label>
+src/components/Login.tsx:79:          ? 'Jina la mtumiaji au nenosiri si sahihi! Kwa mlinzi mlangoni, weka username kuelekezwa "scanner" na password kuwa ID ya tukio.'
+src/components/AuditLogsPage.tsx:72:               <p className="text-slate-300 font-bold mb-2">{language === 'sw' ? 'Hakuna Mabadiliko Yoyote' : 'No Audit Logs Found'}</p>
+src/components/AuditLogsPage.tsx:80:                    <th className="py-4 px-4 whitespace-nowrap">{language === 'sw' ? 'Muda (Time)' : 'Time'}</th>
+src/components/EventReports.tsx:307:        subTitleText = "Ripoti ya Jumla na Muhtasari wa Mahudhurio ya Kadi";
+src/components/EventReports.tsx:315:        subTitleText = "Orodha Kamili ya Wageni Waliothibitisha Majibu";
+src/components/EventReports.tsx:319:        subTitleText = "Wageni Ambapo RSVP Bado haijajibiwa";
+src/components/EventReports.tsx:331:        subTitleText = "Orodha ya Wageni Waliosajili Ahadi za Michango";
+src/components/EventReports.tsx:364:    const dateLabel = " • Tarehe: ";
+src/components/EventReports.tsx:486:        head: [['S/N', 'Muda (Time Arrived)', 'Mgeni (Guest Full Name)', 'Simu / Mobile', 'Aina ya Kadi', 'Scan Status', 'SMS', 'WA']],
+src/components/EventReports.tsx:638:    text += `• Ujumbe wa Kikampeni (SMS Sent): ${totalSmsSent}\n`;
+src/components/EventReports.tsx:639:    text += `• Ujumbe wa WA (WA Sent): ${totalWhatsappSent}\n\n`;
+src/components/EventReports.tsx:643:    text += `• Jumla ya Ahadi (Pledged): TZS ${metrics.totalPledgedAmount.toLocaleString()}\n`;
+src/components/EventReports.tsx:644:    text += `• Jumla Zilizokusanywa (Paid): TZS ${metrics.totalPaidAmount.toLocaleString()} (${collectedRatio}% ya ahadi)\n`;
+src/components/EventReports.tsx:663:    text += `• Jumla Kadi: ${groupSummaries.totals.count}\n`;
+src/components/EventReports.tsx:664:    text += `• Jumla Ahadi: TZS ${groupSummaries.totals.pledged.toLocaleString()}\n`;
+src/components/EventReports.tsx:665:    text += `• Jumla Iliyolipwa: TZS ${groupSummaries.totals.collected.toLocaleString()}\n`;
+src/components/EventReports.tsx:666:    text += `• Jumla Salio linalodaiwa: TZS ${groupSummaries.totals.balances.toLocaleString()}\n`;
+src/components/EventReports.tsx:735:    doc.text(`ID: ${event.id}  |  Tarehe ya Tukio: ${event.date || '-'}  |  Mchapishaji: EventCard Reports`, startTextX, currentY + 18);
+src/components/EventReports.tsx:754:      [isEn ? "Total Guests Listed" : "Jumla ya Wageni Walioorodheshwa", `${totalGuestsCount} ${isEn ? 'Guests' : 'Wageni'}`],
+src/components/EventReports.tsx:756:      [isEn ? "Confirmed RSVP No (Declined)" : "Waliokataa (Declined)", `${declinedCount} ${isEn ? 'Guests' : 'Wageni'}`],
+src/components/EventReports.tsx:757:      [isEn ? "Maybe / Undecided Answer" : "Wasiouhakika (Maybe)", `${maybeCount} ${isEn ? 'Guests' : 'Wageni'}`],
+src/components/EventReports.tsx:758:      [isEn ? "Pending Response" : "Bado Hawajajibu Kampeni", `${pendingCount} ${isEn ? 'Guests' : 'Wageni'}`],
+src/components/EventReports.tsx:764:      head: [[isEn ? "RSVP Metric / Attribute" : "Kipengele cha RSVP & Mahudhurio", isEn ? "Status Summary / Value" : "Idadi / Thamani"]],
+src/components/EventReports.tsx:791:      [isEn ? "Total Amount Pledged" : "Jumla ya Ahadi Kusajiliwa (Pledged)", `TZS ${metrics.totalPledgedAmount.toLocaleString()}`],
+src/components/EventReports.tsx:827:      isEn ? "Category Name" : "Jina la Kundi",
+src/components/EventReports.tsx:882:    doc.text(isEn ? "Report Verified and Signed by Committee Operations" : "Ripoti hii imethibitishwa na kuidhinishwa na Uongozi wa Kamati", 10, currentY);
+src/components/EventReports.tsx:898:            <span className="text-slate-450">{isEn ? 'Guest Cards:' : 'Kadi za Wageni:'}</span>
+src/components/EventReports.tsx:941:              {language === 'sw' ? 'Ripoti za Tukio' : 'Event Reports Manager'}
+src/components/EventReports.tsx:945:                ? 'Tazama na pakua ripoti zote za mahudhurio ya kadi, RSVP, pamoja na michango ya sherehe yako.' 
+src/components/EventReports.tsx:970:              {language === 'sw' ? 'Muhtasari wa Kamati' : 'Executive Dashboard Hub'}
+src/components/EventReports.tsx:1037:              {language === 'sw' ? 'Uchambuzi wa Michango' : 'Fundraising Insights'}
+src/components/EventReports.tsx:1060:              {language === 'sw' ? 'Wageni (Kadi)' : 'Guests Count'}
+src/components/EventReports.tsx:1222:          {language === 'sw' ? 'Michango na Fedha' : 'Contributions & Finance'}
+src/components/EventReports.tsx:1231:              { id: 'Overall', name: isEn ? '1. Overall Event Report' : '1. Ripoti Kuu ya Jumla' },
+src/components/EventReports.tsx:1232:              { id: 'Attendance_Only', name: isEn ? '2. Check-In & Arrivals' : '2. Wageni Waliofika' },
+src/components/EventReports.tsx:1311:                <p className="text-2xl font-mono font-black text-blue-300 mt-1">{checkedInCount} Wageni ({arivedPercent()}% Ratio)</p>
+src/components/EventReports.tsx:1320:                  <span className="text-[10px] font-black tracking-widest text-purple-400 uppercase font-mono">4. Mrejesho wa Ujumbe</span>
+src/components/EventReports.tsx:1364:                {language === 'sw' ? `Mwonekano: Wageni ${filteredGuests.length} kati ya ${totalGuestsCount}` : `Showing ${filteredGuests.length} of ${totalGuestsCount}`}
+src/components/EventReports.tsx:1380:                    <th className="py-3 px-3 font-black text-center">Muda wa Kufika</th>
+src/components/EventReports.tsx:1389:                        Hakuna kadi ya mgeni inayolingana na utafutaji wako.
+src/components/EventReports.tsx:1452:                2. Wageni Waliofika (Check-In Register Tracker)
+src/components/EventReports.tsx:1464:                    <th className="py-3 px-3 font-black">{isEn ? 'Arrival Time' : 'Muda wa Kufika'}</th>
+src/components/EventReports.tsx:1465:                    <th className="py-3 px-3 font-black">{isEn ? 'Guest Name' : 'Jina la Mgeni'}</th>
+src/components/EventReports.tsx:1466:                    <th className="py-3 px-3 font-black">{isEn ? 'Phone Number' : 'Namba ya Simu'}</th>
+src/components/EventReports.tsx:1476:                        {language === 'sw' ? 'Hakuna kumbukumbu za kuonyesha. Scan bado hazijaanza.' : 'No arrivals registered yet.'}
+src/components/EventReports.tsx:1516:                Waliojibu: {attendingCount + declinedCount + maybeCount} Wageni
+src/components/EventReports.tsx:1525:                    <th className="py-3 px-3 font-black">{isEn ? 'Guest Name' : 'Jina la Mgeni'}</th>
+src/components/EventReports.tsx:1526:                    <th className="py-3 px-3 font-black">{isEn ? 'Phone Number' : 'Namba ya Simu'}</th>
+src/components/EventReports.tsx:1536:                        {isEn ? 'No guests have confirmed RSVP yet.' : 'Hakuna wageni waliothibitisha RSVP bado.'}
+src/components/EventReports.tsx:1580:                4. Wageni ambao Bado Hawajajibu Kampeni ya RSVP
+src/components/EventReports.tsx:1583:                {isEn ? `No response: ${pendingCount} Guests` : `Hawajajibu: ${pendingCount} Wageni`}
+src/components/EventReports.tsx:1592:                    <th className="py-3 px-3 font-black">{isEn ? 'Guest Name' : 'Jina la Mgeni'}</th>
+src/components/EventReports.tsx:1593:                    <th className="py-3 px-3 font-black">{isEn ? 'Phone Number' : 'Namba ya Simu'}</th>
+src/components/EventReports.tsx:1596:                    <th className="py-3 px-3 font-black text-center">{isEn ? 'Message Dispatches' : 'Ujumbe Dispatches'}</th>
+src/components/EventReports.tsx:1603:                        {isEn ? 'Awesome! All guests have submitted their RSVPs!' : 'Safi sana! Wageni wote wametimiza kujibu RSVP zao!'}
+src/components/EventReports.tsx:1611:                        <td className="py-2.5 px-3 text-slate-400">{g.phone || 'Hakuna Namba'}</td>
+src/components/EventReports.tsx:1633:                1. Orodha ya Wageni Wenye Salio la Deni/Ahadi bado
+src/components/EventReports.tsx:1636:                Jumla Inayodaiwa: TZS {metrics.outstandingBalance.toLocaleString()}
+src/components/EventReports.tsx:1645:                    <th className="py-3 px-3 font-black">Jina la Mchangiaji</th>
+src/components/EventReports.tsx:1649:                    <th className="py-3 px-3 font-black text-center">Ujumbe Counts</th>
+src/components/EventReports.tsx:1656:                        {language === 'sw' ? 'Mungu ni Mwema! Hakuna mtu anayedaiwa sasa hivi.' : 'Awesome! Outstanding balance is entirely clear.'}
+src/components/EventReports.tsx:1688:                Waliomaliza: {filteredGuests.length} Wageni
+src/components/EventReports.tsx:1698:                    <th className="py-3 px-3 font-black">Namba ya Simu</th>
+src/components/EventReports.tsx:1736:                3. Kumbukumbu Zote za Wageni Walioaahidi Mchango kuisaidia Sherehe
+src/components/EventReports.tsx:1739:                {isEn ? 'Total Pledges:' : 'Jumla ya Ahadi:'} TZS {metrics.totalPledgedAmount.toLocaleString()}
+src/components/EventReports.tsx:1748:                    <th className="py-3 px-3 font-black">{isEn ? 'Guest Name' : 'Jina la Mgeni'}</th>
+src/components/EventReports.tsx:1749:                    <th className="py-3 px-3 font-black">{isEn ? 'Phone Number' : 'Namba ya Simu'}</th>
+src/components/EventReports.tsx:1758:                        {isEn ? 'No contribution pledges registered yet on the system.' : 'Hakuna ahadi ya mchango iliyoandikishwa bado kwenye mfumo.'}
+src/components/EventReports.tsx:1783:                4. Wageni ambao Bado Hawajaweka Ahadi yoyote ya Kichango
+src/components/EventReports.tsx:1786:                Bado Kuchangia: {filteredGuests.length} Wageni
+src/components/EventReports.tsx:1796:                    <th className="py-3 px-3 font-black">Namba ya Simu</th>
+src/components/EventReports.tsx:1805:                        Safi sana! Wageni wote wameishaandikisha michango yao kikamilifu.
+src/components/EventReports.tsx:1813:                        <td className="py-2.5 px-3 text-slate-400 text-[10px]">{g.phone || 'Hakuna Namba'}</td>
+src/components/TemplatesSelector.tsx:233:                  {language === 'sw' ? 'Jina la Mgeni' : 'Guest Name'}
+src/components/TemplatesSelector.tsx:269:                    <span>{language === 'sw' ? 'Uhariri wa eneo la Jina la Mgeni' : 'Adjust Guest Name Layout'}</span>
+src/components/TemplatesSelector.tsx:307:                      <span>{language === 'sw' ? 'Ukubwa wa Jina (Font Size)' : 'Typography Font Size'}</span>
+src/components/TemplatesSelector.tsx:323:                      {language === 'sw' ? 'Rangi ya Jina la Mgeni' : 'Guest Name Highlight Color'}
+src/components/TemplatesSelector.tsx:547:              <span>{isSaved ? (language === 'sw' ? 'Imehifadhiwa!' : 'Saved Successfully!') : (language === 'sw' ? 'Hifadhi Kadi ✓' : 'Save Layout Settings ✓')}</span>
+src/components/TemplatesSelector.tsx:555:              <span>{language === 'sw' ? 'Weka Orodha ya Wageni' : 'Upload Guest List'}</span>
+src/components/EventDetailsForm.tsx:117:                ? (language === 'sw' ? 'Sanidi / Hariri Taarifa za Sherehe' : 'Configure / Edit Event Information')
+src/components/EventDetailsForm.tsx:137:              <span>{language === 'sw' ? 'Hariri Taarifa (Edit Event)' : 'Edit Event Details'}</span>
+src/components/EventDetailsForm.tsx:192:              {formData.name || (language === 'sw' ? 'Bado Jina la Sherehe Halijawekwa' : 'Untitled Event')}
+src/components/EventDetailsForm.tsx:209:                    <p className="text-slate-400 text-[10px] uppercase font-mono">Tarehe ya Tukio (Date)</p>
+src/components/EventDetailsForm.tsx:217:                    <p className="text-slate-400 text-[10px] uppercase font-mono">Muda wa Kuanza (Time)</p>
+src/components/EventDetailsForm.tsx:297:                    <p className="text-slate-400 text-[10px] uppercase font-mono">Namba za Maswali RSVP</p>
+src/components/EventDetailsForm.tsx:318:                ? 'Kama unataka kubadilisha ukumbi, muda, au code ya mavazi wakati wowote, bofya kitufe cha "Hariri Taarifa" hapo juu.'
+src/components/EventDetailsForm.tsx:334:                {language === 'sw' ? 'Aina ya Tukio (SENDER ID / Harusi / Send-off)' : 'Event Type (Top Badge Header)'}
+src/components/EventDetailsForm.tsx:343:                <option value="" disabled>-- Chagua Aina ya Tukio --</option>
+src/components/EventDetailsForm.tsx:356:                {language === 'sw' ? 'Jina la Sherehe (Event Title)' : 'Official Event Name (Title)'}
+src/components/EventDetailsForm.tsx:407:                <span>{language === 'sw' ? 'Tarehe ya Sherehe' : 'Event Calendar Date'}</span>
+src/components/EventDetailsForm.tsx:440:                {language === 'sw' ? 'Muda wa Siku (Period)' : 'Time of Day (Period)'}
+src/components/EventDetailsForm.tsx:503:                  <span>{language === 'sw' ? 'Jina la Jengo/Ukumbi (Hall Name)' : 'Reception Hall / Venue Name'}</span>
+src/components/EventDetailsForm.tsx:582:                {language === 'sw' ? 'Vipengele vya RSVP (Namba Tatu za Maswali)' : 'RSVP Contact Center (3 Hotline numbers)'}
+src/components/EventDetailsForm.tsx:641:                    value={getFieldHelp('contact3Name', language === 'sw' ? 'Jina' : 'Name').value}
+src/components/EventDetailsForm.tsx:642:                    placeholder={getFieldHelp('contact3Name', language === 'sw' ? 'Jina' : 'Name').placeholder}
+src/components/EventDetailsForm.tsx:777:                  {language === 'sw' ? 'Hifadhi Taarifa (Save Event)' : 'Save Event Details ✓'}
+src/components/QRScanner.tsx:118:      : ["ID", "Namba ya Kadi (Code)", "Jina la Mgeni", "Namba ya Simu", "Aina ya Kadi (Card Type)", "Muda wa Kuingia (Check-in Time)", "RSVP Status", "Idadi ya Wageni (Companions)"];
+src/components/QRScanner.tsx:137:    const cleanFileName = `Wageni_Walioingia_${(event.name || 'Sherehe').replace(/[^a-zA-Z0-9_\u00c0-\u00ff]+/g, '_')}.csv`;
+src/components/QRScanner.tsx:697:            swahiliMessage = 'Kifaa cha Kamera Hakipatikani (NotFoundError)! Hakuna kamera inayofanya kazi iliyotambuliwa kwenye kifaa hiki kwa sasa.';
+src/components/QRScanner.tsx:1006:          <span>{isEn ? 'Gate Guest Check-in (QR Scanner & Verification)' : 'Kagua Wageni Mlangoni (QR Scanner & Check-in)'}</span>
+src/components/QRScanner.tsx:1055:                  • {isEn ? 'Username' : 'Jina la Mtumiaji'}: <span className="text-white font-bold bg-white/10 px-1.5 py-0.2 rounded border border-white/5">scanner</span><br />
+src/components/QRScanner.tsx:1095:            Wageni & Hakiki ({countConfirmedGuests})
+src/components/QRScanner.tsx:1441:                          <p>Idadi walioingia: <strong>{scanResult.companions}</strong></p>
+src/components/QRScanner.tsx:1482:                          {manualError || 'Nambari ya QR haikutambulika au haimo katika orodha rasmi ya sherehe hii.'}
+src/components/QRScanner.tsx:1560:                      <strong>Njia Mbadala ya Haraka:</strong> Hakuna shida kabisa! Kwenye upande wa kulia, gusa tu kitufe cha <strong className="text-blue-300">Tafuta kwa Jina</strong> au orodha ya wageni uwa-check in kwa kubofya mara moja tu bila kuhitaji kamera!
+src/components/QRScanner.tsx:1606:                <span className="text-xl font-extrabold text-white">{countCheckedIn} <span className="text-xs text-slate-400">Wageni</span></span>
+src/components/QRScanner.tsx:1640:                <label className="font-bold text-slate-300 block mb-1" htmlFor="simulate-guest-scan-select">Hariri: Chagua Mgeni wa Kuskani</label>
+src/components/QRScanner.tsx:1723:                  Skani za Hivi Karibuni
+src/components/QRScanner.tsx:1844:                    <th className="px-5 py-3">{isEn ? 'Guest Name' : 'Jina la Mgeni'}</th>
+src/components/QRScanner.tsx:1847:                    <th className="px-5 py-3 text-center">{isEn ? 'Time Checked-In' : 'Muda wa Kuingia'}</th>
+src/components/QRScanner.tsx:1857:                          ? (isEn ? 'No guest found with that name.' : 'Hakuna mgeni aliyepatikana kwa jina hilo.') 
+src/components/QRScanner.tsx:1930:                Muda uliopo sasa
+src/components/QRScanner.tsx:1933:              <p className="text-[10px] text-slate-450 italic">Tukio linaendelea...</p>
+src/components/QRScanner.tsx:1938:                Wageni Waliofika
+src/components/QRScanner.tsx:1958:                Mtiririko wa Wageni (Arrival Pattern)
+src/components/QRScanner.tsx:2019:                Audit Logs: Orodha ya Muda wa Skani
+src/components/QRScanner.tsx:2027:                    <th className="px-5 py-2.5 font-bold">Muda (Time)</th>
+src/components/QRScanner.tsx:2139:                      Hifadhi ✓
+src/components/GuestInvitePage.tsx:107:             MWALIKO WA {(event.name || "Tukio").toUpperCase()}
+src/components/GuestInvitePage.tsx:110:             Karibu, mpendwa <span className="font-bold text-amber-400 uppercase">{guest.name}</span>
+src/components/SaveTheDateManager.tsx:55:Karibu sana!`);
+src/components/SaveTheDateManager.tsx:165:Karibu sana!`);
+src/components/SaveTheDateManager.tsx:320:          "Kumbuka: Una mabadiliko kwenye picha au template ambayo haujahifadhi. Wageni wataona picha ya zamani iliyopo kwenye database. Je, unataka kuendelea kutuma?"
+src/components/SaveTheDateManager.tsx:364:        setSendLogs(prev => [`[✓ SMS Sender ID: ${gatewaySettings.senderId || 'SIMULATION'}] Ujumbe umetumwa kwa ${guest.name} (${guest.phone})`, ...prev]);
+src/components/SaveTheDateManager.tsx:398:        showToast("Hakuna wageni kwenye orodha hii ya kutumiwa ujumbe!", "info");
+src/components/SaveTheDateManager.tsx:403:        showToast("⚠️ Huwezi kutuma kwa wote wakati una mabadiliko ambayo hayajahifadhiwa! Tafadhali bofya kitufe cha 'Hifadhi Taarifa za Save The Date' kwanza ili picha na ujumbe uhifadhiwe kwenye database.", "error");
+src/components/SaveTheDateManager.tsx:455:              setSendLogs(prev => [`[✓ SMS Sender ID: ${gatewaySettings.senderId || 'SIMULATION'}] Ujumbe umetumwa kwa ${g.name} (${g.phone})`, ...prev]);
+src/components/SaveTheDateManager.tsx:512:            <label className="font-bold text-slate-300 block">Chagua Tukio (Event)</label>
+src/components/SaveTheDateManager.tsx:533:            <span>Pakia Kadi & Andika Template ya Ujumbe</span>
+src/components/SaveTheDateManager.tsx:539:              <label className="font-bold text-slate-400 block">Kichwa cha Ujumbe (Save The Date Title)</label>
+src/components/SaveTheDateManager.tsx:569:                <label className="font-bold text-slate-400 block">Template ya Maneno ya Ujumbe</label>
+src/components/SaveTheDateManager.tsx:597:                    Umekamilisha kurekebisha picha au maneno kwenye muundo wa Save The Date. Tafadhali bofya kitufe cha kijani cha <strong>"Hifadhi Taarifa za Save The Date"</strong> sasa ili kuhifadhi thabiti, kisha ndio utengeneze au utume viungo kwa wageni.
+src/components/SaveTheDateManager.tsx:616:              <span>Hifadhi Taarifa za Save The Date</span>
+src/components/SaveTheDateManager.tsx:661:              <span>Mfano wa Ujumbe wa Kutuma</span>
+src/components/SaveTheDateManager.tsx:679:              <span>Orodha ya Wageni Watakaotumiwa ({activeFilteredGuests.length} Kwenye Orodha)</span>
+src/components/SaveTheDateManager.tsx:771:              <p className="font-extrabold text-white text-xs">Bado Hakuna Hageni Kwenye Kikundi Hiki!</p>
+src/components/SaveTheDateManager.tsx:773:                Hakuna wageni walioainishwa hapa kwa kutumia chujio cha sasa. Unaweza kubadilisha chujio ili kuangalia makundi mengine.
+src/components/SaveTheDateManager.tsx:809:                      <span>{g.phone || 'Bila Namba'}</span>
+src/components/SaveTheDateManager.tsx:967:                  <span>Ujumbe wa Mgeni Huyu ({viewGuestStd.phone})</span>
+src/components/LandingPage.tsx:175:                      <p>• <strong>{language === 'sw' ? 'Tarehe:' : 'Date:'}</strong> 26/11/2026</p>
+src/components/LandingPage.tsx:177:                      <p>• <strong>{language === 'sw' ? 'Mahali:' : 'Venue:'}</strong> Isamuhyo Hall</p>
+src/components/LandingPage.tsx:191:                      <span className="text-[9px] bg-white/10 hover:bg-white/20 text-slate-300 font-semibold py-1 px-3 rounded-full cursor-pointer transition">{language === 'sw' ? 'Sitaweza' : 'Declined'}</span>
+src/components/LandingPage.tsx:395:                  <strong>{language === 'sw' ? 'Namba ya Usajili (BRELA):' : 'BRELA Registration No:'}</strong>{' '}
+src/components/LandingPage.tsx:399:                  <strong>{language === 'sw' ? 'Namba ya Mlipakodi (TRA TIN):' : 'Taxpayer Identification Number (TIN):'}</strong>{' '}
+src/components/LandingPage.tsx:449:              ? 'EVENTCARD ni jukwaa la kiteknolojia linalomilikiwa na EVENT CARD (Namba ya Usajili BRELA: 705371), Dar es Salaam, Jamhuri ya Muungano wa Tanzania.'
+src/components/LandingPage.tsx:488:                      <strong>Swahili:</strong> Jukwaa la EVENTCARD linaendeshwa na <strong>EVENT CARD</strong> (Namba ya Usajili: 705371). Tunajitolea kulinda faragha ya data zako zote. Sera hii inaeleza jinsi tunavyokusanya, kutumia, kuhifadhi, na kulinda orodha ya wageni (majina na namba za simu) unapojiandikisha kwenye mfumo wetu kutuma kadi za mialiko na kupata RSVP kupitia WhatsApp Business API.
+src/components/LandingPage.tsx:534:                      {language === 'sw' ? 'Namba ya Sajili BRELA: 705371' : 'Tanzanian BRELA Registration No: 705371'}
+src/components/LandingPage.tsx:551:                      <strong>Swahili:</strong> Kwa kusajili harusi au tukio lolote ndani ya jukwaa la EVENTCARD, unakubali kufuata kanuni na sheria zote za nchi yetu (Sheria ya Ulinzi wa Data ya Kibinafsi, 2022) na Sheria za Biashara za Meta WhatsApp. Huduma hizi zinaendeshwa kisheria na <strong>EVENT CARD</strong> (Namba ya Usajili 705371).
+src/components/CreateEventPage.tsx:46:      defaultName: language === 'sw' ? 'Kikao cha Kamati ya Sherehe' : 'Committee Meeting',
+src/components/CreateEventPage.tsx:99:          {language === 'sw' ? 'Tengeneza Tukio Jipya' : 'Create New Event'}
+src/components/SMSGatewayConfig.tsx:153:          {isEn ? "Global SMS Gateway Settings" : "Mipangilio ya SMS Gateway (Jumla)"}
+src/components/SMSGatewayConfig.tsx:180:          : "Sanidi Gateway ya Meseji hapa mara moja kwa ajili ya mfumo mzima. Sehemu zote za (Mialiko, Save the Date, na Michango) zitatumia Mipangilio hii."}
+src/components/SMSGatewayConfig.tsx:221:                {isEn ? "Sender ID / Brand Name" : "Jina la Kutuma (Sender ID)"}
+src/components/SMSGatewayConfig.tsx:305:                {isEn ? "WhatsApp Integration Channel" : "Njia ya Ujumbe ya WhatsApp"}
+src/components/SMSGatewayConfig.tsx:348:                    : "Mfumo wa Kujaribu: Ujumbe utatengenezwa na kuonyeshwa kama umetumwa hapa hapa bila gharama yoyote ya salio."}
+src/components/SMSGatewayConfig.tsx:381:                      {isEn ? "Meta Phone Number ID" : "ID ya Namba ya Simu Meta (Phone Number ID)"}
+src/components/SMSGatewayConfig.tsx:395:                        {isEn ? "WABA Template Name" : "Jina la Template Meta"}
+src/components/SMSGatewayConfig.tsx:423:                      : "Hakikisha template yako ya Meta ina vigezo kwa mpangilio sahihi. Mfumo wetu utatuma taarifa (Kama Jina la Mgeni, Ukumbi, n.k) kwa ulingano sahihi."}
+src/components/SMSGatewayConfig.tsx:456:            {isSaving ? "Inahifadhi..." : (isEn ? "Save Settings" : "Hifadhi Mipangilio")}
+src/components/UploadGuests.tsx:182:            action: `${actionDescText}: Wageni ${i + 1} hadi ${Math.min(i + batch.length, totalToUpload)} kati ya ${totalToUpload}`,
+src/components/UploadGuests.tsx:226:      onUpdateGuests(currentMerged, `${actionDescText}: Jumla ya wageni wapya ${totalToUpload}`, true);
+src/components/UploadGuests.tsx:288:    const headers = "Jina la Mgeni,Namba ya Simu,Aina ya Kadi\n";
+src/components/UploadGuests.tsx:494:      // Expect format: Jina la Mgeni, Namba ya Simu, CardType
+src/components/UploadGuests.tsx:537:          : `Inaanza kupakia wageni ${newGuestsList.length}. Wageni ${duplicatesSkipped.length} wenye taarifa za kufanana (duplicates) wamerukwa.`);
+src/components/UploadGuests.tsx:547:          : `Hakuna mgeni mpya aliyesajiliwa kwani wote tayari wapo kwenye mfumo (Duplication check failed).`);
+src/components/UploadGuests.tsx:690:        <title>EVENTCARD - Chapisha Kadi za Wageni</title>
+src/components/UploadGuests.tsx:849:            <h1>Kadi za Wageni - EVENTCARD Designer Print</h1>
+src/components/UploadGuests.tsx:850:            <p>Jumla ya kadi zinazochapishwa: <strong>${itemsToPrint.length}</strong></p>
+src/components/UploadGuests.tsx:960:                  Inapakia Wageni Kwenye Database...
+src/components/UploadGuests.tsx:1013:            <span>Pakia na Simamia Wageni (Upload Guests)</span>
+src/components/UploadGuests.tsx:1051:          <p className="text-[9px] uppercase font-mono tracking-wider text-blue-400 font-bold">Jumla Kadi</p>
+src/components/UploadGuests.tsx:1067:            placeholder="Tafuta kwa Jina, Simu, au Code..."
+src/components/UploadGuests.tsx:1096:              <span>Futa Wageni Wote</span>
+src/components/UploadGuests.tsx:1144:                    <span>{isEn ? 'Guest Name' : 'Jina la Mgeni'}</span>
+src/components/UploadGuests.tsx:1153:                <th className="px-5 py-3 text-center">{isEn ? 'Card Code' : 'Namba ya Code'}</th>
+src/components/UploadGuests.tsx:1187:                    Hakuna mgeni aliyepatikana. Pakia au ongeza wageni kwanza kuanza!
+src/components/UploadGuests.tsx:1216:                               <AlertTriangle className="w-3.5 h-3.5 text-amber-500" title="Taarifa: Namba hii imejirudia (Duplicate phone number)" />
+src/components/UploadGuests.tsx:1258:                        title="Hariri Taarifa"
+src/components/UploadGuests.tsx:1385:              <h3 className="text-base font-bold text-white">Uingizaji Wageni kwa Wingi (Bulk Add)</h3>
+src/components/UploadGuests.tsx:1387:                Ingiza orodha ya wageni wako kwa kuweka <strong>Jina, Namba (Optional), Aina ya kadi (Optional)</strong> katika kila mstari mpya mmoja mmoja.
+src/components/UploadGuests.tsx:1394:                  <p>Jina la Mgeni wa Kwanza, 0714786751, DOUBLE</p>
+src/components/UploadGuests.tsx:1395:                  <p>Jina la Mgeni wa Pili, 0755883901, UNCLASSIFIED</p>
+src/components/UploadGuests.tsx:1396:                  <p>Jina la Mgeni wa Tatu, 0713998822, SINGLE</p>
+src/components/UploadGuests.tsx:1505:                        Wageni waliopatikana kwenye faili ({parsedFileGuests.length}):
+src/components/UploadGuests.tsx:1532:                    Ongeza Wageni ({parsedFileGuests.length}) Kwenye Orodha Sasa ✓
+src/components/UploadGuests.tsx:1746:                        <p className="font-sans">Hakuna kadi zilizopatikana kwenye kundi hili la vichujio.</p>
+src/components/UploadGuests.tsx:1918:              <h3 className="text-base font-bold text-white pr-8">Hariri Taarifa za Mgeni (Edit Guest Information)</h3>
+src/components/UploadGuests.tsx:1973:                    Hifadhi Tofauti ✓
+src/components/UploadGuests.tsx:1997:                  Futa Wageni Wote ⚠️
+src/components/CardPreview.tsx:15:  const mockMessage = `Habari {Jina la Mgeni},
+src/components/CardPreview.tsx:16:Familia ya ${event.hostName || (language === 'sw' ? "[Jina la Mwenyeji]" : "[Host Name]")} inakualika kwa furaha kushiriki katika sherehe ya ${event.name || (language === 'sw' ? "[Jina la Sherehe / Harusi]" : "[Event Name]")}.
+src/components/CardPreview.tsx:18:Siku: Tarehe ${event.date || (language === 'sw' ? "[Tarehe]" : "[Date]")}
+src/components/CardPreview.tsx:20:Ukumbi: ${event.eventHallName || (language === 'sw' ? "[Jina la Ukumbi]" : "[Venue Hall]")}
+src/components/CardPreview.tsx:100:                <p>Habari <strong>{language === 'sw' ? 'Jina la Mwalikwa' : 'Guest Name'}</strong>,</p>
+src/components/SendMessages.tsx:157:Familia ya {host_name} kwa kushirikiana na Kamati ya Maandalizi, wanayo furaha kubwa kukukaribisha kushiriki katika {event_name}.
+src/components/SendMessages.tsx:160:Tarehe: {date}
+src/components/SendMessages.tsx:162:Muda: {time}
+src/components/SendMessages.tsx:173:Karibu sana.`;
+src/components/SendMessages.tsx:221:Familia ya {host_name} kwa kushirikiana na Kamati ya Maandalizi, wanayo furaha kubwa kukukaribisha kushiriki katika {event_name}.
+src/components/SendMessages.tsx:224:Tarehe: {date}
+src/components/SendMessages.tsx:226:Muda: {time}
+src/components/SendMessages.tsx:237:Karibu sana.`);
+src/components/SendMessages.tsx:389:Familia ya {host_name} kwa kushirikiana na Kamati ya Maandalizi, wanayo furaha kubwa kukukaribisha kushiriki katika {event_name}.
+src/components/SendMessages.tsx:393:Tarehe: {date}
+src/components/SendMessages.tsx:395:Muda: {time}
+src/components/SendMessages.tsx:407:Karibu sana.`);
+src/components/SendMessages.tsx:787:      alert("Hakuna wageni katika orodha hii ambao hawajapata SMS bado!");
+src/components/SendMessages.tsx:843:        alert(`Ujumbe wa pamoja (Batch) umekubaliwa na Meseji API!\n\nBatch ID: ${data.batchId || 'N/A'}\nJumla ya Wageni: ${data.total}`);
+src/components/SendMessages.tsx:1055:          <p className="text-[9px] uppercase font-mono tracking-wider text-slate-400 font-bold">Wageni Waliobakia</p>
+src/components/SendMessages.tsx:1070:          <p className="text-[9px] uppercase font-mono tracking-wider text-blue-300 font-bold">Jumla Iliyotekelezwa</p>
+src/components/SendMessages.tsx:1154:                Hariri Muundo wa Mwaliko (Edit Invitation Template)
+src/components/SendMessages.tsx:1173:              {isTemplateSaving ? 'Inahifadhi...' : templateSavedSuccess ? 'Imehifadhiwa!' : 'Hifadhi Muundo (Save)'}
+src/components/SendMessages.tsx:1191:                Ujumbe wa Mwaliko (Andika hapa)
+src/components/SendMessages.tsx:1242:                  { tag: '{name}', label: 'Jina la Mgeni' },
+src/components/SendMessages.tsx:1246:                  { tag: '{date}', label: 'Tarehe' },
+src/components/SendMessages.tsx:1248:                  { tag: '{time}', label: 'Muda' },
+src/components/SendMessages.tsx:1249:                  { tag: '{card_number}', label: 'Namba ya Kadi' },
+src/components/SendMessages.tsx:1283:              {guests.length > 0 ? getGuestMessageText(guests[0], false) : "Tafadhali kwanza ingiza wageni katika sehemu ya 'Wageni' ili kuona preview hapa."}
+src/components/SendMessages.tsx:1303:                  <th className="px-5 py-3">{isEn ? 'Guest Name' : 'Jina la Mgeni'}</th>
+src/components/SendMessages.tsx:1316:                        ? 'Hakuna wageni waliothibitisha kuhudhuria bado. Save the Date inatumwa kwa wale walioweka "Atahudhuria" pekee.'
+src/components/SendMessages.tsx:1317:                        : 'Hakuna wageni waliopatikana.'}
+src/components/SendMessages.tsx:1387:                          title="Hariri Taarifa za Mgeni"
+src/components/SendMessages.tsx:1389:                          Hariri (Edit)
+src/components/SendMessages.tsx:1461:          <span>Fuatilia Majibu ya Wageni (RSVP Responses)</span>
+src/components/SendMessages.tsx:1537:                  {isEn ? 'Edit Guest Information' : 'Hariri Taarifa za Mgeni'}
+src/components/SendMessages.tsx:1599:                      {isEn ? 'Save Changes ✓' : 'Hifadhi ✓'}
+src/components/SendMessages.tsx:1663:                    <span>{copySuccess ? (isEn ? 'Copied!' : 'Imenakiliwa!') : (isEn ? 'Copy Ujumbe' : 'Copy Ujumbe')}</span>
+src/components/SendMessages.tsx:1730:                  <span>{isEn ? 'Quick Messaging Guide (Copy-Paste) :' : 'Mbinu wepesi ya Kutuma Ujumbe (Copy-Paste) :'}</span>
+src/components/SendMessages.tsx:1737:                       2. Bonyeza kitufe cha <b>"Copy Ujumbe"</b> upande wa juu wa ujumbe. <br />
+src/components/GitHubSyncConfig.tsx:317:                  {isSaving ? (isEn ? "Saving..." : "Inahifadhi...") : (isEn ? "Save Settings" : "Hifadhi Mipangilio")}
+src/components/GitHubSyncConfig.tsx:401:                        : "1. Shiriki Hifadhidata ya pamoja: Hakikisha tovuti nyingine pia imelengwa kwenye ile anwani ya Postgres (DATABASE_URL).\n2. Tumia muundo thabiti wa GitHub kufanya 'deployment' otomatiki kote kote."}
+src/components/GitHubSyncConfig.tsx:423:                  {isEn ? "No deployment logs yet. Trigger a sync to start." : "Hakuna kumbukumbu za uoanisho bado. Gonga Oanisha Sasa."}

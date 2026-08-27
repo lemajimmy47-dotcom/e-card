@@ -1,0 +1,2 @@
+#!/bin/bash
+sed -i 's/resolvedParams.push(eventData?.paymentMethods || "Namba za Michango");/let pmStr = "Namba za Michango"; if (Array.isArray(eventData?.paymentMethods) \&\& eventData.paymentMethods.length > 0) { pmStr = eventData.paymentMethods.map((m: any) => `${m.provider}: ${m.number} (${m.name})`).join(", "); } else if (typeof eventData?.paymentMethods === "string" \&\& eventData.paymentMethods) { pmStr = eventData.paymentMethods; } resolvedParams.push(pmStr);/g' server.ts
