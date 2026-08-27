@@ -522,19 +522,46 @@ export async function seedFromBackupFile(): Promise<boolean> {
 
 // 2. State Reconstruction function
 export async function fetchFullStateFromDB(): Promise<any> {
-  return await executeQuery("fetchFullStateFromDB", async () => {
-    // Load tables sequentially or in smaller batches to avoid overwhelming the Render free-tier pool
-    const sqlEvents = await db.select().from(schema.events);
-    const sqlGuests = await db.select().from(schema.guests);
-    const sqlSaveTheDates = await db.select().from(schema.saveTheDates);
-    const sqlRecipients = await db.select().from(schema.saveTheDateRecipients);
-    const sqlTemplates = await db.select().from(schema.templateSettings);
-    const sqlSmsSettings = await db.select().from(schema.smsGatewaySettings);
-    const sqlCommitteeMembers = await db.select().from(schema.committeeMembers);
-    const sqlCommitteeRoles = await db.select().from(schema.committeeRoles);
-    const sqlAuditLogs = await db.select().from(schema.auditLogs);
-    const sqlUserAcc = await db.select().from(schema.userAccount);
-    const sqlUwalemi = await db.select().from(schema.uwalemiStateTable);
+  try {
+    return await executeQuery("fetchFullStateFromDB", async () => {
+    let sqlEvents: any[] = [];
+    let sqlGuests: any[] = [];
+    let sqlSaveTheDates: any[] = [];
+    let sqlRecipients: any[] = [];
+    let sqlTemplates: any[] = [];
+    let sqlSmsSettings: any[] = [];
+    let sqlCommitteeMembers: any[] = [];
+    let sqlCommitteeRoles: any[] = [];
+    let sqlAuditLogs: any[] = [];
+    let sqlUserAcc: any[] = [];
+    let sqlUwalemi: any[] = [];
+
+    const loadTables = async () => {
+      sqlEvents = await db.select().from(schema.events);
+      sqlGuests = await db.select().from(schema.guests);
+      sqlSaveTheDates = await db.select().from(schema.saveTheDates);
+      sqlRecipients = await db.select().from(schema.saveTheDateRecipients);
+      sqlTemplates = await db.select().from(schema.templateSettings);
+      sqlSmsSettings = await db.select().from(schema.smsGatewaySettings);
+      sqlCommitteeMembers = await db.select().from(schema.committeeMembers);
+      sqlCommitteeRoles = await db.select().from(schema.committeeRoles);
+      sqlAuditLogs = await db.select().from(schema.auditLogs);
+      sqlUserAcc = await db.select().from(schema.userAccount);
+      sqlUwalemi = await db.select().from(schema.uwalemiStateTable);
+    };
+
+    try {
+      await loadTables();
+    } catch (err: any) {
+      const msg = String(err?.message || "").toLowerCase();
+      if (msg.includes("does not exist") || msg.includes("relation") || msg.includes("undefined_table")) {
+        console.log("[CloudSQL] Table missing detected. Running ensureTablesExist()...");
+        await ensureTablesExist();
+        await loadTables();
+      } else {
+        throw err;
+      }
+    }
 
     // Reconstruct lists and nested formats
     const eventsList = sqlEvents.map(e => ({
@@ -725,6 +752,19 @@ export async function fetchFullStateFromDB(): Promise<any> {
       uwalemiState,
     };
   });
+  } catch (dbErr: any) {
+    console.warn("[CloudSQL Core] fetchFullStateFromDB notice: SQL query unavailable, using local database.json store:", dbErr?.message || dbErr);
+    if (fs.existsSync(DB_PATH)) {
+      try {
+        const raw = fs.readFileSync(DB_PATH, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    throw dbErr;
+  }
 }
 
 // 3. Robust Relational Upsert function
@@ -743,9 +783,9 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
     }
 
     if (eventsToSync.length > 0) {
-      const values = eventsToSync
-        .filter((ev: any) => ev.id)
-        .map((ev: any) => ({
+      for (const ev of eventsToSync) {
+        if (!ev || !ev.id) continue;
+        await db.insert(schema.events).values({
           id: String(ev.id),
           senderId: ev.senderId ? String(ev.senderId) : null,
           name: String(ev.name || "Sherehe"),
@@ -771,10 +811,7 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
           fundraisingGoal: typeof ev.fundraisingGoal === "number" ? ev.fundraisingGoal : 0,
           autoRsvpRemindersEnabled: ev.autoRsvpRemindersEnabled === true,
           contributionDeadline: ev.contributionDeadline ? String(ev.contributionDeadline) : null,
-        }));
-
-      if (values.length > 0) {
-        await db.insert(schema.events).values(values).onConflictDoUpdate({
+        }).onConflictDoUpdate({
           target: schema.events.id,
           set: {
             senderId: sql`EXCLUDED.sender_id`,
@@ -809,14 +846,14 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
     // 3.2. Save Guests (BATCHED)
     if (data.guests && Array.isArray(data.guests) && data.guests.length > 0) {
       const guestChunks = [];
-      const CHUNK_SIZE = 1000;
+      const CHUNK_SIZE = 50;
       for (let i = 0; i < data.guests.length; i += CHUNK_SIZE) {
         guestChunks.push(data.guests.slice(i, i + CHUNK_SIZE));
       }
 
-      const guestPromises = guestChunks.map(async (chunk) => {
+      for (const chunk of guestChunks) {
         const values = chunk
-          .filter((g: any) => g.id)
+          .filter((g: any) => g && g.id)
           .map((g: any) => ({
             id: String(g.id),
             eventId: g.eventId ? String(g.eventId) : null,
@@ -880,8 +917,7 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
             },
           });
         }
-      });
-      await Promise.all(guestPromises);
+      }
     }
 
     // 3.3. Delete explicitly requested guests if client sends deletedGuestIds

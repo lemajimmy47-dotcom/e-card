@@ -14,7 +14,10 @@ function hasSQLConfig() {
   const envUrl = process.env.SQL_HOST || process.env.DATABASE_URL || process.env.SQL_DATABASE_URL;
   if (!envUrl) return false;
   if (sqlConnectionFailed) {
-    return false;
+    if (Date.now() - lastSqlFailTime < 30000) {
+      return false;
+    }
+    sqlConnectionFailed = false;
   }
   return true;
 }
@@ -82,7 +85,12 @@ export async function fetchFromFirestore() {
   if (!hasSQLConfig()) {
     return getLocalDBFallback();
   }
-  return await fetchFullStateFromDB();
+  try {
+    return await readDBLatest();
+  } catch (err: any) {
+    console.warn("[CloudSQL] fetchFromFirestore notice: SQL query unavailable, using local store:", err?.message || err);
+    return getLocalDBFallback();
+  }
 }
 
 export async function initDB() {
@@ -131,6 +139,7 @@ export async function initDB() {
     return inMemoryDB;
   } catch (error: any) {
     sqlConnectionFailed = true;
+    lastSqlFailTime = Date.now();
     console.warn("[CloudSQL Initializer] Setup notice:", error?.message || error);
     // Fallback safely to local JSON file
     console.log("[CloudSQL Initializer] Operating smoothly on local database.json store.");
@@ -192,6 +201,7 @@ export async function readDBLatest() {
         attempts--;
         if (attempts === 0) {
           sqlConnectionFailed = true;
+          lastSqlFailTime = Date.now();
           console.warn("[CloudSQL readDBLatest] Notice: SQL database unavailable, switching to local store fallback.");
           throw error;
         }
