@@ -610,25 +610,74 @@ export async function triggerAutoReceiptSms(params: {
   }
 
   const dateStr = params.paymentDate || new Date().toISOString().split('T')[0];
-  const methodStr = params.paymentMethod || 'M-Pesa / M-Koba';
   
   let customMessage = params.customMessage;
 
   if (!customMessage) {
     const memberName = params.member.fullName || 'Mwanachama';
     const amountStr = `TZS ${params.amount.toLocaleString()}`;
-    const debtStr = typeof params.totalDebtAfter === 'number' 
-      ? (params.totalDebtAfter > 0 ? `TZS ${params.totalDebtAfter.toLocaleString()}` : '0 (Umekamilisha Ada ✓)')
-      : undefined;
+    
+    // Compute remaining fee debt details and specific unpaid months
+    let debtMonthsDetail = '';
+    let totalDebtVal = typeof params.totalDebtAfter === 'number' ? params.totalDebtAfter : undefined;
+
+    if (params.state && params.member) {
+      const fullMember = (params.state.members || []).find(
+        m => m.id === params.member.id || (params.member.memberNo && m.memberNo === params.member.memberNo)
+      ) || (params.member as UwalemiMember);
+
+      if (fullMember && fullMember.id) {
+        const debtInfo = calculateMemberFeeDebt(fullMember, params.state);
+        if (totalDebtVal === undefined) {
+          totalDebtVal = debtInfo.totalDebt;
+        }
+
+        if (totalDebtVal > 0 && debtInfo.breakdown && debtInfo.breakdown.length > 0) {
+          if (debtInfo.breakdown.length === 1) {
+            const single = debtInfo.breakdown[0];
+            const mName = `${MONTH_NAMES_SW[single.month - 1]} ${single.year}`;
+            if (single.paid > 0) {
+              debtMonthsDetail = ` (${mName}: Salio TZS ${single.debt.toLocaleString()})`;
+            } else {
+              debtMonthsDetail = ` (Mwezi wa ${mName})`;
+            }
+          } else if (debtInfo.breakdown.length <= 4) {
+            const itemsStr = debtInfo.breakdown.map(item => {
+              const mName = `${MONTH_NAMES_SW[item.month - 1]} ${item.year}`;
+              if (item.paid > 0) {
+                return `${mName}: Salio TZS ${item.debt.toLocaleString()}`;
+              }
+              return `${mName}: TZS ${item.debt.toLocaleString()}`;
+            }).join(', ');
+            debtMonthsDetail = ` (${itemsStr})`;
+          } else {
+            const first = debtInfo.breakdown[0];
+            const last = debtInfo.breakdown[debtInfo.breakdown.length - 1];
+            const firstName = `${MONTH_NAMES_SW[first.month - 1]} ${first.year}`;
+            const lastName = `${MONTH_NAMES_SW[last.month - 1]} ${last.year}`;
+            debtMonthsDetail = ` (Miezi ${debtInfo.breakdown.length}: ${firstName} hadi ${lastName})`;
+          }
+        }
+      }
+    }
+
+    let debtStr: string | undefined = undefined;
+    if (typeof totalDebtVal === 'number') {
+      if (totalDebtVal > 0) {
+        debtStr = `TZS ${totalDebtVal.toLocaleString()}${debtMonthsDetail}`;
+      } else {
+        debtStr = 'TZS 0 (Umekamilisha Ada zote)';
+      }
+    }
 
     if (params.paymentType === 'ada') {
       if (params.multiMonthBreakdown && params.multiMonthBreakdown.length > 1) {
-        // Multi-Month payment message
+        // Multi-Month payment message (No non-ASCII bullets or checkmarks, No Njia)
         const monthsList = params.multiMonthBreakdown.map(m => {
           if (m.isPartial) {
-            return `• ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (Nusu, salio TZS ${m.balance.toLocaleString()})`;
+            return `- ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (Nusu, salio TZS ${m.balance.toLocaleString()})`;
           }
-          return `• ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (Kamili ✓)`;
+          return `- ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (Kamili)`;
         }).join('\n');
 
         customMessage = `STAKABADHI YA MALIPO YA ADA - UWALEMI
@@ -636,42 +685,38 @@ Habari ${memberName}, tumepokea malipo yako ya ${amountStr} ya Ada ya Miezi (${p
 ${monthsList}
 
 Risiti: ${params.receiptNo}
-Tarehe: ${dateStr}
-Njia: ${methodStr}${debtStr ? `\nSalio la Deni Lililobaki: ${debtStr}` : ''}
+Tarehe: ${dateStr}${debtStr ? `\nSalio la Deni Lililobaki: ${debtStr}` : ''}
 
 Asante kwa kutimiza wajibu wako.
 Lema, Nguvu Moja!`;
       } else if (params.isPartial) {
-        // Single Partial Payment message
+        // Single Partial Payment message (No bullets, No checkmarks, No Njia)
         const expStr = params.expectedAmount ? `TZS ${params.expectedAmount.toLocaleString()}` : '';
         const balStr = params.monthBalance ? `TZS ${params.monthBalance.toLocaleString()}` : '';
         customMessage = `STAKABADHI YA MALIPO YA NUSU - UWALEMI
 Habari ${memberName}, tumepokea malipo yako ya ${amountStr} kwa ajili ya ${params.purpose}.
-• Kiasi Kilicholipwa: ${amountStr}
-${expStr ? `• Ada Inayotakiwa: ${expStr}\n` : ''}${balStr ? `• Salio Linalobaki la Mwezi: ${balStr}\n` : ''}${debtStr ? `• Jumla ya Deni Lililobaki: ${debtStr}\n` : ''}Risiti: ${params.receiptNo}
+Kiasi Kilicholipwa: ${amountStr}
+${expStr ? `Ada Inayotakiwa: ${expStr}\n` : ''}${balStr ? `Salio Linalobaki la Mwezi: ${balStr}\n` : ''}${debtStr ? `Salio la Deni Lililobaki: ${debtStr}\n` : ''}Risiti: ${params.receiptNo}
 Tarehe: ${dateStr}
-Njia: ${methodStr}
 
 Asante kwa kuendelea kulipia ada yako.
 Lema, Nguvu Moja!`;
       } else {
-        // Standard Full Payment message
+        // Standard Full Payment message (No Njia)
         customMessage = `STAKABADHI YA MALIPO YA ADA - UWALEMI
 Habari ${memberName}, tumepokea malipo yako ya ${amountStr} kwa ajili ya ${params.purpose}.
 Risiti: ${params.receiptNo}
-Tarehe: ${dateStr}
-Njia: ${methodStr}${debtStr ? `\nSalio la Deni Lililobaki: ${debtStr}` : ''}
+Tarehe: ${dateStr}${debtStr ? `\nSalio la Deni Lililobaki: ${debtStr}` : ''}
 
 Asante kwa kutimiza wajibu wako kwa UWALEMI.
 Lema, Nguvu Moja!`;
       }
     } else {
-      // Emergency fund or fines
+      // Emergency fund or fines (No Njia)
       customMessage = `STAKABADHI YA MALIPO - UWALEMI
 Habari ${memberName}, tumepokea malipo yako ya ${amountStr} ya ${params.purpose}.
 Risiti: ${params.receiptNo}
 Tarehe: ${dateStr}
-Njia: ${methodStr}
 
 Asante kwa kutimiza wajibu wako kwa UWALEMI.
 Lema, Nguvu Moja!`;

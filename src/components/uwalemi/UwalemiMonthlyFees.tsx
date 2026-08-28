@@ -409,7 +409,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       // Trigger Automated Receipt SMS
       if (state.groupSettings?.smsConfig?.autoSendReceipts) {
         triggerAutoReceiptSms({
-          state,
+          state: updatedState,
           member,
           paymentType: 'ada',
           amount: paidAmount,
@@ -483,7 +483,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       // Trigger Automated Receipt SMS
       if (state.groupSettings?.smsConfig?.autoSendReceipts && paidAmount > 0) {
         triggerAutoReceiptSms({
-          state,
+          state: updatedState,
           member,
           paymentType: 'ada',
           amount: paidAmount,
@@ -526,12 +526,13 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     );
     updatedPayments.push(newPayment);
 
-    await onSaveState({ ...state, monthlyPayments: updatedPayments });
+    const updatedState = { ...state, monthlyPayments: updatedPayments };
+    await onSaveState(updatedState);
 
     // Tuma Stakabadhi ya SMS Kiotomatiki
     if (state.groupSettings?.smsConfig?.autoSendReceipts && expected > 0) {
       triggerAutoReceiptSms({
-        state,
+        state: updatedState,
         member,
         paymentType: 'ada',
         amount: expected,
@@ -2025,7 +2026,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               </button>
               <button
                 onClick={() => {
-                  const monthsList = viewingMultiReceipt.months.map(m => `• ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (${!m.isPartial ? 'Kamili' : `Nusu, Salio: TZS ${m.balance.toLocaleString()}`})`).join('\n');
+                  const monthsList = viewingMultiReceipt.months.map(m => `- ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (${!m.isPartial ? 'Kamili' : `Nusu, Salio: TZS ${m.balance.toLocaleString()}`})`).join('\n');
                   const msg = `STAKABADHI YA ADA YA UWALEMI\nNamba: ${viewingMultiReceipt.receiptNo}\nMjumbe: ${viewingMultiReceipt.member.fullName} (${viewingMultiReceipt.member.memberNo})\nJumla Iliyolipwa: TZS ${viewingMultiReceipt.amount.toLocaleString()}\nTarehe: ${viewingMultiReceipt.paymentDate}\n\nMchanganuo:\n${monthsList}\n\nSalio la Deni Linalobaki: TZS ${viewingMultiReceipt.totalDebtAfter.toLocaleString()}\n\nAhsante kwa kuwajibika na kujenga UWALEMI!`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                 }}
