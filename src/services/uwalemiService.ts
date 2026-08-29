@@ -67,7 +67,7 @@ export const INITIAL_UWALEMI_SETTINGS: UwalemiGroupSettings = {
       provider: 'M-Koba / Vodacom M-Pesa',
       type: 'Mobile',
       number: '0758 219 298',
-      accountName: 'Eva Lema (M-Koba)'
+      accountName: 'Eva O Lema (M-Koba)'
     },
     {
       id: 'pm-2',
@@ -529,8 +529,8 @@ export function formatPersonalizedUwalemiSms(
     .replace(/{idadi_ya_miezi}/g, `${debtInfo.unpaidCount} miezi`)
     .replace(/{periodSummary}/g, debtInfo.periodSummary)
     .replace(/{monthlyFee}/g, `TZS ${debtInfo.monthlyFee.toLocaleString()}`)
-    .replace(/{lipaNamba}/g, 'M-Koba au 0758 219 298 Eva Lema')
-    .replace(/{lipaNumber}/g, 'M-Koba au 0758 219 298 Eva Lema');
+    .replace(/{lipaNamba}/g, 'M Koba au 0758 219 298 Eva O Lema')
+    .replace(/{lipaNumber}/g, 'M Koba au 0758 219 298 Eva O Lema');
 }
 
 export async function sendUwalemiSms(payload: {

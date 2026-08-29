@@ -913,10 +913,47 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     }
 
     const expectedAmountForSelectedMonth = getDefaultFeeForMonth(selectedYear, selectedMonth);
-    const template = `Habari {name}, hii ni taarifa ya kukumbusha ada yako ya kikundi cha UWALEMI ya mwezi wa ${monthNamesSw[selectedMonth - 1]} ${selectedYear} (TZS ${expectedAmountForSelectedMonth.toLocaleString()}). Tafadhali kamilisha malipo kupitia M-Koba au 0758 219 298 Eva Lema. Lema, Nguvu Moja!`;
+    const template = `Habari {name}, hii ni taarifa ya kukumbusha ada yako ya kikundi cha UWALEMI ya mwezi wa ${monthNamesSw[selectedMonth - 1]} ${selectedYear} (TZS ${expectedAmountForSelectedMonth.toLocaleString()}). Tafadhali kamilisha malipo kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
 
     if (onOpenSmsWithTemplate) {
       onOpenSmsWithTemplate(unpaidList, template);
+    }
+  };
+
+  const handleSendFeeDebtOnlyReminder = () => {
+    const activeM = members.filter(m => m.status === 'active');
+    const debtors = activeM.filter(m => {
+      const debtInfo = calculateMemberFeeDebt(m, state);
+      return debtInfo.feeDebt > 0;
+    }).map(m => {
+      const debtInfo = calculateMemberFeeDebt(m, state);
+      return {
+        name: m.fullName,
+        phone: m.phone,
+        memberNo: m.memberNo,
+        memberId: m.id,
+        debtAmount: debtInfo.feeDebt,
+        feeDebt: debtInfo.feeDebt,
+        lateFeePenalty: 0,
+        otherFinesDebt: 0,
+        totalFinesDebt: 0,
+        startMonth: debtInfo.startMonthName,
+        endMonth: debtInfo.endMonthName,
+        unpaidMonths: debtInfo.unpaidMonthsText,
+        periodSummary: debtInfo.periodSummary,
+        monthsCount: debtInfo.unpaidCount
+      };
+    });
+
+    if (debtors.length === 0) {
+      alert('Hakuna mwanachama anayedaiwa ada!');
+      return;
+    }
+
+    const template = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada yako ya miezi iliyopita: unadaiwa ada TZS {feeDebt} {periodSummary} ({unpaidMonths}). Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Tafadhali kamilisha malipo yako kuepuka faini ya kuchelewa kulipa ada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!`;
+
+    if (onOpenSmsWithTemplate) {
+      onOpenSmsWithTemplate(debtors, template);
     }
   };
 
@@ -983,6 +1020,16 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               <FileSpreadsheet className="w-3.5 h-3.5" />
               Pakia Excel Ada
             </button>
+
+            {onOpenSmsWithTemplate && (
+              <button
+                onClick={handleSendFeeDebtOnlyReminder}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5 text-emerald-400" />
+                💳 Kumbusha Ada Pekee (SMS)
+              </button>
+            )}
 
             <button
               onClick={handleExportExcel}

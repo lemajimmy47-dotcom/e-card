@@ -3035,8 +3035,8 @@ async function startServer() {
             .replace(/{idadi_ya_miezi}/g, `${monthsCountVal || 0} miezi`)
             .replace(/{periodSummary}/g, periodSummaryStr || '')
             .replace(/{monthlyFee}/g, `TZS 20,000`)
-            .replace(/{lipaNamba}/g, 'M-Koba au 0758 219 298 Eva Lema')
-            .replace(/{lipaNumber}/g, 'M-Koba au 0758 219 298 Eva Lema');
+            .replace(/{lipaNamba}/g, 'M Koba au 0758 219 298 Eva O Lema')
+            .replace(/{lipaNumber}/g, 'M Koba au 0758 219 298 Eva O Lema');
         }
 
         let status: 'delivered' | 'sent' | 'simulated' | 'failed' = 'simulated';
@@ -3203,7 +3203,7 @@ async function startServer() {
         const formattedMsg = `KIKUMBUSHO CHA ADA YA MWEZI - UWALEMI
 Habari ${name}, unakumbushwa kulipa ada yako ya mwezi wa ${monthName} ${currentYear} (TZS ${item.balance.toLocaleString()}) kabla ya tarehe 30 ili kuepuka usumbufu na tozo ya ucheleweshaji.
 
-Lipa kupitia: M-Koba au 0758 219 298 - Eva O. Lema.
+Lipa kupitia: M Koba au 0758 219 298 Eva O Lema.
 Lema, Nguvu Moja!`;
 
         let status: 'delivered' | 'sent' | 'simulated' | 'failed' = 'simulated';

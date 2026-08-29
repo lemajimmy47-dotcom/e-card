@@ -245,7 +245,7 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
       return;
     }
 
-    const templateText = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kushiriki mchango wa dharura wa "${selectedFund.title}" (TZS ${(selectedFund.perMemberTarget || 20000).toLocaleString()}). Mwisho wa kuchanga ni ${selectedFund.deadline}. Lipa kupitia M-Koba au 0758 219 298 Eva Lema. Lema, Nguvu Moja!`;
+    const templateText = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kushiriki mchango wa dharura wa "${selectedFund.title}" (TZS ${(selectedFund.perMemberTarget || 20000).toLocaleString()}). Mwisho wa kuchanga ni ${selectedFund.deadline}. Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
 
     if (onOpenSmsWithTemplate) {
       onOpenSmsWithTemplate(unpaidList, templateText);

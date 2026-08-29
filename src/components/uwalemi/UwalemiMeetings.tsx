@@ -967,7 +967,7 @@ Lema, Nguvu Moja!`;
                           <button
                             onClick={() => {
                               const amount = (att.fineAmount || (att.status === 'late' ? (state.groupSettings.meetingFineLateDefault || 2000) : (state.groupSettings.meetingFineDefault || 10000))).toLocaleString();
-                              const text = `Habari ${m.fullName} (${m.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya ${att.status === 'late' ? 'kuchelewa' : 'kutohudhuria'} ${selectedMeeting.title} ya tarehe ${selectedMeeting.date} kiasi cha TZS ${amount}. Tafadhali lipa kupitia M-Koba au 0758 219 298 Eva Lema. Lema, Nguvu Moja!`;
+                              const text = `Habari ${m.fullName} (${m.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya ${att.status === 'late' ? 'kuchelewa' : 'kutohudhuria'} ${selectedMeeting.title} ya tarehe ${selectedMeeting.date} kiasi cha TZS ${amount}. Tafadhali lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
                               onOpenSmsWithTemplate([{
                                 name: m.fullName,
                                 phone: m.phone || '',
@@ -988,7 +988,7 @@ Lema, Nguvu Moja!`;
                               const cleanPhone = (m.phone || '').replace(/[^0-9]/g, '');
                               const fullPhone = cleanPhone.startsWith('0') ? '255' + cleanPhone.substring(1) : cleanPhone;
                               const amount = (att.fineAmount || (att.status === 'late' ? (state.groupSettings.meetingFineLateDefault || 2000) : (state.groupSettings.meetingFineDefault || 10000))).toLocaleString();
-                              const text = `Habari ${m.fullName} (${m.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya ${att.status === 'late' ? 'kuchelewa' : 'kutohudhuria'} ${selectedMeeting.title} ya tarehe ${selectedMeeting.date} kiasi cha TZS ${amount}. Tafadhali lipa kupitia M-Koba au 0758 219 298 Eva Lema. Lema, Nguvu Moja!`;
+                              const text = `Habari ${m.fullName} (${m.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya ${att.status === 'late' ? 'kuchelewa' : 'kutohudhuria'} ${selectedMeeting.title} ya tarehe ${selectedMeeting.date} kiasi cha TZS ${amount}. Tafadhali lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
                               window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`, '_blank');
                             }}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-950/60 text-emerald-300 hover:bg-emerald-600 hover:text-white font-semibold text-[11px] transition-all cursor-pointer border border-emerald-800/50"

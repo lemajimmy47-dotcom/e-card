@@ -183,6 +183,27 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
       });
     }
 
+    if (recipientFilter === 'fee_debt_only') {
+      return memberDebts
+        .filter(d => (d.feeDebt || 0) > 0 && d.status === 'active')
+        .map(d => ({
+          name: d.memberName,
+          phone: d.phone,
+          memberNo: d.memberNo,
+          memberId: d.memberId,
+          debtAmount: d.feeDebt,
+          feeDebt: d.feeDebt,
+          lateFeePenalty: 0,
+          otherFinesDebt: 0,
+          totalFinesDebt: 0,
+          startMonth: d.startMonthName,
+          endMonth: d.endMonthName,
+          unpaidMonths: d.unpaidMonthsText,
+          periodSummary: d.periodSummary,
+          monthsCount: d.unpaidCount
+        }));
+    }
+
     if (recipientFilter === 'all_debtors') {
       return memberDebts
         .filter(d => d.totalDebt > 0 && d.status === 'active')
@@ -316,7 +337,10 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   }, [recipientFilter, selectedMemberIds, initialRecipients, members, memberDebts, memberDebtsMap, currentMonthUnpaidIds]);
 
   const handleApplyTemplate = (type: string) => {
-    if (type === 'smart_debt_reminder') {
+    if (type === 'fee_debt_only_reminder') {
+      setMessageText(`Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada yako ya miezi iliyopita: unadaiwa ada TZS {feeDebt} {periodSummary} ({unpaidMonths}). Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya kuchelewa kulipa ada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!`);
+      setMessageType('reminder');
+    } else if (type === 'smart_debt_reminder') {
       setMessageText(`Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada zako: unadaiwa ada {feeDebt} {periodSummary} ({unpaidMonths}). Faini: {fainiSummary}. Jumla unayopaswa kulipa: {jumlaKuu}. Kamilisha kupitia {lipaNamba}. Lema, Nguvu Moja!`);
       setMessageType('reminder');
     } else if (type === 'fines_only_reminder') {
@@ -604,6 +628,17 @@ Lema, Nguvu Moja!`);
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    setRecipientFilter('fee_debt_only');
+                    handleApplyTemplate('fee_debt_only_reminder');
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[11px] font-bold border border-emerald-500/40 cursor-pointer flex items-center gap-1 shadow-sm"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  💳 Madeni ya Ada Pekee (Bila Faini)
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleApplyTemplate('fines_only_reminder')}
                   className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[11px] font-bold border border-rose-500/40 cursor-pointer flex items-center gap-1 shadow-sm"
                 >
@@ -786,7 +821,7 @@ Lema, Nguvu Moja!`);
                 <button
                   type="button"
                   onClick={() => insertTag('{lipaNamba}')}
-                  title="Njia ya Malipo (M-Koba / 0758 219 298 Eva Lema)"
+                  title="Njia ya Malipo (M Koba / 0758 219 298 Eva O Lema)"
                   className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10.5px] font-mono border border-slate-700 cursor-pointer"
                 >
                   {"{lipaNamba}"}
@@ -949,6 +984,32 @@ Lema, Nguvu Moja!`);
             </div>
 
             <div className="space-y-2 text-xs">
+              <label className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                recipientFilter === 'fee_debt_only' ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+              }`}>
+                <input
+                  type="radio"
+                  name="recFilter"
+                  checked={recipientFilter === 'fee_debt_only'}
+                  onChange={() => {
+                    setRecipientFilter('fee_debt_only');
+                    handleApplyTemplate('fee_debt_only_reminder');
+                  }}
+                  className="text-emerald-500 mt-0.5"
+                />
+                <div>
+                  <span className="font-bold text-emerald-300 flex items-center gap-1.5">
+                    💳 Wenye Madeni ya Ada Pekee (Bila Faini)
+                    <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono">
+                      {memberDebts.filter(d => (d.feeDebt || 0) > 0 && d.status === 'active').length}
+                    </span>
+                  </span>
+                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                    Huchuja wajumbe wanaodaiwa ada za miezi bila kujumuisha faini za aina yoyote.
+                  </span>
+                </div>
+              </label>
+
               <label className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
                 recipientFilter === 'all_debtors' ? 'bg-amber-500/10 border-amber-500/40' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
               }`}>

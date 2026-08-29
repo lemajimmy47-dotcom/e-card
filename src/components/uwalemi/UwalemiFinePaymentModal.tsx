@@ -73,10 +73,10 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
   const [paymentMethod, setPaymentMethod] = useState<string>(
     state.groupSettings?.paymentMethods?.[0]?.provider 
       ? `${state.groupSettings.paymentMethods[0].provider} (${state.groupSettings.paymentMethods[0].number})`
-      : 'M-Koba / M-Pesa (0758 219 298 - Eva Lema)'
+      : 'M Koba / M-Pesa (0758 219 298 - Eva O Lema)'
   );
   const [referenceNo, setReferenceNo] = useState<string>('');
-  const [receivedBy, setReceivedBy] = useState<string>('Eva Lema (Mweka Hazina)');
+  const [receivedBy, setReceivedBy] = useState<string>('Eva O Lema (Mweka Hazina)');
   const [notes, setNotes] = useState<string>('');
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -568,7 +568,7 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
                       {pm.provider} - {pm.number} ({pm.accountName})
                     </option>
                   ))}
-                  <option value="Vodacom M-Pesa (0758 219 298 - Eva Lema)">M-Pesa (0758 219 298 - Eva Lema)</option>
+                  <option value="Vodacom M-Pesa (0758 219 298 - Eva O Lema)">M-Pesa (0758 219 298 - Eva O Lema)</option>
                   <option value="CRDB Bank (0152435678900)">CRDB Bank (0152435678900)</option>
                   <option value="Taslimu (Cash)">Taslimu (Cash)</option>
                   <option value="Airtel Money">Airtel Money</option>

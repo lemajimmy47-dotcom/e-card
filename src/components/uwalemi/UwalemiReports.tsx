@@ -1341,6 +1341,7 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
           let totalMeetingFinesDebt = 0;
           let membersWithFinesCount = 0;
           const recipientsWithFines: { name: string; phone: string; memberNo: string }[] = [];
+          const recipientsWithFeeDebt: { name: string; phone: string; memberNo: string }[] = [];
 
           const processedMembers = members.map(m => {
             const debtInfo = calculateMemberFeeDebt(m, state);
@@ -1383,6 +1384,14 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
 
             if (totalMemberFineDebt > 0 && m.phone) {
               recipientsWithFines.push({
+                name: m.fullName,
+                phone: m.phone,
+                memberNo: m.memberNo
+              });
+            }
+
+            if ((debtInfo.feeDebt || 0) > 0 && m.phone && m.status === 'active') {
+              recipientsWithFeeDebt.push({
                 name: m.fullName,
                 phone: m.phone,
                 memberNo: m.memberNo
@@ -1552,6 +1561,19 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
                     </button>
                   )}
 
+                  {onOpenSmsWithTemplate && recipientsWithFeeDebt.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const templateText = "Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada yako ya miezi iliyopita: unadaiwa ada TZS {feeDebt} {periodSummary} ({unpaidMonths}). Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya kuchelewa kulipa ada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!";
+                        onOpenSmsWithTemplate(recipientsWithFeeDebt, templateText);
+                      }}
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                    >
+                      <Send className="w-3.5 h-3.5 text-emerald-400" />
+                      💳 Kumbusha Ada Pekee (SMS {recipientsWithFeeDebt.length})
+                    </button>
+                  )}
+
                   {onOpenSmsWithTemplate && recipientsWithFines.length > 0 && (
                     <button
                       onClick={() => {
@@ -1594,7 +1616,7 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
                         : d.lateFee > 0
                         ? `Faini ya kuchelewa ada (>miezi 3) kiasi cha TZS ${d.lateFee.toLocaleString()}`
                         : `Faini ya kikao kiasi cha TZS ${d.meetingUnpaid.toLocaleString()}`;
-                      const fineReminderText = `Habari ${d.member.fullName} (${d.member.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa ${fineSummaryText}. Jumla ya faini: TZS ${d.totalMemberFineDebt.toLocaleString()}. Tafadhali lipa kupitia M-Koba au 0758 219 298 Eva Lema. Lema, Nguvu Moja!`;
+                      const fineReminderText = `Habari ${d.member.fullName} (${d.member.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa ${fineSummaryText}. Jumla ya faini: TZS ${d.totalMemberFineDebt.toLocaleString()}. Tafadhali lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
 
                       return (
                         <tr key={d.member.id || idx} className="hover:bg-slate-900/40">
@@ -1771,7 +1793,7 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
 
                                 {!f.paid && (() => {
                                   const targetMember = members.find(m => m.memberNo === f.memberNo);
-                                  const msg = `Habari ${f.memberName} (${f.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya ${f.reason} ya ${f.title} (${f.date}) kiasi cha TZS ${f.amount.toLocaleString()}. Tafadhali lipa kupitia M-Koba au 0758 219 298 Eva Lema. Lema, Nguvu Moja!`;
+                                  const msg = `Habari ${f.memberName} (${f.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya ${f.reason} ya ${f.title} (${f.date}) kiasi cha TZS ${f.amount.toLocaleString()}. Tafadhali lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
                                   return (
                                     <>
                                       {onOpenSmsWithTemplate && targetMember && (
