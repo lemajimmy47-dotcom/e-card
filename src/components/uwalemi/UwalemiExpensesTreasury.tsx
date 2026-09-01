@@ -33,7 +33,7 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
 
   const [expenseForm, setExpenseForm] = useState<{
     title: string;
-    category: 'msiba' | 'matibabu' | 'uendeshaji' | 'kikao' | 'huduma' | 'nyingine';
+    category: 'msiba' | 'matibabu' | 'uendeshaji' | 'kikao' | 'mkutano_mkuu' | 'huduma' | 'nyingine';
     amount: number;
     date: string;
     paidTo: string;
@@ -78,8 +78,9 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
   const expenseCategories = [
     { key: 'msiba', label: 'Misiba & Rambirambi', color: 'bg-rose-500' },
     { key: 'matibabu', label: 'Matibabu & Kuuguliwa', color: 'bg-amber-500' },
-    { key: 'kikao', label: 'Gharama za Vikao (Vinywaji/Ukumbi)', color: 'bg-blue-500' },
-    { key: 'uendeshaji', label: 'Uendeshaji & Mihuri/Vitabu', color: 'bg-purple-500' },
+    { key: 'kikao', label: 'Gharama za Vikao', color: 'bg-blue-500' },
+    { key: 'mkutano_mkuu', label: 'Gharama za Mkutano Mkuu', color: 'bg-indigo-500' },
+    { key: 'uendeshaji', label: 'Uendeshaji & Vifaa', color: 'bg-purple-500' },
     { key: 'huduma', label: 'Huduma za Kijamii', color: 'bg-teal-500' },
     { key: 'nyingine', label: 'Matumizi Mengineyo', color: 'bg-slate-500' }
   ];
@@ -246,7 +247,7 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
       </div>
 
       {/* Category Breakdown Chips */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5">
         {categoryTotals.map(cat => (
           <div key={cat.key} className="bg-slate-900/60 border border-slate-800 rounded-xl p-3">
             <div className="flex items-center gap-1.5 text-[10px] text-slate-400 truncate">
@@ -281,8 +282,9 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
           <option value="all">Aina Zote za Matumizi</option>
           <option value="msiba">Misiba & Rambirambi</option>
           <option value="matibabu">Matibabu</option>
-          <option value="kikao">Vikao</option>
-          <option value="uendeshaji">Uendeshaji</option>
+          <option value="kikao">Gharama za Vikao</option>
+          <option value="mkutano_mkuu">Gharama za Mkutano Mkuu</option>
+          <option value="uendeshaji">Uendeshaji & Vifaa</option>
           <option value="huduma">Huduma za Kijamii</option>
           <option value="nyingine">Mengineyo</option>
         </select>
@@ -322,7 +324,7 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                        {exp.category}
+                        {exp.category === 'mkutano_mkuu' ? 'Mkutano Mkuu' : exp.category}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-rose-400">
@@ -385,6 +387,7 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
                     <option value="msiba">Misiba & Rambirambi</option>
                     <option value="matibabu">Matibabu</option>
                     <option value="kikao">Gharama za Vikao</option>
+                    <option value="mkutano_mkuu">Gharama za Mkutano Mkuu</option>
                     <option value="uendeshaji">Uendeshaji & Vifaa</option>
                     <option value="huduma">Huduma za Kijamii</option>
                     <option value="nyingine">Mengineyo</option>

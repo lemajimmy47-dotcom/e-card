@@ -33,7 +33,9 @@ import {
   Calendar,
   DollarSign,
   Tag,
-  Scale
+  Scale,
+  CreditCard,
+  Layers
 } from 'lucide-react';
 
 interface Props {
@@ -118,6 +120,66 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     recipientsCount: number;
     list?: string[];
   } | null>(null);
+
+  const [isCheckingBalance, setIsCheckingBalance] = useState(false);
+  const [balanceInfo, setBalanceInfo] = useState<{
+    balance?: number | null;
+    provider?: string;
+    isSimulation?: boolean;
+    error?: string;
+    raw?: any;
+    status?: number;
+  } | null>(null);
+
+  const handleCheckBalance = async () => {
+    setIsCheckingBalance(true);
+    setBalanceInfo(null);
+    try {
+      const res = await fetch('/api/sms-balance');
+      const data = await res.json();
+      if (res.ok) {
+        setBalanceInfo(data);
+      } else {
+        setBalanceInfo({ error: data.error || 'Imeshindwa kupata salio' });
+      }
+    } catch (e: any) {
+      setBalanceInfo({ error: e.message || 'Hitilafu ya mtandao' });
+    } finally {
+      setIsCheckingBalance(false);
+    }
+  };
+
+  const handleQuickFixSenderId = async (newSenderId = 'MESEJI') => {
+    const updatedConfig: UwalemiSmsConfig = {
+      ...gatewayConfig,
+      senderId: newSenderId
+    };
+    setGatewayConfig(updatedConfig);
+    const updatedSettings = {
+      ...state.groupSettings,
+      smsConfig: updatedConfig
+    };
+    const updatedState = { ...state, groupSettings: updatedSettings };
+    await onSaveState(updatedState);
+    setSendResult(null);
+    alert(`Sender ID imebadilishwa kuwa "${newSenderId}" na kuhifadhiwa! Sasa unaweza kujaribu kutuma tena ujumbe.`);
+  };
+
+  const handleSwitchToSimulation = async () => {
+    const updatedConfig: UwalemiSmsConfig = {
+      ...gatewayConfig,
+      provider: 'simulation'
+    };
+    setGatewayConfig(updatedConfig);
+    const updatedSettings = {
+      ...state.groupSettings,
+      smsConfig: updatedConfig
+    };
+    const updatedState = { ...state, groupSettings: updatedSettings };
+    await onSaveState(updatedState);
+    setSendResult(null);
+    alert('Mfumo umebadilishwa kuwa Hali ya Majaribio (Simulation Mode). Ujumbe utarekodiwa kwenye mfumo bila makato ya salio la SMS.');
+  };
 
   const members = useMemo(() => sortMembersByLeadership(state.members || []), [state.members]);
   const messageLogs = state.messageLogs || [];
@@ -911,16 +973,50 @@ Lema, Nguvu Moja!`);
 
             {/* Send Result Notification */}
             {sendResult && (
-              <div className={`p-4 rounded-xl text-xs flex items-start gap-3 border ${
+              <div className={`p-4 rounded-xl text-xs flex flex-col gap-3 border ${
                 sendResult.success 
                   ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300' 
                   : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
               }`}>
-                {sendResult.success ? <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" /> : <XCircle className="w-5 h-5 shrink-0 text-rose-400" />}
-                <div>
-                  <div className="font-bold">{sendResult.success ? 'Ujumbe Umetumwa Kikamilifu!' : 'Hitilafu ya Kutuma'}</div>
-                  <div className="mt-0.5">{sendResult.message}</div>
+                <div className="flex items-start gap-3">
+                  {sendResult.success ? <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" /> : <XCircle className="w-5 h-5 shrink-0 text-rose-400" />}
+                  <div>
+                    <div className="font-bold text-sm">{sendResult.success ? 'Ujumbe Umetumwa Kikamilifu!' : 'Hitilafu ya Kutuma SMS'}</div>
+                    <div className="mt-1 leading-relaxed text-slate-200">{sendResult.message}</div>
+                  </div>
                 </div>
+
+                {!sendResult.success && (
+                  <div className="mt-2 pt-3 border-t border-rose-900/40 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-slate-400 font-semibold">Ufumbuzi wa Haraka:</span>
+                    {gatewayConfig.senderId !== 'MESEJI' && (
+                      <button
+                        type="button"
+                        onClick={() => handleQuickFixSenderId('MESEJI')}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white font-medium flex items-center gap-1.5 transition-all cursor-pointer shadow"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Weka Sender ID kuwa "MESEJI"
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSwitchToSimulation}
+                      className="px-3 py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-white font-medium flex items-center gap-1.5 transition-all cursor-pointer shadow"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      Badilisha kuwa Hali ya Majaribio (Simulation)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSubTab('gateway')}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-emerald-400" />
+                      Fungua Mipangilio ya Gateway
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1288,14 +1384,38 @@ Lema, Nguvu Moja!`);
             </div>
 
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">Jina la Mtumaji (Sender ID):</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-slate-300 font-semibold">Jina la Mtumaji (Sender ID):</label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'MESEJI' })}
+                    className="text-[10px] text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                    title="Chagua MESEJI (Inayokubalika papo hapo bila hitilafu ya 500)"
+                  >
+                    Weka "MESEJI" (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'UWALEMI' })}
+                    className="text-[10px] text-slate-400 hover:text-white bg-slate-800/80 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                  >
+                    Weka "UWALEMI"
+                  </button>
+                </div>
+              </div>
               <input
                 type="text"
                 value={gatewayConfig.senderId || ''}
                 onChange={(e) => setGatewayConfig({ ...gatewayConfig, senderId: e.target.value })}
-                placeholder="mf. UWALEMI au MESEJI"
+                placeholder="mf. MESEJI au UWALEMI"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
               />
+              {gatewayConfig.provider === 'meseji' && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  💡 <strong>Kidokezo:</strong> Kwenye Meseji.co.tz, tumia Sender ID ya <span className="font-mono text-emerald-400 font-bold">MESEJI</span> isipokuwa uwe umeshasajili na kuidhinishiwa jina lingine (kama UWALEMI) kwenye dashboard ya Meseji. Kutumia jina ambalo halijaidhinishwa husababisha hitilafu (500).
+                </p>
+              )}
             </div>
 
             <div>
@@ -1321,6 +1441,58 @@ Lema, Nguvu Moja!`);
                 />
               </div>
             )}
+
+            {/* Test Connection & Balance Checker */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
+                  <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
+                  Uhakiki wa Salio & Muunganisho (Live Gateway Status)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCheckBalance}
+                  disabled={isCheckingBalance}
+                  className="px-3 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 text-white font-medium text-[11px] flex items-center gap-1.5 transition-all cursor-pointer shadow disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isCheckingBalance ? 'animate-spin' : ''}`} />
+                  {isCheckingBalance ? 'Inahakiki...' : 'Kagua Salio Sasa'}
+                </button>
+              </div>
+
+              {balanceInfo && (
+                <div className={`p-3 rounded-lg border text-xs ${
+                  balanceInfo.error 
+                    ? 'bg-rose-950/50 border-rose-800/80 text-rose-300' 
+                    : 'bg-emerald-950/50 border-emerald-800/80 text-emerald-300'
+                }`}>
+                  {balanceInfo.error ? (
+                    <div>
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                        Hitilafu ya Muunganisho / Salio:
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-300 leading-relaxed">{balanceInfo.error}</div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Muunganisho na {balanceInfo.provider?.toUpperCase()} Uko Sawa!
+                      </div>
+                      <div className="text-xs text-slate-200">
+                        Salio la SMS (SMS Credits): <strong className="text-emerald-400 font-mono text-sm">{balanceInfo.balance !== null && balanceInfo.balance !== undefined ? Number(balanceInfo.balance).toLocaleString() : 'Iko hewani'}</strong> SMS
+                      </div>
+                      {balanceInfo.balance === 0 && (
+                        <div className="text-[11px] text-amber-300 mt-1">
+                          ⚠️ Salio lako la SMS ni 0. Ili SMS zitumwe kwa wanachama, tafadhali ongeza salio kwenye akaunti yako ya Meseji/Beem.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="space-y-3 pt-3 border-t border-slate-800">
               <label className="flex items-start gap-3 cursor-pointer text-slate-300">

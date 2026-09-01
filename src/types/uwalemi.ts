@@ -82,7 +82,7 @@ export interface UwalemiEmergencyFund {
 export interface UwalemiExpense {
   id: string;
   title: string;
-  category: 'msiba' | 'matibabu' | 'uendeshaji' | 'kikao' | 'huduma' | 'nyingine';
+  category: 'msiba' | 'matibabu' | 'uendeshaji' | 'kikao' | 'mkutano_mkuu' | 'huduma' | 'nyingine';
   amount: number;
   date: string;
   paidTo: string;

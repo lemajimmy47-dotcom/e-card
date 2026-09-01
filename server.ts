@@ -1920,16 +1920,20 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
     fetchOptions.headers = {
       ...fetchOptions.headers,
       "x-api-key": apiKey,
+      "Authorization": "Bearer " + apiKey,
+      "Content-Type": "application/json",
       "Accept": "application/json"
     };
     
-    // Strictly formatted recipient (no +)
-    const cleanPhone = formattedPhone.replace(/\+/g, "");
+    // Strictly formatted recipient (no +, digits only, 255...)
+    let cleanPhone = formattedPhone.replace(/[^0-9]/g, "");
+    if (cleanPhone.startsWith("0")) cleanPhone = "255" + cleanPhone.substring(1);
+    if (cleanPhone.startsWith("7") || cleanPhone.startsWith("6")) cleanPhone = "255" + cleanPhone;
 
     const bodyData: any = {
       contacts: cleanPhone,
       message: text,
-      sender_id: senderId
+      sender_id: senderId || "MESEJI"
     };
     
     if (scheduleTime) {
@@ -1938,7 +1942,7 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
 
     fetchOptions.body = JSON.stringify(bodyData);
     
-    console.log(`[SMS] Meseji Dispatch: ${requestUrl}, Recipient: ${cleanPhone}, SenderID: ${senderId}${scheduleTime ? ', ScheduleTime: ' + scheduleTime : ''}`);
+    console.log(`[SMS] Meseji Dispatch: ${requestUrl}, Recipient: ${cleanPhone}, SenderID: ${senderId || 'MESEJI'}${scheduleTime ? ', ScheduleTime: ' + scheduleTime : ''}`);
   } else if (settings.provider === "ehub") {
     requestUrl = settings.url || "https://sms.ehub.co.tz/api/v1/sms/send";
     if (requestUrl.endsWith("/api/v1") || requestUrl.endsWith("/api/v1/")) {
@@ -2178,9 +2182,12 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
     }
     
     if (response.status === 500 && settings.provider === "meseji") {
+      let cleanPhone = formattedPhone.replace(/[^0-9]/g, "");
+      if (cleanPhone.startsWith("0")) cleanPhone = "255" + cleanPhone.substring(1);
+      if (cleanPhone.startsWith("7") || cleanPhone.startsWith("6")) cleanPhone = "255" + cleanPhone;
+
       if (senderId !== "MESEJI") {
         console.log(`[SMS-Meseji] Retrying with default sender_id 'MESEJI' after 500 error for '${senderId}'...`);
-        const cleanPhone = formattedPhone.replace(/\+/g, "");
         const retryBody: any = {
           contacts: cleanPhone,
           message: text,
@@ -2195,6 +2202,7 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
             headers: {
               ...fetchOptions.headers,
               "x-api-key": apiKey,
+              "Authorization": "Bearer " + apiKey,
               "Accept": "application/json",
               "Content-Type": "application/json"
             },
@@ -2202,7 +2210,6 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
           });
           const retryText = await retryRes.text();
           if (retryRes.ok) {
-            // Check if JSON response is successful
             let retryOk = true;
             try {
               const p = JSON.parse(retryText);
@@ -2220,7 +2227,7 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
         }
       }
 
-      const errorMsg = `Mtoa huduma (Meseji.co.tz) alirejesha hitilafu (500). Hii mara nyingi husababishwa na: 1) Sender ID uliyoweka ("${senderId}") haijaidhinishwa/haijasajiliwa kwenye akaunti yako ya Meseji.co.tz, au 2) Salio lako la SMS kwenye akaunti ya Meseji limeisha. Tafadhali ingia kwenye Meseji.co.tz uhakiki Sender ID na salio lako, au badilisha Sender ID kuwa "MESEJI". [Jibu la Gateway: ${sanitizedBody}]`;
+      const errorMsg = `Mtoa huduma (Meseji.co.tz) alirejesha hitilafu (500). Hii mara nyingi husababishwa na: 1) Salio lako la SMS (Credits) limeisha kwenye akaunti ya Meseji.co.tz, au 2) Sender ID uliyoweka ("${senderId}") haijaidhinishwa kwenye mtandao (badilisha Sender ID kuwa "MESEJI" inayokubalika papo hapo), au 3) API Token imekwisha muda. Tafadhali ingia Meseji.co.tz uhakiki salio au weka Sender ID kama "MESEJI". [Jibu la Gateway: ${sanitizedBody}]`;
       throw new Error(errorMsg);
     }
     
@@ -2895,6 +2902,8 @@ async function startServer() {
 
       const logs: any[] = [];
       let deliveredCount = 0;
+      let failedCount = 0;
+      let lastErrorMsg = '';
 
       const MONTHS_SW = ['Januari', 'Februari', 'Machi', 'Aprili', 'Mei', 'Juni', 'Julai', 'Agosti', 'Septemba', 'Oktoba', 'Novemba', 'Desemba'];
       const MONTHS_SW_SHORT = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ago', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -3063,9 +3072,11 @@ async function startServer() {
             status = 'delivered';
             deliveredCount++;
           } catch (smsErr: any) {
-            console.warn("[UWALEMI SMS Dispatch] Gateway error:", smsErr?.message || smsErr);
-            // Fallback status marked as simulated or failed with descriptive trace
+            const errStr = smsErr?.message || String(smsErr);
+            console.warn("[UWALEMI SMS Dispatch] Gateway error:", errStr);
             status = 'failed';
+            failedCount++;
+            lastErrorMsg = errStr;
           }
         }
 
@@ -3090,12 +3101,25 @@ async function startServer() {
       db.uwalemiState = uwalemiState;
       await writeDB(db);
 
+      if (smsConfig.provider !== 'simulation' && deliveredCount === 0 && failedCount > 0) {
+        return res.json({
+          success: false,
+          deliveredCount: 0,
+          failedCount,
+          error: lastErrorMsg,
+          message: lastErrorMsg || `Imeshindwa kutuma SMS kwa wajumbe kupitia ${smsConfig.provider.toUpperCase()}.`
+        });
+      }
+
       return res.json({
         success: true,
         deliveredCount,
+        failedCount,
         message: smsConfig.provider === 'simulation' 
-          ? `Ujumbe ${deliveredCount} umetumwa (Hali ya Majaribio/Simulation). Ili kutuma SMS halisi, weka API Key za Beem/NextSMS kwenye Mipangilio ya UWALEMI.`
-          : `Ujumbe ${deliveredCount} kati ya ${recipients.length} umetumwa kwa mafanikio kupitia ${smsConfig.provider.toUpperCase()} (${smsConfig.senderId || 'UWALEMI'}).`
+          ? `Ujumbe ${deliveredCount} umerekodiwa (Hali ya Majaribio/Simulation). Ili kutuma SMS halisi, weka API Key za Meseji/Beem/NextSMS kwenye Mipangilio ya UWALEMI.`
+          : failedCount === 0
+            ? `Ujumbe ${deliveredCount} kati ya ${recipients.length} umetumwa kwa mafanikio kupitia ${smsConfig.provider.toUpperCase()} (${smsConfig.senderId || 'MESEJI'}).`
+            : `Ujumbe ${deliveredCount} umetumwa, lakini ujumbe ${failedCount} umeshindwa: ${lastErrorMsg}`
       });
     } catch (error: any) {
       console.error("[UWALEMI SMS] Error:", error);
