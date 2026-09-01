@@ -198,47 +198,20 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     }
     
     const totalToUpload = newGuestsList.length;
-    let currentMerged = [...guests];
+    const finalMerged = [...newGuestsList, ...guests];
     
     try {
       let currentProgressVal = 1;
       for (let i = 0; i < totalToUpload; i += BATCH_SIZE) {
         const batch = newGuestsList.slice(i, i + BATCH_SIZE);
-        currentMerged = [...batch, ...currentMerged];
         
         // Show last guest being uploaded in this batch
         if (batch.length > 0) {
           setLastUploadedGuestName(batch[batch.length - 1].name || '');
         }
         
-        const payload = {
-          guests: batch.map(g => {
-            const { cardImageUrl, ...rest } = g;
-            return rest;
-          }),
-          auditLog: {
-            id: 'log-' + Date.now() + '-' + i,
-            timestamp: new Date().toISOString(),
-            user: 'Admin',
-            action: `${actionDescText}: Wageni ${i + 1} hadi ${Math.min(i + batch.length, totalToUpload)} kati ya ${totalToUpload}`,
-            details: `Kundi la wageni lilipakiwa na kusajiliwa salama kwenye PostgreSQL.`
-          }
-        };
-        
-        const response = await fetch('/api/state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        
-        if (!response.ok) {
-          throw new Error(isEn 
-            ? `Failed to upload batch starting at ${i + 1}` 
-            : `Imeshindikana kupakia kundi kuanzia mgeni wa ${i + 1}`);
-        }
-        
         const loadedCount = Math.min(i + BATCH_SIZE, totalToUpload);
-        const targetPercent = Math.min(Math.round((loadedCount / totalToUpload) * 100), 99);
+        const targetPercent = Math.min(Math.round((loadedCount / totalToUpload) * 100), 95);
         
         // Smoothly tick the visual progress with sequential counts
         const stepDelay = Math.max(2, Math.min(25, 120 / (targetPercent - currentProgressVal || 1)));
@@ -249,22 +222,20 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
         }
         
         setChunkUploadedCount({ current: loadedCount, total: totalToUpload });
-        // Tiny pacing delay to show name before proceeding to next batch
-        await new Promise(resolve => setTimeout(resolve, 80));
+        await new Promise(resolve => setTimeout(resolve, 40));
       }
       
       // Smoothly roll from the current progress value up to 100%
       for (let p = currentProgressVal; p <= 100; p++) {
         setChunkUploadProgress(p);
-        await new Promise(resolve => setTimeout(resolve, 15));
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
       
       setChunkUploadedCount({ current: totalToUpload, total: totalToUpload });
-      await new Promise(resolve => setTimeout(resolve, 850));
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      // Successfully uploaded everything! Now call the master state updates
-      // skipping repetitive heavy redunant server write commands
-      onUpdateGuests(currentMerged, `${actionDescText}: Jumla ya wageni wapya ${totalToUpload}`, true);
+      // Save all merged guests cleanly and reliably through onUpdateGuests
+      onUpdateGuests(finalMerged, `${actionDescText}: Jumla ya wageni wapya ${totalToUpload}`);
       
     } catch (err: any) {
       console.error("Batch upload failed:", err);
@@ -378,13 +349,15 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   }, [isBulkModalOpen]);
 
   const handleDownloadSampleCSV = () => {
-    const headers = "Guest Full Name *,Phone Number (Optional),Category,Pledge (TZS),Paid (TZS)\n";
+    // Official clean template focusing on Name, Phone, and Card Type (No mandatory pledge/paid)
+    const headers = "Jina la Mgeni,Namba ya Simu,Aina ya Kadi\n";
     const rows = [
-      "Arnold Kimaro,,VIP,5000000,3000000",
-      "Ernest Gao,,Wafanyakazi,250000,0",
-      "David Komba,,Ndugu,250000,0",
-      "Eng Gerald Baslei,0714786751,Kamati,1000000,600000",
-      "Kilonzo Izina,0755883901,Wafanyakazi,220000,70000"
+      "Arnold Kimaro,0712345678,DOUBLE",
+      "Grace Mbise,0754112233,SINGLE",
+      "Dkt. Peter Kweka,0789001122,VIP",
+      "Ernest Gao,0655443322,DOUBLE",
+      "Salma Rashidi,0714786751,SINGLE",
+      "Mhe. Joseph & Mke,0755883901,COUPLE"
     ].join("\n");
     
     try {
@@ -392,7 +365,31 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', 'mfano_wa_orodha_ya_wageni.csv');
+      link.setAttribute('download', 'kiolezo_cha_kadi_za_wageni.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      alert(isEn ? "Failed to download sample file." : "Imeshindikana kupakua mfano wa faili.");
+    }
+  };
+
+  const handleDownloadFullSampleCSV = () => {
+    // Advanced template with optional Pledge and Paid for committees
+    const headers = "Jina la Mgeni,Namba ya Simu,Aina ya Kadi,Ahadi (TZS),Iliyolipwa (TZS)\n";
+    const rows = [
+      "Arnold Kimaro,0712345678,VIP,5000000,3000000",
+      "Grace Mbise,0754112233,SINGLE,250000,250000",
+      "Dkt. Peter Kweka,0789001122,VIP,1000000,1000000",
+      "Ernest Gao,0655443322,DOUBLE,500000,0"
+    ].join("\n");
+    
+    try {
+      const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'kiolezo_kamili_chenye_michango.csv');
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -408,7 +405,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     const parsed = parseUniversalGuestTable(matrix);
 
     if (parsed.length === 0) {
-      setCsvError('Haikupata mgeni yeyote katika faili la CSV/Text. Hakikisha safu wima zina majina kama "Guest Full Name", "Pledge", "Paid", n.k.');
+      setCsvError('Haikupata mgeni yeyote katika faili la CSV/Text. Hakikisha faili lina angalau safu wima ya Jina la Mgeni (na kwa hiari Namba ya Simu na Aina ya Kadi).');
       setParsedFileGuests([]);
     } else {
       setParsedFileGuests(parsed);
@@ -435,7 +432,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
           const rawMatrix: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
           const parsed = parseUniversalGuestTable(rawMatrix);
           if (parsed.length === 0) {
-            setCsvError('Haikupata mgeni yeyote katika faili la Excel. Hakikisha vichwa vya habari vinasomeka mfano "Guest Full Name", "Pledge", "Paid", n.k.');
+            setCsvError('Haikupata mgeni yeyote katika faili la Excel. Hakikisha safu wima ya Jina la Mgeni ipo.');
           } else {
             setParsedFileGuests(parsed);
           }
@@ -463,24 +460,21 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     e.preventDefault();
     if (parsedFileGuests.length === 0) return;
 
-    const nonConflicts: Guest[] = [];
-    const conflicts: { newGuest: Guest; existingGuest: Guest }[] = [];
-
-    parsedFileGuests.forEach((item, index) => {
-      const id = 'G-' + (Date.now() + index).toString().slice(-6);
+    const newGuestsToAdd: Guest[] = parsedFileGuests.map((item, index) => {
+      const id = 'G-' + Date.now().toString().slice(-6) + '-' + index;
       const shortCode = 'IP-' + Math.floor(1100 + Math.random() * 8800);
       const standardisedPhone = standardisePhoneNumber(item.phone);
 
       const itemTags = item.tags ? item.tags : [];
       const itemCustomFields = item.customFields ? item.customFields : {};
 
-      const newGuest: Guest = {
+      return {
         id,
         eventId: event.id,
         code: shortCode,
         name: item.name.trim(),
         phone: standardisedPhone,
-        cardType: item.cardType,
+        cardType: item.cardType || 'DOUBLE',
         smsStatus: 'Sijatuma',
         whatsappStatus: 'Sijatuma',
         rsvpStatus: 'Bado',
@@ -493,47 +487,10 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
         paidAmount: item.paidAmount,
         pledgeStatus: item.pledgeStatus || 'No Pledge'
       };
-
-      // Check for duplicate in existing guests OR within the incoming batch
-      const cleanPhone = standardisedPhone.replace(/\D/g, '');
-      const lastNdigits = cleanPhone.slice(-9);
-      const normName = item.name.trim().toLowerCase();
-
-      const existingDuplicate = guests.find(g => {
-        const existingNormName = (g.name || '').trim().toLowerCase();
-        const existingCleanPhone = (g.phone || '').replace(/\D/g, '');
-        const existingLastNdigits = existingCleanPhone.slice(-9);
-
-        const phoneMatches = lastNdigits.length >= 7 && existingLastNdigits.length >= 7 && lastNdigits === existingLastNdigits;
-        const nameMatches = normName && existingNormName === normName;
-
-        return phoneMatches || nameMatches;
-      });
-
-      const batchDuplicate = nonConflicts.find(g => {
-        const existingNormName = (g.name || '').trim().toLowerCase();
-        const existingCleanPhone = (g.phone || '').replace(/\D/g, '');
-        const existingLastNdigits = existingCleanPhone.slice(-9);
-
-        const phoneMatches = lastNdigits.length >= 7 && existingLastNdigits.length >= 7 && lastNdigits === existingLastNdigits;
-        const nameMatches = normName && existingNormName === normName;
-
-        return phoneMatches || nameMatches;
-      });
-
-      if (existingDuplicate) {
-        conflicts.push({ newGuest, existingGuest: existingDuplicate });
-      } else if (!batchDuplicate) {
-        nonConflicts.push(newGuest);
-      }
     });
 
-    if (nonConflicts.length > 0) {
-      handleUploadInBatches(nonConflicts, "Pakia wageni kupitia faili (CSV/Excel)");
-    }
-
-    if (conflicts.length > 0) {
-      setConflictQueue(prev => [...prev, ...conflicts]);
+    if (newGuestsToAdd.length > 0) {
+      handleUploadInBatches(newGuestsToAdd, "Pakia wageni kupitia faili (CSV/Excel)");
     }
 
     setIsBulkModalOpen(false);
@@ -657,21 +614,18 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
       return;
     }
 
-    const nonConflicts: Guest[] = [];
-    const conflicts: { newGuest: Guest; existingGuest: Guest }[] = [];
-
-    parsedItems.forEach((item, index) => {
-      const id = 'G-' + (Date.now() + index).toString().slice(-6);
+    const newGuestsToAdd: Guest[] = parsedItems.map((item, index) => {
+      const id = 'G-' + Date.now().toString().slice(-6) + '-' + index;
       const shortCode = 'IP-' + Math.floor(1100 + Math.random() * 8800);
       const standardisedPhone = standardisePhoneNumber(item.phone);
 
-      const newGuest: Guest = {
+      return {
         id,
         eventId: event.id,
         code: shortCode,
         name: item.name.trim(),
         phone: standardisedPhone,
-        cardType: item.cardType,
+        cardType: item.cardType || 'DOUBLE',
         smsStatus: 'Sijatuma',
         whatsappStatus: 'Sijatuma',
         rsvpStatus: 'Bado',
@@ -684,47 +638,10 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
         paidAmount: item.paidAmount,
         pledgeStatus: item.pledgeStatus || 'No Pledge'
       };
-
-      // Check for duplicate in existing guests OR within the incoming batch
-      const cleanPhone = standardisedPhone.replace(/\D/g, '');
-      const lastNdigits = cleanPhone.slice(-9);
-      const normName = item.name.trim().toLowerCase();
-
-      const existingDuplicate = guests.find(g => {
-        const existingNormName = (g.name || '').trim().toLowerCase();
-        const existingCleanPhone = (g.phone || '').replace(/\D/g, '');
-        const existingLastNdigits = existingCleanPhone.slice(-9);
-
-        const phoneMatches = lastNdigits.length >= 7 && existingLastNdigits.length >= 7 && lastNdigits === existingLastNdigits;
-        const nameMatches = normName && existingNormName === normName;
-
-        return phoneMatches || nameMatches;
-      });
-
-      const batchDuplicate = nonConflicts.find(g => {
-        const existingNormName = (g.name || '').trim().toLowerCase();
-        const existingCleanPhone = (g.phone || '').replace(/\D/g, '');
-        const existingLastNdigits = existingCleanPhone.slice(-9);
-
-        const phoneMatches = lastNdigits.length >= 7 && existingLastNdigits.length >= 7 && lastNdigits === existingLastNdigits;
-        const nameMatches = normName && existingNormName === normName;
-
-        return phoneMatches || nameMatches;
-      });
-
-      if (existingDuplicate) {
-        conflicts.push({ newGuest, existingGuest: existingDuplicate });
-      } else if (!batchDuplicate) {
-        nonConflicts.push(newGuest);
-      }
     });
 
-    if (nonConflicts.length > 0) {
-      handleUploadInBatches(nonConflicts, "Ameongeza wageni wapya kwa pamoja");
-    }
-
-    if (conflicts.length > 0) {
-      setConflictQueue(prev => [...prev, ...conflicts]);
+    if (newGuestsToAdd.length > 0) {
+      handleUploadInBatches(newGuestsToAdd, "Ameongeza wageni wapya kwa pamoja");
     }
 
     setIsBulkModalOpen(false);
@@ -1770,29 +1687,51 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                 <X className="w-5 h-5" />
               </button>
 
-              <h3 className="text-base font-bold text-white">Uingizaji Wageni kwa Wingi (Smart Bulk Add)</h3>
+              <h3 className="text-base font-bold text-white">Uingizaji Wageni kwa Wingi (Bulk Guest Upload)</h3>
               <p className="text-[11px] text-slate-300 leading-normal">
-                Mfumo utagundua na kupanga taarifa kiotomatiki kulingana na <strong>Kichwa cha Habari (Headers)</strong> kama <em>Guest Full Name, Phone, Category, Pledge, Paid</em> n.k. Si lazima kuweka taarifa zote au kwa mpangilio ule ule.
+                Mfumo unatambua kiotomatiki <strong>Jina la Mgeni</strong>, <strong>Namba ya Simu</strong>, na <strong>Aina ya Kadi</strong> (SINGLE, DOUBLE, VIP, n.k.). <span className="text-emerald-400 font-semibold">Safu wima za Ahadi au Michango SI LAZIMA</span> na unaweza kuziacha kabisa.
               </p>
 
               {/* Sample hint card */}
-              <div className="bg-white/5 p-3 rounded-xl border border-white/10 font-mono text-[10px] text-slate-300 space-y-2">
-                <div className="space-y-0.5">
-                  <p className="font-bold text-white">Mfano wa kadi/safu wima zinazotambuliwa:</p>
-                  <p className="text-emerald-300">Guest Full Name *, Phone Number, Category, Pledge, Paid</p>
-                  <p className="text-slate-400">Arnold Kimaro | VIP | Ahadi: 5,000,000 | Paid: 3,000,000</p>
-                  <p className="text-slate-400">Ernest Gao | Wafanyakazi | Ahadi: 250,000 | Paid: 0</p>
+              <div className="bg-white/5 p-3.5 rounded-2xl border border-white/10 font-mono text-[10px] text-slate-300 space-y-2.5">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-white font-bold font-sans text-[11px]">
+                    <span className="flex items-center gap-1 text-emerald-400">
+                      <span>✓</span> Safu Wima Zinazotambuliwa Kwenye CSV:
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">Format ya Msingi</span>
+                  </div>
+                  <p className="text-blue-300 font-semibold bg-blue-950/40 p-1.5 rounded-lg border border-blue-800/40">
+                    Jina la Mgeni, Namba ya Simu, Aina ya Kadi (SINGLE / DOUBLE / VIP)
+                  </p>
+                  <div className="space-y-0.5 text-slate-300 text-[9.5px] pl-1 font-mono">
+                    <p>• Arnold Kimaro, 0712345678, DOUBLE</p>
+                    <p>• Grace Mbise, 0754112233, SINGLE</p>
+                    <p>• Dkt. Peter Kweka, 0789001122, VIP</p>
+                  </div>
                 </div>
-                <div className="pt-2 border-t border-white/5 flex justify-between items-center gap-2">
-                  <span className="text-[9px] text-slate-400 font-sans">Unataka mfano wa faili la Excel/CSV?</span>
-                  <button
-                    type="button"
-                    onClick={handleDownloadSampleCSV}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-[10px] font-sans transition cursor-pointer shrink-0"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Pakua Excel/CSV Template</span>
-                  </button>
+
+                <div className="pt-2 border-t border-white/10 flex flex-wrap justify-between items-center gap-2 font-sans">
+                  <span className="text-[10px] text-slate-400">Pakua kiolezo tayari kwa kujaza:</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleDownloadSampleCSV}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] transition cursor-pointer shadow-sm"
+                      title="Pakua kiolezo rasmi chenye safu za: Jina, Namba ya Simu, Aina ya Kadi"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Kiolezo cha Kadi (CSV)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadFullSampleCSV}
+                      className="flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/15 text-slate-300 hover:text-white rounded-lg text-[9.5px] transition cursor-pointer"
+                      title="Kiolezo kinachojumuisha safu za hiari za Ahadi na Michango"
+                    >
+                      <span>+ Michango (Hiari)</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1818,7 +1757,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       : 'border-transparent text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <span>Mbinu ya 2: Pakia Faili la Excel (.xlsx / .csv)</span>
+                  <span>Mbinu ya 2: Pakia Faili la CSV / Excel (.csv / .xlsx)</span>
                 </button>
               </div>
 
@@ -1847,7 +1786,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                               const rawMatrix: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: '' });
                               const parsed = parseUniversalGuestTable(rawMatrix);
                               if (parsed.length === 0) {
-                                setCsvError('Haikupata mgeni yeyote katika faili la Excel.');
+                                setCsvError('Haikupata mgeni yeyote katika faili la Excel. Hakikisha safu wima ya Jina ipo.');
                               } else {
                                 setParsedFileGuests(parsed);
                               }
@@ -1887,13 +1826,13 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       <div className="space-y-2">
                         <FileText className="w-10 h-10 mx-auto text-emerald-400 animate-bounce" />
                         <p className="font-bold text-white max-w-full truncate text-[11px]">{fileName}</p>
-                        <p className="text-[10px] text-emerald-450">Bonyeza chini kumalizia kuyaingiza!</p>
+                        <p className="text-[10px] text-emerald-400">Faili limekaguliwa! Bonyeza kitufe hapo chini kuhifadhi.</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <Upload className="w-10 h-10 mx-auto text-blue-455 animate-pulse" />
-                        <p className="font-semibold text-slate-200">Bofya hapa au Vuta na kuachia faili sasa (Drag & Drop)</p>
-                        <p className="text-[10px] text-slate-400">Inasaidia faili za Excel (.xlsx, .xls), CSV na Text (.txt)</p>
+                        <Upload className="w-10 h-10 mx-auto text-blue-400 animate-pulse" />
+                        <p className="font-semibold text-slate-200">Bofya hapa au Vuta na kuachia faili la CSV/Excel</p>
+                        <p className="text-[10px] text-slate-400">Inasaidia faili za CSV (.csv), Excel (.xlsx, .xls) na Text (.txt)</p>
                       </div>
                     )}
                   </div>
@@ -1906,22 +1845,60 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
 
                   {parsedFileGuests.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
-                        Wageni waliopatikana kwenye faili ({parsedFileGuests.length}):
-                      </p>
-                      <div className="border border-white/15 rounded-xl max-h-[140px] overflow-y-auto divide-y divide-white/5 bg-[#050b18] text-[10.5px]">
-                        {parsedFileGuests.slice(0, 10).map((g, idx) => (
-                          <div key={idx} className="p-2 flex flex-wrap justify-between items-center gap-1.5 text-slate-350">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-white truncate max-w-[130px]">{g.name}</span>
-                              {g.phone && <span className="font-mono text-[10px] text-slate-400">{g.phone}</span>}
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                          Wageni waliopatikana kwenye faili ({parsedFileGuests.length}):
+                        </p>
+                        <div className="flex items-center gap-1 text-[9px] text-slate-400 font-mono">
+                          <span className="text-purple-300">DOUBLE: {parsedFileGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length}</span>
+                          <span>•</span>
+                          <span className="text-blue-300">SINGLE: {parsedFileGuests.filter(g => g.cardType === 'SINGLE').length}</span>
+                          {parsedFileGuests.some(g => g.cardType === 'VIP' || g.cardType === 'VVIP') && (
+                            <>
+                              <span>•</span>
+                              <span className="text-amber-300">VIP: {parsedFileGuests.filter(g => g.cardType === 'VIP' || g.cardType === 'VVIP').length}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="border border-white/15 rounded-xl max-h-[160px] overflow-y-auto divide-y divide-white/5 bg-[#050b18] text-[10.5px]">
+                        {parsedFileGuests.slice(0, 15).map((g, idx) => (
+                          <div key={idx} className="p-2.5 flex flex-wrap justify-between items-center gap-2 hover:bg-white/5 transition-colors">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] flex items-center justify-center font-bold shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <span className="font-bold text-white block truncate max-w-[160px]">{g.name}</span>
+                                {g.phone ? (
+                                  <span className="font-mono text-[10px] text-slate-400">{g.phone}</span>
+                                ) : (
+                                  <span className="text-[9px] text-slate-500 italic">Bila namba ya simu</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                              {g.category && (
-                                <span className="bg-blue-500/10 text-blue-300 border border-blue-500/20 text-[9px] font-bold px-1.5 py-0.5 rounded">
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Card Type badge */}
+                              <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md border ${
+                                g.cardType === 'DOUBLE' || g.cardType === 'COUPLE'
+                                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                                  : g.cardType === 'SINGLE'
+                                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                                  : g.cardType === 'VIP' || g.cardType === 'VVIP'
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                  : 'bg-slate-700 text-slate-300 border-slate-600'
+                              }`}>
+                                Kadi: {g.cardType}
+                              </span>
+
+                              {g.category && g.category.toUpperCase() !== g.cardType && (
+                                <span className="bg-white/10 text-slate-300 border border-white/15 text-[9px] px-1.5 py-0.5 rounded">
                                   {g.category}
                                 </span>
                               )}
+
                               {(g.pledgeAmount || 0) > 0 && (
                                 <span className="bg-purple-500/10 text-purple-300 border border-purple-500/20 text-[9px] font-bold font-mono px-1.5 py-0.5 rounded">
                                   Ahadi: TZS {g.pledgeAmount?.toLocaleString()}
@@ -1935,9 +1912,9 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                             </div>
                           </div>
                         ))}
-                        {parsedFileGuests.length > 10 && (
-                          <div className="p-2 text-center text-[10px] text-slate-500 italic">
-                            ... na wageni wengine {parsedFileGuests.length - 10} zaidi.
+                        {parsedFileGuests.length > 15 && (
+                          <div className="p-2 text-center text-[10px] text-slate-500 italic bg-white/[0.02]">
+                            ... na wageni wengine {parsedFileGuests.length - 15} zaidi.
                           </div>
                         )}
                       </div>
@@ -1955,15 +1932,20 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                 </div>
               ) : (
                 <form onSubmit={handleAddBulkGuests} className="space-y-4">
-                  <textarea
-                    id="bulk-guests-textarea"
-                    rows={7}
-                    required
-                    placeholder={`Paste au andika orodha yako hapa kutoka Excel au Google Sheets...\n\nGuest Full Name *\tPhone Number (Optional)\tCategory\tPledge (TZS)\tPaid (TZS)\nArnold Kimaro\t\tVIP\t5,000,000\t3,000,000\nErnest Gao\t\tWafanyakazi\t250,000\t0`}
-                    value={bulkTextInput}
-                    onChange={(e) => setBulkTextInput(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 font-mono text-[11px] text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                  />
+                  <div className="space-y-1">
+                    <label className="block text-[10.5px] text-slate-400">
+                      Weka orodha ya wageni (Kila mstari uwe na Jina la Mgeni, Namba ya Simu, na Aina ya Kadi):
+                    </label>
+                    <textarea
+                      id="bulk-guests-textarea"
+                      rows={7}
+                      required
+                      placeholder={`Jina la Mgeni\tNamba ya Simu\tAina ya Kadi\nArnold Kimaro\t0712345678\tDOUBLE\nGrace Mbise\t0754112233\tSINGLE\nDkt. Peter Kweka\t0789001122\tVIP\nErnest Gao\t0655443322\tDOUBLE\nSalma Rashidi\t0714786751\tSINGLE`}
+                      value={bulkTextInput}
+                      onChange={(e) => setBulkTextInput(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl p-3 font-mono text-[11px] text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    />
+                  </div>
 
                   <button 
                     type="submit"

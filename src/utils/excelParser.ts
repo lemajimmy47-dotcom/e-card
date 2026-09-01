@@ -109,29 +109,32 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
 
       if (foundName === -1 && (
         norm.includes('guest name') || norm.includes('full name') || norm.includes('jina la mgeni') || 
-        norm.includes('jina') || norm.includes('mgeni') || norm.includes('name') || 
-        norm.includes('mchangiaji') || norm.includes('mlipaji') || norm.includes('member') || norm.includes('majina')
+        norm.includes('jina kamili') || norm.includes('jina') || norm.includes('mgeni') || norm.includes('name') || 
+        norm.includes('mchangiaji') || norm.includes('mlipaji') || norm.includes('member') || norm.includes('majina') ||
+        norm.includes('first name') || norm.includes('last name') || norm === 'n' || norm === 'guest'
       )) {
         foundName = cIdx;
       }
       else if (foundPhone === -1 && (
         norm.includes('phone') || norm.includes('simu') || norm.includes('namba') || 
         norm.includes('mobile') || norm.includes('contact') || norm.includes('tel') || 
-        norm.includes('nu') || norm.includes('no')
+        norm.includes('cell') || norm.includes('msisdn') || norm === 'no' || norm === 'no.' || norm === 'simu ya mkononi'
       )) {
         foundPhone = cIdx;
+      }
+      else if (foundCard === -1 && (
+        norm.includes('card type') || norm.includes('aina ya kadi') || norm.includes('aina kadi') ||
+        norm.includes('aina ya mwaliko') || norm.includes('kadi') || norm.includes('card') || 
+        norm.includes('single/double') || norm.includes('ticket') || norm.includes('pass') ||
+        norm.includes('aina') || norm.includes('type') || norm.includes('mwaliko')
+      )) {
+        foundCard = cIdx;
       }
       else if (foundCat === -1 && (
         norm.includes('category') || norm.includes('kategoria') || norm.includes('kikundi') || 
         norm.includes('group') || norm.includes('kundi') || norm.includes('tag') || norm.includes('lebo')
       )) {
         foundCat = cIdx;
-      }
-      else if (foundCard === -1 && (
-        norm.includes('card type') || norm.includes('aina ya kadi') || norm.includes('card') || 
-        norm.includes('kadi') || norm.includes('single/double')
-      )) {
-        foundCard = cIdx;
       }
       else if (foundPledge === -1 && (
         norm.includes('pledge') || norm.includes('ahadi') || norm.includes('pledged') || 
@@ -163,7 +166,7 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
       nameCol = foundName;
       phoneCol = foundPhone;
       categoryCol = foundCat;
-      cardTypeCol = foundCard;
+      cardTypeCol = foundCard !== -1 ? foundCard : foundCat;
       pledgeCol = foundPledge;
       paidCol = foundPaid;
       tableCol = foundTable;
@@ -180,29 +183,34 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
     const row0 = validRows[0];
     const isRow0Header = row0.some(cell => {
       const s = String(cell ?? '').toLowerCase();
-      return s.includes('name') || s.includes('jina') || s.includes('pledge') || s.includes('paid') || s.includes('ahadi') || s.includes('phone');
+      return s.includes('name') || s.includes('jina') || s.includes('pledge') || s.includes('paid') || s.includes('ahadi') || s.includes('phone') || s.includes('simu') || s.includes('card') || s.includes('kadi');
     });
     if (isRow0Header) {
       dataStartRow = 1;
     }
 
     // Auto detect columns by analyzing data rows
-    const colScores: Record<number, { textCount: number; phoneCount: number; numericAmounts: number[] }> = {};
+    const colScores: Record<number, { textCount: number; phoneCount: number; cardTypeCount: number; numericAmounts: number[] }> = {};
     const sampleRows = validRows.slice(dataStartRow, Math.min(validRows.length, dataStartRow + 20));
+
+    const knownCardKeywords = ['single', 'double', 'vip', 'vvip', 'couple', 'family', 'table', 'meza', 'pekee', 'wili', 'mbili', 'moja'];
 
     sampleRows.forEach(row => {
       row.forEach((cell, cIdx) => {
-        if (!colScores[cIdx]) colScores[cIdx] = { textCount: 0, phoneCount: 0, numericAmounts: [] };
+        if (!colScores[cIdx]) colScores[cIdx] = { textCount: 0, phoneCount: 0, cardTypeCount: 0, numericAmounts: [] };
         const val = String(cell ?? '').trim();
         if (!val) return;
 
+        const valLower = val.toLowerCase();
         const num = parseAmountValue(val);
         const digitsOnly = val.replace(/\D/g, '');
 
-        if (num > 1000) {
-          colScores[cIdx].numericAmounts.push(num);
-        } else if (digitsOnly.length >= 7 && digitsOnly.length <= 15 && (digitsOnly.startsWith('0') || digitsOnly.startsWith('255') || digitsOnly.startsWith('7') || digitsOnly.startsWith('6'))) {
+        if (knownCardKeywords.includes(valLower) || valLower.startsWith('single') || valLower.startsWith('double') || valLower.startsWith('vip')) {
+          colScores[cIdx].cardTypeCount++;
+        } else if (digitsOnly.length >= 7 && digitsOnly.length <= 15 && (digitsOnly.startsWith('0') || digitsOnly.startsWith('255') || digitsOnly.startsWith('7') || digitsOnly.startsWith('6') || digitsOnly.startsWith('254') || digitsOnly.startsWith('256'))) {
           colScores[cIdx].phoneCount++;
+        } else if (num > 1000) {
+          colScores[cIdx].numericAmounts.push(num);
         } else if (val.length >= 2 && isNaN(Number(val))) {
           colScores[cIdx].textCount++;
         }
@@ -211,6 +219,10 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
 
     let bestTextCol = -1;
     let maxText = -1;
+    let bestPhoneCol = -1;
+    let maxPhone = -1;
+    let bestCardCol = -1;
+    let maxCard = -1;
     const amountCols: { colIndex: number; avgAmount: number }[] = [];
 
     Object.entries(colScores).forEach(([colStr, score]) => {
@@ -219,6 +231,14 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
         maxText = score.textCount;
         bestTextCol = cIdx;
       }
+      if (score.phoneCount > maxPhone) {
+        maxPhone = score.phoneCount;
+        bestPhoneCol = cIdx;
+      }
+      if (score.cardTypeCount > maxCard) {
+        maxCard = score.cardTypeCount;
+        bestCardCol = cIdx;
+      }
       if (score.numericAmounts.length > 0) {
         const sum = score.numericAmounts.reduce((a, b) => a + b, 0);
         amountCols.push({ colIndex: cIdx, avgAmount: sum / score.numericAmounts.length });
@@ -226,18 +246,28 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
     });
 
     nameCol = bestTextCol !== -1 ? bestTextCol : 0;
-    
+    if (bestPhoneCol !== -1 && bestPhoneCol !== nameCol) phoneCol = bestPhoneCol;
+    if (bestCardCol !== -1 && bestCardCol !== nameCol && bestCardCol !== phoneCol) cardTypeCol = bestCardCol;
+
     amountCols.sort((a, b) => a.colIndex - b.colIndex);
     if (amountCols.length >= 1) pledgeCol = amountCols[0].colIndex;
     if (amountCols.length >= 2) paidCol = amountCols[1].colIndex;
 
-    if (phoneCol === -1) {
-      Object.entries(colScores).forEach(([colStr, score]) => {
-        const cIdx = parseInt(colStr, 10);
-        if (score.phoneCount > 0 && cIdx !== nameCol && cIdx !== pledgeCol && cIdx !== paidCol) {
-          phoneCol = cIdx;
+    // Fallback: If 3 columns and no amounts, cols are likely (Name, Phone, CardType) or (Name, CardType, Phone)
+    const totalCols = validRows[0]?.length || 0;
+    if (totalCols === 2 && phoneCol === -1) {
+      phoneCol = nameCol === 0 ? 1 : 0;
+    } else if (totalCols === 3) {
+      if (nameCol === 0) {
+        if (phoneCol === -1 && cardTypeCol === -1) {
+          phoneCol = 1;
+          cardTypeCol = 2;
+        } else if (phoneCol === 1 && cardTypeCol === -1) {
+          cardTypeCol = 2;
+        } else if (phoneCol === 2 && cardTypeCol === -1) {
+          cardTypeCol = 1;
         }
-      });
+      }
     }
   }
 
@@ -249,18 +279,33 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
     
     if (!nameVal) continue;
     const normNameCheck = nameVal.toLowerCase();
-    if (normNameCheck === 'guest full name' || normNameCheck === 'jina la mgeni' || normNameCheck === 'jina' || normNameCheck === 'name') continue;
+    if (normNameCheck === 'guest full name' || normNameCheck === 'jina la mgeni' || normNameCheck === 'jina' || normNameCheck === 'name' || normNameCheck === 'majina' || normNameCheck === 'full name') continue;
 
     const phoneVal = phoneCol !== -1 && row[phoneCol] != null ? String(row[phoneCol]).trim() : '';
     const categoryVal = categoryCol !== -1 && row[categoryCol] != null ? String(row[categoryCol]).trim() : '';
-    const cardTypeRaw = cardTypeCol !== -1 && row[cardTypeCol] != null ? String(row[cardTypeCol]).trim().toUpperCase() : '';
+    const cardTypeRaw = cardTypeCol !== -1 && row[cardTypeCol] != null ? String(row[cardTypeCol]).trim() : '';
 
-    let cardType = 'DOUBLE';
-    if (cardTypeRaw.includes('SINGLE')) cardType = 'SINGLE';
-    else if (cardTypeRaw.includes('DOUBLE')) cardType = 'DOUBLE';
-    else if (['SINGLE', 'DOUBLE', 'FAMILY', 'VIP'].includes(cardTypeRaw)) cardType = cardTypeRaw;
-    else if (categoryVal.toUpperCase().includes('SINGLE')) cardType = 'SINGLE';
-    else if (categoryVal.toUpperCase().includes('DOUBLE')) cardType = 'DOUBLE';
+    // Smart Card Type normalization (SINGLE, DOUBLE, VIP, VVIP, COUPLE, FAMILY, TABLE, etc.)
+    let cardType = 'DOUBLE'; // Default for wedding/event invitations
+    const combinedCardStr = (cardTypeRaw + ' ' + categoryVal).toUpperCase().trim();
+
+    if (combinedCardStr.includes('SINGLE') || combinedCardStr.includes('PEKEE') || combinedCardStr.includes('MOJA') || combinedCardStr === '1' || combinedCardStr === 'KADI MOJA') {
+      cardType = 'SINGLE';
+    } else if (combinedCardStr.includes('DOUBLE') || combinedCardStr.includes('COUPLE') || combinedCardStr.includes('WILI') || combinedCardStr.includes('MBILI') || combinedCardStr.includes('WANANDOA') || combinedCardStr === '2' || combinedCardStr === 'KADI MBILI') {
+      cardType = 'DOUBLE';
+    } else if (combinedCardStr.includes('VVIP')) {
+      cardType = 'VVIP';
+    } else if (combinedCardStr.includes('VIP')) {
+      cardType = 'VIP';
+    } else if (combinedCardStr.includes('FAMILY') || combinedCardStr.includes('FAMILIA')) {
+      cardType = 'FAMILY';
+    } else if (combinedCardStr.includes('MEZA') || combinedCardStr.includes('TABLE')) {
+      cardType = 'TABLE';
+    } else if (cardTypeRaw) {
+      cardType = cardTypeRaw.toUpperCase();
+    } else if (categoryVal) {
+      cardType = categoryVal.toUpperCase();
+    }
 
     const pledgeAmount = pledgeCol !== -1 ? parseAmountValue(row[pledgeCol]) : 0;
     const paidAmount = paidCol !== -1 ? parseAmountValue(row[paidCol]) : 0;
@@ -284,13 +329,13 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
     if (foodVal) customFieldsObj.foodPreference = foodVal;
 
     const tags: string[] = [];
-    if (categoryVal) tags.push(categoryVal);
+    if (categoryVal && categoryVal.toUpperCase() !== cardType) tags.push(categoryVal);
 
     results.push({
       name: nameVal,
       phone: phoneVal,
       cardType,
-      category: categoryVal || undefined,
+      category: categoryVal || (cardType !== 'DOUBLE' && cardType !== 'SINGLE' ? cardType : undefined),
       tags,
       customFields: Object.keys(customFieldsObj).length > 0 ? customFieldsObj : undefined,
       pledgeAmount: pledgeAmount > 0 ? pledgeAmount : undefined,

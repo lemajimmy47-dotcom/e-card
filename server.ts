@@ -30,7 +30,7 @@ function isCorruptGuest(g: any) {
   if (name.includes('workbook') || name.includes('sharedStrings') || name.includes('docProps') || name.includes('xl/theme')) {
     return true;
   }
-  if (name.length > 70) {
+  if (name.length > 200) {
     return true;
   }
   if (g.phone && (String(g.phone).includes('\u0000') || String(g.phone).length > 35)) {

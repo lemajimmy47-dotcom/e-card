@@ -2539,12 +2539,12 @@ export default function ContributionManager({
   };
 
   const downloadCSVTemplate = () => {
-    const csvContent = "Guest Full Name *,Phone Number (Optional),Category,Pledge (TZS),Paid (TZS)\nJohn Doe,0712345678,SINGLE,100000,50000\nJane Smith,0612345678,VIP,500000,500000";
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const csvContent = "Jina la Mgeni,Namba ya Simu,Aina ya Kadi\nArnold Kimaro,0712345678,DOUBLE\nGrace Mbise,0754112233,SINGLE\nDkt. Peter Kweka,0789001122,VIP\nErnest Gao,0655443322,DOUBLE";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `guests_template.csv`;
+    link.download = `kiolezo_cha_wageni.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
