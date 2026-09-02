@@ -3,6 +3,80 @@ import QRCode from 'qrcode';
 
 const imageCache = new Map<string, HTMLImageElement>();
 const qrCache = new Map<string, HTMLImageElement>();
+const imagePromiseMap = new Map<string, Promise<HTMLImageElement>>();
+const qrPromiseMap = new Map<string, Promise<HTMLImageElement>>();
+
+export function preloadImage(src: string): Promise<HTMLImageElement> {
+  if (!src) return Promise.reject(new Error("No image source provided"));
+  if (imagePromiseMap.has(src)) {
+    return imagePromiseMap.get(src)!;
+  }
+  const cached = imageCache.get(src);
+  if (cached && cached.complete && cached.naturalWidth > 0) {
+    const p = Promise.resolve(cached);
+    imagePromiseMap.set(src, p);
+    return p;
+  }
+  const promise = new Promise<HTMLImageElement>((resolve) => {
+    const img = cached || new Image();
+    img.crossOrigin = 'anonymous';
+    if (!cached) {
+      imageCache.set(src, img);
+    }
+    const handleDone = () => resolve(img);
+    if (img.complete && img.naturalWidth > 0) {
+      resolve(img);
+    } else {
+      img.addEventListener('load', handleDone, { once: true });
+      img.addEventListener('error', handleDone, { once: true });
+      if (!cached) {
+        img.src = src;
+      }
+    }
+  });
+  imagePromiseMap.set(src, promise);
+  return promise;
+}
+
+export function preloadQRImage(text: string): Promise<HTMLImageElement> {
+  const textToEncode = text || "EVENTCARD";
+  if (qrPromiseMap.has(textToEncode)) {
+    return qrPromiseMap.get(textToEncode)!;
+  }
+  const cached = qrCache.get(textToEncode);
+  if (cached) {
+    const p = Promise.resolve(cached);
+    qrPromiseMap.set(textToEncode, p);
+    return p;
+  }
+  const promise = new Promise<HTMLImageElement>((resolve) => {
+    QRCode.toDataURL(textToEncode, {
+      margin: 1,
+      color: { dark: '#000000', light: '#ffffff' }
+    }, (err, url) => {
+      if (err || !url) {
+        const dummyImg = new Image();
+        dummyImg.onload = () => {
+          qrCache.set(textToEncode, dummyImg);
+          resolve(dummyImg);
+        };
+        dummyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        qrCache.set(textToEncode, img);
+        resolve(img);
+      };
+      img.onerror = () => {
+        resolve(img);
+      };
+      img.src = url;
+    });
+  });
+  qrPromiseMap.set(textToEncode, promise);
+  return promise;
+}
 
 function isLightColor(hex: string): boolean {
   if (!hex || typeof hex !== 'string' || hex.startsWith('url')) return true;
@@ -19,41 +93,7 @@ function isLightColor(hex: string): boolean {
 }
 
 function getOrCreateQRImage(text: string, callback: (img: HTMLImageElement) => void) {
-  const textToEncode = text || "EVENTCARD";
-  const cached = qrCache.get(textToEncode);
-  if (cached) {
-    callback(cached);
-    return;
-  }
-
-  QRCode.toDataURL(textToEncode, {
-    margin: 1,
-    color: {
-      dark: '#000000',
-      light: '#ffffff'
-    }
-  }, (err, url) => {
-    if (err || !url) {
-      console.error("[canvasHelper] QR Code generation failed:", err);
-      const dummyImg = new Image();
-      dummyImg.onload = () => {
-        qrCache.set(textToEncode, dummyImg);
-        callback(dummyImg);
-      };
-      dummyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-      return;
-    }
-    const img = new Image();
-    img.onload = () => {
-      qrCache.set(textToEncode, img);
-      callback(img);
-    };
-    img.onerror = () => {
-      console.error("[canvasHelper] QR Image loading failed");
-      callback(img);
-    };
-    img.src = url;
-  });
+  preloadQRImage(text).then(callback);
 }
 
 export function drawCardToCanvas(
@@ -307,15 +347,6 @@ export function ensureAssetsLoaded(
   qrCodeText: string,
   callback: () => void
 ) {
-  let bgLoaded = false;
-  let qrLoaded = false;
-
-  const checkDone = () => {
-    if (bgLoaded && qrLoaded) {
-      callback();
-    }
-  };
-
   const isWebImage = settings.imageUrl && (
     settings.imageUrl.startsWith('data:') || 
     settings.imageUrl.startsWith('http://') || 
@@ -323,38 +354,15 @@ export function ensureAssetsLoaded(
     settings.imageUrl.startsWith('/')
   );
 
+  const promises: Promise<any>[] = [preloadQRImage(qrCodeText)];
   if (isWebImage) {
-    const src = settings.imageUrl!;
-    const cachedImg = imageCache.get(src);
-    if (cachedImg && cachedImg.complete && cachedImg.naturalWidth > 0) {
-      bgLoaded = true;
-      checkDone();
-    } else {
-      const img = cachedImg || new Image();
-      if (!cachedImg) {
-        img.crossOrigin = 'anonymous';
-        imageCache.set(src, img);
-      }
-      img.onload = () => {
-        bgLoaded = true;
-        checkDone();
-      };
-      img.onerror = () => {
-        bgLoaded = true;
-        checkDone();
-      };
-      if (!cachedImg) {
-        img.src = src;
-      }
-    }
-  } else {
-    bgLoaded = true;
-    checkDone();
+    promises.push(preloadImage(settings.imageUrl!));
   }
 
-  getOrCreateQRImage(qrCodeText, () => {
-    qrLoaded = true;
-    checkDone();
+  Promise.all(promises).then(() => {
+    callback();
+  }).catch(() => {
+    callback();
   });
 }
 

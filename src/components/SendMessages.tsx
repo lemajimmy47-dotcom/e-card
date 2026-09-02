@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, RefreshCw, CheckCircle, MessageCircle, AlertCircle, PlayCircle, ArrowRight, X, Clipboard, Check, ExternalLink } from 'lucide-react';
+import { Send, RefreshCw, CheckCircle, MessageCircle, AlertCircle, PlayCircle, ArrowRight, X, Clipboard, Check, ExternalLink, Smartphone, MessageSquare } from 'lucide-react';
 import { EventDetails, Guest, TemplateSettings } from '../types';
-import { drawCardToCanvas, generateGuestCardImage } from '../utils/canvasHelper';
+import { drawCardToCanvas, generateGuestCardImage, preloadImage } from '../utils/canvasHelper';
 import { safeLocalStorage } from '../utils/storage';
 import { convertWebPToJpeg } from '../utils/imageUtils';
 import { isStatusSent } from '../utils/statusHelper';
@@ -44,6 +44,28 @@ export default function SendMessages({ event, settings, guests, language, onUpda
     }
   };
 
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(prev => (prev?.message === message ? null : prev));
+    }, 4500);
+  };
+
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    onConfirm: () => {}
+  });
   const [isSendingAll, setIsSendingAll] = useState(false);
   const [isBatchSending, setIsBatchSending] = useState(false);
   const [lastBatchId, setLastBatchId] = useState<string | null>(null);
@@ -558,8 +580,15 @@ Thank you very much and God bless you!`;
           if (lastActive && lastActive.status === 'completed' && wasActive && wasActive.status !== 'completed') {
             if (onUpdateGuests) {
               fetch('/api/guests')
-                .then(r => r.json())
-                .then(data => onUpdateGuests(data, "Queue finished", false))
+                .then(r => {
+                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                  return r.json();
+                })
+                .then(data => {
+                  if (Array.isArray(data)) {
+                    onUpdateGuests(data, "Queue finished", false);
+                  }
+                })
                 .catch(err => console.error("Error refreshing guests:", err));
             }
           }
@@ -685,25 +714,24 @@ Karibu sana!`);
   // Get unique categories list dynamically for edit select category input dropdown
   const availableCategories = Array.from(new Set(guests.map(g => g.cardType).filter(Boolean)));
 
-  const handleResetSingleGuest = (guestId: string) => {
+  const handleResetSingleGuest = (guestId: string, channel: 'sms' | 'whatsapp' | 'all' = 'all') => {
+    const target = guests.find(g => g.id === guestId);
+    const label = channel === 'sms' ? 'SMS' : channel === 'whatsapp' ? 'WhatsApp' : 'SMS na WhatsApp';
     const updated = guests.map(g => {
       if (g.id === guestId) {
         return {
           ...g,
-          smsStatus: 'Sijatuma' as const,
-          whatsappStatus: 'Sijatuma' as const,
-          smsCount: 0,
-          whatsappCount: 0
+          ...(channel === 'sms' || channel === 'all' ? { smsStatus: 'Sijatuma' as const, smsCount: 0 } : {}),
+          ...(channel === 'whatsapp' || channel === 'all' ? { whatsappStatus: 'Sijatuma' as const, whatsappCount: 0 } : {})
         };
       }
       return g;
     });
-    onUpdateGuests(updated);
+    onUpdateGuests(updated, `Amefuta hali ya ${label} kwa mgeni: ${target?.name || guestId}`);
     
-    const target = guests.find(g => g.id === guestId);
     if (target) {
       setSendLogs(prev => [
-        `[${new Date().toLocaleTimeString()}] ↺ Hali ya kutuma imefutwa (Reset) kwa mgeni mmoja: ${target.name}`,
+        `[${new Date().toLocaleTimeString()}] ↺ Hali ya ${label} imefutwa (Reset) kwa: ${target.name}`,
         ...prev
       ]);
     }
@@ -1181,104 +1209,18 @@ Karibu sana!`);
     }
   };
 
-  const handleSendAll = async () => {
-    if (isSendingAll || isBatchSending) return;
-    const channel: string = gatewaySettings.provider === 'whatsapp' ? 'whatsapp' : 'sms';
-    
-    // Only send to guests that are currently visible/filtered
-    if (filteredGuests.length === 0) {
-      alert("Samahani, hakuna wageni katika orodha ya sasa wa kutumiwa ujumbe huu.");
-      return;
-    }
-
-    const pendingGuests = filteredGuests.filter(g => {
-      if (channel === 'whatsapp') {
-        return !isStatusSent(g.whatsappStatus);
-      } else {
-        return !isStatusSent(g.smsStatus);
-      }
-    });
-    
-    if (pendingGuests.length === 0) {
-      alert(`Hakuna wageni katika orodha hii ambao hawajapata ujumbe wa ${channel.toUpperCase()} bado!`);
-      return;
-    }
-
-    const formattedScheduleTime = isScheduling && scheduleTime ? scheduleTime.replace('T', ' ') + ':00' : undefined;
-
-    const confirmMsg = `Je, una uhakika unataka kutuma mialiko kwa wageni ${pendingGuests.length} ambao bado hawajapata ujumbe wa ${channel.toUpperCase()}${formattedScheduleTime ? ' kwa muda ' + formattedScheduleTime : ''}?`;
-
-    if (!confirm(confirmMsg)) {
-      return;
-    }
-
-    // IF PROVIDER IS MESEJI, WE CAN DO A REAL BATCH SEND IN ONE GO
-    if (gatewaySettings.provider === 'meseji') {
-      setIsBatchSending(true);
-      setLastBatchId(null);
-      setSendLogs(prev => [`[INFO] Imeanza kuwasilisha ujunbe wa BATCH kwa Meseji API kwa wageni ${pendingGuests.length}...`, ...prev]);
-
-      try {
-        // Use a generic version of the template for batch send (no personalized tags or resolve them generic)
-        const sampleText = getGuestMessageText(pendingGuests[0], true);
-        
-        const res = await fetch('/api/send-bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            guestIds: pendingGuests.map(g => g.id),
-            message: sampleText,
-            scheduleTime: formattedScheduleTime
-          })
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Batch dispatch failed.");
-
-        setLastBatchId(data.batchId);
-        
-        // Update all guest statuses locally
-        const updated = guests.map(g => {
-          if (pendingGuests.find(pg => pg.id === g.id)) {
-            const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (isStatusSent(g.smsStatus) ? 1 : 0);
-            return { 
-              ...g, 
-              smsStatus: 'Imetumia' as const,
-              smsCount: currentCount + 1
-            };
-          }
-          return g;
-        });
-        onUpdateGuests(updated);
-
-        setSendLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] ✓ BATCH SUCCESS! Batch ID: ${data.batchId || 'N/A'}. Total: ${data.total}`,
-          ...prev
-        ]);
-        
-        alert(`Ujumbe wa pamoja (Batch) umekubaliwa na Meseji API!\n\nBatch ID: ${data.batchId || 'N/A'}\nJumla ya Wageni: ${data.total}`);
-
-      } catch (err: any) {
-        setSendLogs(prev => [
-          `[${new Date().toLocaleTimeString()}] ✗ BATCH FAILED. Sababu: ${err.message}`,
-          ...prev
-        ]);
-        addSystemNotification(
-          'error',
-          isEn ? 'Batch Dispatch Failed' : 'Utumaji wa Pamoja Umeshindwa',
-          isEn ? `Batch sending failed. Error: ${err.message}` : `Utumaji wa pamoja (Batch) umeshindwa. Hitilafu: ${err.message}`
-        );
-        alert("Hitilafu katika utumaji wa Batch: " + err.message);
-      } finally {
-        setIsBatchSending(false);
-      }
-      return;
-    }
-
-    // BACKGROUND QUEUE SYSTEM FOR ALL OTHER DISPATCHES (No more slow/risky client side loops)
+  const startBackgroundDispatch = async (channel: 'sms' | 'whatsapp', pendingGuests: Guest[]) => {
     setIsSendingAll(true);
     setSendingProgress(0);
-    setSendLogs(prev => [`[INFO] Inatayarisha picha za kadi na mialiko kwa ajili ya Foleni ya Server...`, ...prev]);
+    setSendLogs(prev => [`[INFO] Inatayarisha picha za kadi na mialiko ya kibinafsi kwa ajili ya wageni ${pendingGuests.length}...`, ...prev]);
+
+    if (channel === 'whatsapp' && settings.imageUrl) {
+      try {
+        await preloadImage(settings.imageUrl);
+      } catch (e) {
+        console.warn("[SendMessages] Background image preload warning:", e);
+      }
+    }
 
     const tasks = [];
     let preparedCount = 0;
@@ -1290,23 +1232,23 @@ Karibu sana!`);
         : 'https://eventcard.co.tz';
       const appUrl = `${currentOrigin}/?invite=${guest.code || guest.id}&eventId=${event.id}&lang=${language}`;
 
-      // 1. Send Main Message
-      let compatibleImageUrl = "";
-      try {
-        const qrCodeText = guest.code || guest.id;
-        compatibleImageUrl = await generateGuestCardImage(
-          event,
-          settings,
-          guest.name,
-          guest.cardType || "DOUBLE",
-          qrCodeText
-        );
-      } catch (err) {
-        console.error("Failed to generate dynamic guest card image:", err);
-        compatibleImageUrl = await convertWebPToJpeg(settings.imageUrl);
+      let compatibleImageUrl = settings.imageUrl || "";
+      if (channel === 'whatsapp') {
+        try {
+          const qrCodeText = guest.code || guest.id;
+          compatibleImageUrl = await generateGuestCardImage(
+            event,
+            settings,
+            guest.name,
+            guest.cardType || "DOUBLE",
+            qrCodeText
+          );
+        } catch (err) {
+          console.warn(`[SendMessages] Error generating dynamic card for guest ${guest.name}:`, err);
+          compatibleImageUrl = settings.imageUrl || "";
+        }
       }
 
-      // Extract template params dynamically for official Meta WhatsApp template matching
       let templateParams: string[] | undefined = undefined;
       const rawTemplate = messageType === 'thank-you' 
         ? (language === 'en' ? thankYouTemplateEn : thankYouTemplateSw)
@@ -1446,9 +1388,10 @@ Karibu sana!`);
         ...prev
       ]);
       fetchQueueJobs();
+      showToast(isEn ? `Dispatch started for ${tasks.length} guests!` : `Utumaji wa wageni ${tasks.length} umeanza kwenye foleni!`, 'success');
     } catch (err: any) {
       console.error("Queue Submission Failed:", err);
-      alert("Imeshindwa kutuma kazi ya foleni: " + err.message);
+      showToast("Imeshindwa kutuma kazi ya foleni: " + err.message, "error");
       setSendLogs(prev => [`[ERROR] Hitilafu: ${err.message}`, ...prev]);
     } finally {
       setIsSendingAll(false);
@@ -1456,17 +1399,144 @@ Karibu sana!`);
     }
   };
 
+  const handleSendAll = async (targetChannel?: 'sms' | 'whatsapp') => {
+    if (isSendingAll || isBatchSending) return;
+    const channel: 'sms' | 'whatsapp' = targetChannel || (gatewaySettings.provider === 'whatsapp' ? 'whatsapp' : 'sms');
+    
+    if (filteredGuests.length === 0) {
+      showToast(isEn ? "No guests in current list to send messages to." : "Samahani, hakuna wageni katika orodha ya sasa wa kutumiwa ujumbe huu.", "info");
+      return;
+    }
+
+    const pendingGuests = filteredGuests.filter(g => {
+      if (channel === 'whatsapp') {
+        return !isStatusSent(g.whatsappStatus);
+      } else {
+        return !isStatusSent(g.smsStatus);
+      }
+    });
+    
+    let targetGuests = pendingGuests;
+    let isResendingAll = false;
+
+    if (pendingGuests.length === 0) {
+      targetGuests = filteredGuests;
+      isResendingAll = true;
+    }
+
+    const formattedScheduleTime = isScheduling && scheduleTime ? scheduleTime.replace('T', ' ') + ':00' : undefined;
+
+    const confirmMsg = isResendingAll
+      ? (isEn
+          ? `All ${targetGuests.length} guests in this list show messages already sent. Do you want to resend ${channel.toUpperCase()} messages to ALL ${targetGuests.length} guests again?`
+          : `Wageni wote ${targetGuests.length} walio kwenye orodha hii wanaonyesha wameshatumiwa ujumbe tayari. Je, unataka kuwatumia tena ujumbe wa ${channel.toUpperCase()} wageni wote ${targetGuests.length}?`)
+      : (isEn
+          ? `Are you sure you want to dispatch invitations to ${targetGuests.length} guests via ${channel.toUpperCase()}${formattedScheduleTime ? ' scheduled for ' + formattedScheduleTime : ''}?`
+          : `Je, una uhakika unataka kutuma mialiko ya kibinafsi kwa wageni ${targetGuests.length} kupitia ${channel.toUpperCase()}${formattedScheduleTime ? ' kwa muda ' + formattedScheduleTime : ''}?`);
+
+    setConfirmModalConfig({
+      isOpen: true,
+      title: isEn ? `Dispatch ${channel.toUpperCase()} Messages` : `Tuma Mialiko ya ${channel.toUpperCase()}`,
+      message: confirmMsg,
+      confirmText: isEn ? "Yes, Send Now" : "Ndiyo, Tuma Sasa",
+      onConfirm: () => {
+        setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+        startBackgroundDispatch(channel, targetGuests);
+      }
+    });
+  };
+
+  const handleResetSMS = () => {
+    const listToReset = filteredGuests.length > 0 ? filteredGuests : guests;
+    if (listToReset.length === 0) {
+      showToast(isEn ? "No guests in current list to reset." : "Hakuna wageni katika orodha ya sasa wa kufanya reset.", "info");
+      return;
+    }
+    
+    const targetIds = new Set(listToReset.map(g => g.id));
+    const reset = guests.map(g => {
+      if (targetIds.has(g.id)) {
+        return {
+          ...g,
+          smsStatus: 'Sijatuma' as const,
+          smsCount: 0
+        };
+      }
+      return g;
+    });
+    
+    onUpdateGuests(reset, `Amefuta hali ya SMS pekee kwa wageni ${listToReset.length}`);
+    setSendLogs(prev => [`[${new Date().toLocaleTimeString()}] ↺ Hali ya SMS pekee imefutwa (Reset SMS Status) kwa wageni ${listToReset.length}`, ...prev]);
+    
+    showToast(
+      isEn 
+        ? `✓ SMS status reset to 'Pending' for ${listToReset.length} guests successfully!`
+        : `✓ Hali ya SMS pekee imefutwa na kurudishwa kuwa 'Sijatuma' kwa wageni ${listToReset.length} kwa mafanikio!`,
+      'success'
+    );
+  };
+
+  const handleResetWhatsApp = () => {
+    const listToReset = filteredGuests.length > 0 ? filteredGuests : guests;
+    if (listToReset.length === 0) {
+      showToast(isEn ? "No guests in current list to reset." : "Hakuna wageni katika orodha ya sasa wa kufanya reset.", "info");
+      return;
+    }
+    
+    const targetIds = new Set(listToReset.map(g => g.id));
+    const reset = guests.map(g => {
+      if (targetIds.has(g.id)) {
+        return {
+          ...g,
+          whatsappStatus: 'Sijatuma' as const,
+          whatsappCount: 0
+        };
+      }
+      return g;
+    });
+    
+    onUpdateGuests(reset, `Amefuta hali ya WhatsApp pekee kwa wageni ${listToReset.length}`);
+    setSendLogs(prev => [`[${new Date().toLocaleTimeString()}] ↺ Hali ya WhatsApp pekee imefutwa (Reset WA Status) kwa wageni ${listToReset.length}`, ...prev]);
+    
+    showToast(
+      isEn 
+        ? `✓ WhatsApp status reset to 'Pending' for ${listToReset.length} guests successfully!`
+        : `✓ Hali ya WhatsApp pekee imefutwa na kurudishwa kuwa 'Sijatuma' kwa wageni ${listToReset.length} kwa mafanikio!`,
+      'success'
+    );
+  };
+
   const handleReset = () => {
-    const reset = guests.map(g => ({
-      ...g,
-      smsStatus: 'Sijatuma' as const,
-      whatsappStatus: 'Sijatuma' as const,
-      smsCount: 0,
-      whatsappCount: 0
-    }));
-    onUpdateGuests(reset);
+    const listToReset = filteredGuests.length > 0 ? filteredGuests : guests;
+    if (listToReset.length === 0) {
+      showToast(isEn ? "No guests in current list to reset." : "Hakuna wageni katika orodha ya sasa wa kufanya reset.", "info");
+      return;
+    }
+    
+    const targetIds = new Set(listToReset.map(g => g.id));
+    const reset = guests.map(g => {
+      if (targetIds.has(g.id)) {
+        return {
+          ...g,
+          smsStatus: 'Sijatuma' as const,
+          whatsappStatus: 'Sijatuma' as const,
+          smsCount: 0,
+          whatsappCount: 0
+        };
+      }
+      return g;
+    });
+    
+    onUpdateGuests(reset, `Amefuta hali zote za SMS na WhatsApp kwa wageni ${listToReset.length}`);
     setSendLogs([]);
     setSendingProgress(0);
+    
+    showToast(
+      isEn 
+        ? `✓ SMS & WhatsApp statuses reset for ${listToReset.length} guests successfully!`
+        : `✓ Hali za SMS na WhatsApp zimefutwa na kurudishwa kuwa 'Sijatuma' kwa wageni ${listToReset.length} kwa mafanikio!`,
+      'success'
+    );
   };
 
   const renderDeliveryIndicator = (g: Guest) => {
@@ -1559,13 +1629,33 @@ Karibu sana!`);
           )}
 
           {filteredGuests.length > 0 && (
-            <button
-              onClick={handleReset}
-              className="text-slate-200 border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 rounded-xl transition flex items-center gap-1 font-bold text-xs cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>{isEn ? "Reset Status" : "Reset Hali"}</span>
-            </button>
+            <div className="flex items-center space-x-1.5 bg-white/5 p-1 rounded-xl border border-white/10">
+              <button
+                onClick={handleResetSMS}
+                className="text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 font-bold text-xs cursor-pointer"
+                title={isEn ? "Reset SMS status only for filtered guests" : "Futa hali ya SMS pekee na kurudisha Sijatuma"}
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                <span>{isEn ? "Reset SMS" : "Reset SMS Pekee"}</span>
+              </button>
+
+              <button
+                onClick={handleResetWhatsApp}
+                className="text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 font-bold text-xs cursor-pointer"
+                title={isEn ? "Reset WhatsApp status only for filtered guests" : "Futa hali ya WhatsApp pekee na kurudisha Sijatuma"}
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{isEn ? "Reset WA" : "Reset WA Pekee"}</span>
+              </button>
+
+              <button
+                onClick={handleReset}
+                className="text-slate-400 hover:text-slate-200 hover:bg-white/10 px-2 py-1.5 rounded-lg transition flex items-center gap-1 font-bold text-xs cursor-pointer"
+                title={isEn ? "Reset both SMS and WhatsApp" : "Futa hali zote mbili (SMS na WA)"}
+              >
+                <span>{isEn ? "Reset All" : "Reset Zote"}</span>
+              </button>
+            </div>
           )}
 
           <div className="flex items-center space-x-2 border border-white/10 bg-white/5 rounded-xl px-2 py-1">
@@ -1588,13 +1678,36 @@ Karibu sana!`);
             )}
           </div>
 
+          {/* Bulk SMS Button */}
           <button
-            onClick={handleSendAll}
+            onClick={() => handleSendAll('sms')}
             disabled={isSendingAll || filteredGuests.length === 0}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-[0_0_15px_rgba(59,130,246,0.30)] text-white px-4 py-2 rounded-xl transition flex items-center gap-1.5 font-bold shadow disabled:bg-white/10 disabled:text-slate-500 disabled:cursor-not-allowed text-xs cursor-pointer"
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 font-bold shadow-md hover:shadow-blue-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-xs cursor-pointer"
+            title={isEn ? "Send SMS invitations to all pending guests" : "Tuma SMS kwa wageni wote waliobakia"}
           >
-            <PlayCircle className="w-4 h-4" />
-            <span>{isSendingAll ? (isEn ? 'Sending...' : 'Inatuma...') : isScheduling ? (isEn ? 'Schedule Send' : 'Weka Ratiba') : (isEn ? 'Dispatch All' : 'Tuma Zote')}</span>
+            <Smartphone className="w-3.5 h-3.5 text-blue-200" />
+            <span>{isSendingAll ? (isEn ? 'Sending...' : 'Inatuma...') : (isEn ? 'Send All SMS' : 'Tuma SMS kwa Wote')}</span>
+            {filteredGuests.filter(g => !isStatusSent(g.smsStatus)).length > 0 && (
+              <span className="ml-1 bg-white/20 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold">
+                {filteredGuests.filter(g => !isStatusSent(g.smsStatus)).length}
+              </span>
+            )}
+          </button>
+
+          {/* Bulk WhatsApp Button */}
+          <button
+            onClick={() => handleSendAll('whatsapp')}
+            disabled={isSendingAll || filteredGuests.length === 0}
+            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 font-bold shadow-md hover:shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-xs cursor-pointer"
+            title={isEn ? "Send WhatsApp invitations to all pending guests" : "Tuma WhatsApp kwa wageni wote waliobakia"}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-200" />
+            <span>{isSendingAll ? (isEn ? 'Sending...' : 'Inatuma...') : (isEn ? 'Send All WhatsApp' : 'Tuma WhatsApp kwa Wote')}</span>
+            {filteredGuests.filter(g => !isStatusSent(g.whatsappStatus)).length > 0 && (
+              <span className="ml-1 bg-white/20 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold">
+                {filteredGuests.filter(g => !isStatusSent(g.whatsappStatus)).length}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -2124,14 +2237,25 @@ Karibu sana!`);
                           {isEn ? "Edit" : "Hariri (Edit)"}
                         </button>
 
-                        {/* Reset Status button */}
-                        {(isStatusSent(guest.smsStatus) || isStatusSent(guest.whatsappStatus)) && (
+                        {/* Reset SMS button */}
+                        {isStatusSent(guest.smsStatus) && (
                           <button
-                            onClick={() => handleResetSingleGuest(guest.id)}
-                            className="p-1 px-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded-lg transition cursor-pointer text-[10px]"
-                            title="Futa Hali ya Kutuma"
+                            onClick={() => handleResetSingleGuest(guest.id, 'sms')}
+                            className="p-1 px-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/20 rounded-lg transition cursor-pointer text-[10px] font-bold"
+                            title="Futa Hali ya SMS Pekee"
                           >
-                            {isEn ? "Reset Status" : "Reset Hali"}
+                            Reset SMS
+                          </button>
+                        )}
+
+                        {/* Reset WA button */}
+                        {isStatusSent(guest.whatsappStatus) && (
+                          <button
+                            onClick={() => handleResetSingleGuest(guest.id, 'whatsapp')}
+                            className="p-1 px-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 rounded-lg transition cursor-pointer text-[10px] font-bold"
+                            title="Futa Hali ya WhatsApp Pekee"
+                          >
+                            Reset WA
                           </button>
                         )}
 
@@ -2551,6 +2675,82 @@ Karibu sana!`);
               </div>
             </motion.div>
           </div>
+          </PortalModal>
+        )}
+      </AnimatePresence>
+
+      {/* Global Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <PortalModal>
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className={`fixed top-6 right-6 z-[9999] max-w-md px-5 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 backdrop-blur-xl font-medium text-xs sm:text-sm ${
+                toast.type === 'error'
+                  ? 'bg-slate-900/95 border-rose-500/50 text-rose-300 shadow-rose-950/40'
+                  : toast.type === 'info'
+                  ? 'bg-slate-900/95 border-blue-500/50 text-blue-300 shadow-blue-950/40'
+                  : 'bg-slate-900/95 border-emerald-500/50 text-emerald-300 shadow-emerald-950/40'
+              }`}
+            >
+              {toast.type === 'error' ? (
+                <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+              ) : toast.type === 'info' ? (
+                <AlertCircle className="w-5 h-5 text-blue-400 shrink-0" />
+              ) : (
+                <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+              )}
+              <span className="leading-snug">{toast.message}</span>
+              <button onClick={() => setToast(null)} className="ml-auto p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          </PortalModal>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {confirmModalConfig.isOpen && (
+          <PortalModal>
+            <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 0 }}
+                className="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 text-left"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20">
+                    <RefreshCw className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-white">{confirmModalConfig.title}</h3>
+                </div>
+                
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  {confirmModalConfig.message}
+                </p>
+
+                <div className="flex space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 transition cursor-pointer"
+                  >
+                    {isEn ? 'Cancel' : 'Ghairi'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmModalConfig.onConfirm}
+                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/30 rounded-xl text-xs font-bold text-white transition cursor-pointer"
+                  >
+                    {confirmModalConfig.confirmText}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           </PortalModal>
         )}
       </AnimatePresence>

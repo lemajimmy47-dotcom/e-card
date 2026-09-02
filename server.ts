@@ -561,11 +561,37 @@ Respond strictly in JSON format:
     // 3. RSVP UPDATE & GUEST COUNT
     if (!actionTaken) {
       let newRsvp: 'Atahudhuria' | 'Hatahudhuria' | 'Labda' | null = null;
-      if (lowerText.includes('ndio') || lowerText.includes('yes') || lowerText.includes('nitakuja') || lowerText.includes('nitahudhuria') || lowerText.includes('atahudhuria') || lowerText.includes('kuhudhuria') || lowerText.includes('ntahudhuria') || lowerText.includes('ntakuja') || lowerText.includes('nakuja') || lowerText.includes('tutakuja') || lowerText.includes('tutahudhuria') || lowerText.includes('nitafika') || lowerText.includes('ntafika') || lowerText.includes('tutafika') || lowerText === '1') {
-        newRsvp = 'Atahudhuria';
-      } else if (lowerText.includes('hapana') || lowerText.includes('no') || lowerText.includes('sitakuja') || lowerText.includes('sintahudhuria') || lowerText.includes('hatahudhuria') || lowerText.includes('sitohudhuria') || lowerText.includes('stahudhuria') || lowerText.includes('hatutakuja') || lowerText.includes('hatutahudhuria') || lowerText.includes('sitafika') || lowerText.includes('siwezi') || lowerText === '2') {
+
+      const isNegativeRsvp = (
+        lowerText.includes('sitahudhuria') || lowerText.includes('sintahudhuria') || lowerText.includes('sitohudhuria') ||
+        lowerText.includes('stahudhuria') || lowerText.includes('hatahudhuria') || lowerText.includes('hatutahudhuria') ||
+        lowerText.includes('sitakuja') || lowerText.includes('hatutakuja') || lowerText.includes('sitafika') ||
+        lowerText.includes('siwezi') || lowerText.includes('sitaweza') || lowerText.includes('sitofika') ||
+        lowerText.includes('sitafanikiwa') || lowerText.includes('nisingeweza') || lowerText.includes('singewahi') ||
+        lowerText.includes('sitawahi') || lowerText.includes('hapana') || lowerText === 'no' || lowerText === '2' || lowerText === 'b'
+      );
+
+      const isPositiveRsvp = !isNegativeRsvp && (
+        lowerText.includes('ndio') || lowerText.includes('ndiyo') || lowerText.includes('naam') || lowerText.includes('yes') ||
+        lowerText.includes('nitakuja') || lowerText.includes('nitahudhuria') || lowerText.includes('ntahudhuria') ||
+        lowerText.includes('ntakuja') || lowerText.includes('nakuja') || lowerText.includes('tutakuja') ||
+        lowerText.includes('tutahudhuria') || lowerText.includes('nitafika') || lowerText.includes('ntafika') ||
+        lowerText.includes('tutafika') || lowerText.includes('nitawepo') || lowerText.includes('ntawepo') ||
+        lowerText.includes('tutawepo') || lowerText.includes('nitaweza') || lowerText.includes('nitafanikiwa') ||
+        lowerText.includes('pamoja') || lowerText === '1' || lowerText === 'a' || lowerText === 'ok' || lowerText === 'sawa'
+      );
+
+      const isMaybeRsvp = !isNegativeRsvp && !isPositiveRsvp && (
+        lowerText.includes('sina uhakika') || lowerText.includes('maybe') || lowerText.includes('labda') ||
+        lowerText.includes('sijajua') || lowerText.includes('ntakujulisha') || lowerText.includes('nitakujulisha') ||
+        lowerText === '3' || lowerText === 'c'
+      );
+
+      if (isNegativeRsvp) {
         newRsvp = 'Hatahudhuria';
-      } else if (lowerText.includes('sina uhakika') || lowerText.includes('maybe') || lowerText.includes('labda') || lowerText.includes('sijajua') || lowerText.includes('ntakujulisha') || lowerText.includes('nitakujulisha') || lowerText === '3') {
+      } else if (isPositiveRsvp) {
+        newRsvp = 'Atahudhuria';
+      } else if (isMaybeRsvp) {
         newRsvp = 'Labda';
       }
 
@@ -583,7 +609,7 @@ Respond strictly in JSON format:
           }
         }
 
-        const gIdx = guests.findIndex((g: any) => g.id === matchedGuest.id);
+        const gIdx = guests.findIndex((g: any) => String(g.id) === String(matchedGuest.id));
         if (gIdx !== -1) {
           guests[gIdx] = matchedGuest;
           db.guests = guests;
@@ -1935,13 +1961,25 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
     };
     
     // Strictly formatted recipient (no +, digits only, 255...)
-    let cleanPhone = formattedPhone.replace(/[^0-9]/g, "");
-    if (cleanPhone.startsWith("0")) cleanPhone = "255" + cleanPhone.substring(1);
-    if (cleanPhone.startsWith("7") || cleanPhone.startsWith("6")) cleanPhone = "255" + cleanPhone;
+    let cleanPhone = formattedPhone.split(',')
+      .map(p => {
+        let clean = p.replace(/[^0-9]/g, "");
+        if (clean.startsWith("0")) clean = "255" + clean.substring(1);
+        if (clean.startsWith("7") || clean.startsWith("6")) clean = "255" + clean;
+        return clean;
+      })
+      .filter(p => p.length >= 9)
+      .join(',');
 
-    const effectiveSenderId = (senderId && senderId !== "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397" && senderId !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1") 
+    let effectiveSenderId = (senderId && senderId !== "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397" && senderId !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1") 
       ? senderId 
-      : "UWALEMI";
+      : (settings.senderId || "UWALEMI");
+
+    if (['HARUSI', 'DEFAULT', 'CUSTOM'].includes(effectiveSenderId.toUpperCase())) {
+      effectiveSenderId = (settings.senderId && !['HARUSI', 'DEFAULT', 'CUSTOM'].includes(settings.senderId.toUpperCase()))
+        ? settings.senderId
+        : "UWALEMI";
+    }
 
     const bodyData: any = {
       contacts: cleanPhone,
@@ -2592,6 +2630,15 @@ async function startServer() {
     try {
       const state = await getStateForClient();
       res.json(state);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/guests", async (req, res) => {
+    try {
+      const db = await readDBLatest();
+      res.json(db?.guests || []);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -3643,23 +3690,44 @@ Lema, Nguvu Moja!`;
   // API 4: RSVP response submission endpoint
   app.post("/api/rsvp-update", async (req, res) => {
     try {
-      const { guestId, rsvpStatus, rsvpGuestsCount, rsvpComment, tableNumber } = req.body;
-      if (!guestId) {
-        return res.status(400).json({ error: "Missing guestId" });
+      const { guestId, code, phone, rsvpStatus, rsvpGuestsCount, rsvpComment, tableNumber } = req.body;
+      const searchTarget = guestId || code || phone;
+      if (!searchTarget) {
+        return res.status(400).json({ error: "Missing guestId or code" });
       }
 
       const db = await readDBLatest();
       const guests = db.guests || [];
       let found = false;
 
+      const rawSearch = String(searchTarget).trim().toLowerCase();
+      const cleanSearch = rawSearch.replace(/^#/, '');
+      const alphaNumSearch = cleanSearch.replace(/[^a-z0-9]/g, '');
+      const phoneSearch = String(phone || searchTarget).replace(/\D/g, '');
+
       const updatedGuests = guests.map((g: any) => {
-        if (g.id === guestId) {
+        const guestIdStr = String(g.id || '').trim().toLowerCase();
+        const guestCodeStr = String(g.code || '').trim().toLowerCase().replace(/^#/, '');
+        const guestIdAlpha = guestIdStr.replace(/[^a-z0-9]/g, '');
+        const guestCodeAlpha = guestCodeStr.replace(/[^a-z0-9]/g, '');
+        const guestPhone = String(g.phone || '').replace(/\D/g, '');
+
+        const isMatch = (
+          guestIdStr === rawSearch ||
+          guestIdStr === cleanSearch ||
+          guestCodeStr === rawSearch ||
+          guestCodeStr === cleanSearch ||
+          (alphaNumSearch.length > 2 && (guestIdAlpha === alphaNumSearch || guestCodeAlpha === alphaNumSearch)) ||
+          (phoneSearch.length >= 7 && guestPhone.length >= 7 && guestPhone.slice(-9) === phoneSearch.slice(-9))
+        );
+
+        if (isMatch) {
           found = true;
           const currentCustomFields = g.customFields || {};
           return {
             ...g,
             rsvpStatus,
-            rsvpGuestsCount: rsvpStatus === "Atahudhuria" ? rsvpGuestsCount : 0,
+            rsvpGuestsCount: rsvpStatus === "Atahudhuria" ? Number(rsvpGuestsCount || 1) : 0,
             rsvpComment: rsvpComment || "",
             rsvpUpdatedAt: new Date().toISOString(),
             rsvpSeen: false,
@@ -4416,132 +4484,168 @@ Lema, Nguvu Moja!`;
     isQueueProcessing = true;
 
     try {
-      const db = await readDBLatest();
-      if (!db.queueJobs) db.queueJobs = [];
+      while (true) {
+        const db = await readDBLatest();
+        if (!db) break;
+        if (!db.queueJobs) db.queueJobs = [];
 
-      // Find first job that is pending or running (for resumption)
-      const activeJob = db.queueJobs.find((j: any) => j.status === 'running' || j.status === 'pending');
-      if (!activeJob) {
-        isQueueProcessing = false;
-        return;
-      }
-
-      if (activeJob.status === 'pending') {
-        activeJob.status = 'running';
-        activeJob.logs.push(`[${new Date().toLocaleTimeString()}] Kazi imeanza kutekelezwa background.`);
-        await writeDB(db);
-      }
-
-      const settings = db.smsGatewaySettings || { provider: "simulation" };
-      
-      // Throttling: 250ms for WhatsApp (Meta rate limit) and 1500ms for regular SMS providers
-      const delayMs = activeJob.channel === 'whatsapp' ? 250 : 1500;
-      console.log(`[QueueProcessor] Processing Job ${activeJob.id}. Channel: ${activeJob.channel}. Delay: ${delayMs}ms`);
-
-      for (let i = 0; i < activeJob.tasks.length; i++) {
-        const task = activeJob.tasks[i];
-
-        // Refresh database state inside loop to see if job status has changed (paused, cancelled, etc.)
-        const freshDb = await readDBLatest();
-        const currentJob = freshDb.queueJobs.find((j: any) => j.id === activeJob.id);
-
-        if (!currentJob) {
-          console.warn(`[QueueProcessor] Job ${activeJob.id} not found in database anymore.`);
-          break;
+        // 1. Auto-cleanup any old/completed/stuck jobs where all tasks are sent or failed
+        let stateChanged = false;
+        for (const job of db.queueJobs) {
+          if (!job || !job.tasks) continue;
+          const finishedTasks = job.tasks.filter((t: any) => t && (t.status === 'sent' || t.status === 'failed')).length;
+          if (finishedTasks >= job.tasks.length && job.status !== 'completed') {
+            job.status = 'completed';
+            job.processed = finishedTasks;
+            job.completed_at = job.completed_at || new Date().toISOString();
+            stateChanged = true;
+          }
+        }
+        if (stateChanged) {
+          await writeDB(db);
         }
 
-        if (currentJob.status === 'paused') {
-          console.log(`[QueueProcessor] Job ${activeJob.id} is paused. Interrupting.`);
-          break;
+        // 2. Find first active job that still has pending tasks
+        const activeJob = db.queueJobs.find((j: any) => 
+          j && 
+          (j.status === 'running' || j.status === 'pending') && 
+          j.tasks && 
+          j.tasks.some((t: any) => t.status === 'pending')
+        );
+
+        if (!activeJob) {
+          break; // No more active jobs needing processing
         }
 
-        if (currentJob.status === 'failed' || currentJob.status === 'completed') {
-          console.log(`[QueueProcessor] Job ${activeJob.id} has finished or failed. Interrupting.`);
-          break;
+        if (activeJob.status === 'pending') {
+          activeJob.status = 'running';
+          if (!activeJob.logs) activeJob.logs = [];
+          activeJob.logs.push(`[${new Date().toLocaleTimeString()}] Kazi imeanza kutekelezwa background.`);
+          await writeDB(db);
         }
 
-        if (task.status === 'sent') {
-          continue;
-        }
+        const settings = db.smsGatewaySettings || { provider: "simulation" };
+        const delayMs = activeJob.channel === 'whatsapp' ? 250 : 1200;
 
-        try {
-          let result: string;
-          let usedChannel = activeJob.channel;
-          let failoverAttempted = false;
-          let failoverLog = '';
+        const tasksList = activeJob.tasks || [];
+        let taskExecutedInThisPass = false;
 
-          const protocol = 'https';
-          const host = 'eventcard.co.tz';
-          const origin = `${protocol}://${host}`;
+        for (let i = 0; i < tasksList.length; i++) {
+          const task = tasksList[i];
+          if (!task || task.status === 'sent' || task.status === 'failed') {
+            continue;
+          }
+
+          // Fetch fresh DB state
+          const freshDb = await readDBLatest();
+          if (!freshDb || !freshDb.queueJobs) break;
+          const currentJob = freshDb.queueJobs.find((j: any) => j && j.id === activeJob.id);
+
+          if (!currentJob) break;
+          if (currentJob.status === 'paused' || currentJob.status === 'failed' || currentJob.status === 'completed') {
+            break;
+          }
+
+          taskExecutedInThisPass = true;
 
           try {
-            result = await dispatchSMS(task.phone, task.text, usedChannel, settings, undefined, task.templateParams, task.guestId, origin, activeJob.eventId, task.templateName, task.imageUrl, task.lang);
+            let usedChannel = activeJob.channel;
+            const protocol = 'https';
+            const host = 'eventcard.co.tz';
+            const origin = `${protocol}://${host}`;
+            const currentSettings = freshDb.smsGatewaySettings || settings;
+
+            const result = await dispatchSMS(
+              task.phone,
+              task.text,
+              usedChannel,
+              currentSettings,
+              undefined,
+              task.templateParams,
+              task.guestId,
+              origin,
+              activeJob.eventId,
+              task.templateName,
+              task.imageUrl,
+              task.lang
+            );
+
             task.status = 'sent';
             task.usedChannel = usedChannel;
             task.log = result;
-          } catch (e: any) {
-            console.log(`[QueueProcessor-Dispatch-Error] Error sending to ${task.phone}:`, e.message);
-            task.status = 'failed';
-            task.usedChannel = usedChannel;
-            task.log = e.message;
-          }
 
-          // Update actual guest status in the database ONLY if sent
-          if (task.status === 'sent' && task.guestId && freshDb.guests) {
-            freshDb.guests = freshDb.guests.map((g: any) => {
-              if (g.id === task.guestId) {
-                if (usedChannel === 'whatsapp') {
-                  const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
-                  return { 
-                    ...g, 
-                    whatsappStatus: "Imetumia", 
-                    whatsappCount: currentCount + 1,
-                    lastSentChannel: "whatsapp",
-                    lastSentLang: task.lang || "sw"
-                  };
-                } else {
-                  const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
-                  return { 
-                    ...g, 
-                    smsStatus: "Imetumia", 
-                    smsCount: currentCount + 1,
-                    lastSentChannel: "sms",
-                    lastSentLang: task.lang || "sw"
-                  };
+            if (task.guestId && freshDb.guests) {
+              freshDb.guests = freshDb.guests.map((g: any) => {
+                if (g.id === task.guestId) {
+                  if (usedChannel === 'whatsapp') {
+                    const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
+                    return { 
+                      ...g, 
+                      whatsappStatus: "Imetumia", 
+                      whatsappCount: currentCount + 1,
+                      lastSentChannel: "whatsapp",
+                      lastSentLang: task.lang || "sw"
+                    };
+                  } else {
+                    const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
+                    return { 
+                      ...g, 
+                      smsStatus: "Imetumia", 
+                      smsCount: currentCount + 1,
+                      lastSentChannel: "sms",
+                      lastSentLang: task.lang || "sw"
+                    };
+                  }
                 }
-              }
-              return g;
-            });
+                return g;
+              });
+            }
+
+            if (!currentJob.logs) currentJob.logs = [];
+            currentJob.logs.push(`[${new Date().toLocaleTimeString()}] ✓ [${usedChannel.toUpperCase()}] Imetumwa kwa namba ${task.phone}.`);
+          } catch (err: any) {
+            task.status = 'failed';
+            task.error = err.message;
+            if (!currentJob.logs) currentJob.logs = [];
+            currentJob.logs.push(`[${new Date().toLocaleTimeString()}] ✗ Imeshindwa kwa namba ${task.phone}. Sababu: ${err.message}`);
           }
 
-          currentJob.logs.push(`[${new Date().toLocaleTimeString()}] ✓ [${usedChannel.toUpperCase()}] Imetumwa kwa namba ${task.phone}.`);
-        } catch (err: any) {
-          task.status = 'failed';
-          task.error = err.message;
-          currentJob.logs.push(`[${new Date().toLocaleTimeString()}] ✗ Imeshindwa kwa namba ${task.phone}. Sababu: ${err.message}`);
+          if (!currentJob.tasks) currentJob.tasks = [];
+          currentJob.tasks[i] = task;
+
+          const doneCount = currentJob.tasks.filter((t: any) => t && (t.status === 'sent' || t.status === 'failed')).length;
+          currentJob.processed = doneCount;
+
+          if (doneCount >= (currentJob.total || currentJob.tasks.length)) {
+            currentJob.status = 'completed';
+            currentJob.completed_at = new Date().toISOString();
+            if (!currentJob.logs) currentJob.logs = [];
+            currentJob.logs.push(`[${new Date().toLocaleTimeString()}] ✓ Kazi yote ya kutuma imekamilika!`);
+          }
+
+          await writeDB(freshDb);
+
+          // Throttling: wait between dispatches
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
 
-        currentJob.processed++;
-        currentJob.tasks[i] = task;
-
-        if (currentJob.processed === currentJob.total) {
-          currentJob.status = 'completed';
-          currentJob.completed_at = new Date().toISOString();
-          currentJob.logs.push(`[${new Date().toLocaleTimeString()}] ✓ Kazi yote ya kutuma imekamilika!`);
+        // Safety check if no task was executed in this pass (all were already sent/failed)
+        if (!taskExecutedInThisPass) {
+          const freshDb = await readDBLatest();
+          if (freshDb && freshDb.queueJobs) {
+            const currentJob = freshDb.queueJobs.find((j: any) => j && j.id === activeJob.id);
+            if (currentJob) {
+              currentJob.status = 'completed';
+              currentJob.completed_at = new Date().toISOString();
+              await writeDB(freshDb);
+            }
+          }
         }
-
-        await writeDB(freshDb);
-
-        // Throttling: wait between dispatches
-        await new Promise(resolve => setTimeout(resolve, delayMs));
       }
-
     } catch (err: any) {
       console.error("[QueueProcessor] Error in loop:", err);
     } finally {
       isQueueProcessing = false;
-      // Trigger check for next pending job
-      setTimeout(() => processQueueJobs(), 1000);
     }
   }
 
@@ -5104,14 +5208,7 @@ Lema, Nguvu Moja!`;
       const contactsString = phones.join(', ');
       
       let result = "";
-      let failoverLog = "";
-      try {
-        result = await dispatchSMS(contactsString, message, 'sms', settings, scheduleTime);
-      } catch (e: any) {
-        console.log(`[Bulk Send] SMS gateway redirected to Simulation mode.`);
-        failoverLog = `(Gateway redirected. Soft-failed to Simulation) `;
-        result = "SMS Simulation";
-      }
+      result = await dispatchSMS(contactsString, message, 'sms', settings, scheduleTime);
       
       let batchId = null;
       try {
