@@ -122,34 +122,36 @@ export default function EventReports({
     };
   }, [guests]);
 
-  // Filters categories for listing
+  // Filters categories for listing, sorted alphabetically by default
   const filteredGuests = useMemo(() => {
-    return guests.filter(g => {
-      const matchesSearch = g.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            (g.phone && g.phone.includes(searchQuery)) ||
-                            (g.category && g.category.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      if (!matchesSearch) return false;
+    return guests
+      .filter(g => {
+        const matchesSearch = g.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              (g.phone && g.phone.includes(searchQuery)) ||
+                              (g.category && g.category.toLowerCase().includes(searchQuery.toLowerCase()));
+        
+        if (!matchesSearch) return false;
 
-      if (selectedReport === 'Overall') {
+        if (selectedReport === 'Overall') {
+          return true;
+        } else if (selectedReport === 'Attendance_Only') {
+          return g.checkedIn;
+        } else if (selectedReport === 'RSVP_Only') {
+          return g.rsvpStatus && g.rsvpStatus !== 'Bado';
+        } else if (selectedReport === 'RSVP_Pending') {
+          return !g.rsvpStatus || g.rsvpStatus === 'Bado';
+        } else if (selectedReport === 'Outstanding') {
+          return (g.pledgeAmount || 0) > (g.paidAmount || 0);
+        } else if (selectedReport === 'FullyPaid') {
+          return (g.pledgeAmount || 0) > 0 && (g.paidAmount || 0) >= (g.pledgeAmount || 0);
+        } else if (selectedReport === 'Pledges') {
+          return (g.pledgeAmount || 0) > 0;
+        } else if (selectedReport === 'NoPledge') {
+          return (g.pledgeAmount || 0) === 0;
+        }
         return true;
-      } else if (selectedReport === 'Attendance_Only') {
-        return g.checkedIn;
-      } else if (selectedReport === 'RSVP_Only') {
-        return g.rsvpStatus && g.rsvpStatus !== 'Bado';
-      } else if (selectedReport === 'RSVP_Pending') {
-        return !g.rsvpStatus || g.rsvpStatus === 'Bado';
-      } else if (selectedReport === 'Outstanding') {
-        return (g.pledgeAmount || 0) > (g.paidAmount || 0);
-      } else if (selectedReport === 'FullyPaid') {
-        return (g.pledgeAmount || 0) > 0 && (g.paidAmount || 0) >= (g.pledgeAmount || 0);
-      } else if (selectedReport === 'Pledges') {
-        return (g.pledgeAmount || 0) > 0;
-      } else if (selectedReport === 'NoPledge') {
-        return (g.pledgeAmount || 0) === 0;
-      }
-      return true;
-    });
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'sw'));
   }, [guests, selectedReport, searchQuery]);
 
   // Group level summaries matching standard template

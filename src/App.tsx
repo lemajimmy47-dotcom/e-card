@@ -453,7 +453,9 @@ export default function App() {
   const activeGuests = useMemo(() => {
     const activeEvId = isScanOnlyPortal ? (scanEventDetails ? scanEventDetails.id : null) : (eventDetails ? eventDetails.id : null);
     if (!activeEvId) return [];
-    return guests.filter(g => g.eventId === activeEvId || (!g.eventId && activeEvId === 'event-starter'));
+    return guests
+      .filter(g => g.eventId === activeEvId || (!g.eventId && activeEvId === 'event-starter'))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'sw'));
   }, [guests, eventDetails, isScanOnlyPortal, scanEventDetails]);
 
   // Dynamically calculate the event lifecycle stage

@@ -618,17 +618,19 @@ Karibu sana!`);
 
   // Get active filtered guests list based on RSVP status
   const getFilteredGuests = () => {
-    return guests.filter(g => {
-      // First, ensure they are on this active event
-      const isCorrectEvent = g.eventId === eventDetails.id || (!g.eventId && eventDetails.id === 'event-starter');
-      if (!isCorrectEvent) return false;
+    return guests
+      .filter(g => {
+        // First, ensure they are on this active event
+        const isCorrectEvent = g.eventId === eventDetails.id || (!g.eventId && eventDetails.id === 'event-starter');
+        if (!isCorrectEvent) return false;
 
-      // Filter by RSVP
-      if (rsvpFilter === 'confirmed') return g.rsvpStatus === 'Atahudhuria';
-      if (rsvpFilter === 'pending') return !g.rsvpStatus || g.rsvpStatus === 'Bado';
-      if (rsvpFilter === 'declined') return g.rsvpStatus === 'Hatahudhuria';
-      return true; // 'all'
-    });
+        // Filter by RSVP
+        if (rsvpFilter === 'confirmed') return g.rsvpStatus === 'Atahudhuria';
+        if (rsvpFilter === 'pending') return !g.rsvpStatus || g.rsvpStatus === 'Bado';
+        if (rsvpFilter === 'declined') return g.rsvpStatus === 'Hatahudhuria';
+        return true; // 'all'
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'sw'));
   };
 
   const activeFilteredGuests = getFilteredGuests();

@@ -977,18 +977,20 @@ export default function ContributionManager({
   const activeEventGuests = guests;
 
   // Filter guests
-  const filteredGuests = activeEventGuests.filter(g => {
-    const refCode = `P-${g.id.substring(0, 6).toUpperCase()}`;
-    const nameMatch = g.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const phoneMatch = g.phone.toLowerCase().includes(searchQuery.toLowerCase());
-    const typeMatch = g.cardType.toLowerCase().includes(searchQuery.toLowerCase());
-    const refMatch = refCode.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const currStatus = g.pledgeStatus || 'No Pledge';
-    const statusMatch = statusFilter === 'All' ? true : currStatus === statusFilter;
+  const filteredGuests = activeEventGuests
+    .filter(g => {
+      const refCode = `P-${g.id.substring(0, 6).toUpperCase()}`;
+      const nameMatch = g.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const phoneMatch = g.phone.toLowerCase().includes(searchQuery.toLowerCase());
+      const typeMatch = g.cardType.toLowerCase().includes(searchQuery.toLowerCase());
+      const refMatch = refCode.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const currStatus = g.pledgeStatus || 'No Pledge';
+      const statusMatch = statusFilter === 'All' ? true : currStatus === statusFilter;
 
-    return (nameMatch || phoneMatch || typeMatch || refMatch) && statusMatch;
-  });
+      return (nameMatch || phoneMatch || typeMatch || refMatch) && statusMatch;
+    })
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'sw'));
 
   // Action methods
   const openPledgeModal = (guest: Guest) => {

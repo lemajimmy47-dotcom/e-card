@@ -150,7 +150,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   const { language, t } = useLanguage();
   const isEn = language === 'en';
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'name' | 'rsvpStatus' | 'cardType' | 'none'>('none');
+  const [sortBy, setSortBy] = useState<'name' | 'rsvpStatus' | 'cardType' | 'none'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [isSingleModalOpen, setIsSingleModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -835,12 +835,14 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   });
 
   const handlePrintAllCards = () => {
-    // Select the same filtered and query-matched lists as in the view
-    const rawItemsToPrint = guests.filter(g => {
-      const matchQuery = g.name.toLowerCase().includes(previewQuery.toLowerCase());
-      const matchType = previewFilterType === 'ALL' || g.cardType === previewFilterType;
-      return matchQuery && matchType;
-    });
+    // Select the same filtered and query-matched lists as in the view, sorted alphabetically A-Z
+    const rawItemsToPrint = guests
+      .filter(g => {
+        const matchQuery = g.name.toLowerCase().includes(previewQuery.toLowerCase());
+        const matchType = previewFilterType === 'ALL' || g.cardType === previewFilterType;
+        return matchQuery && matchType;
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'sw'));
 
     if (rawItemsToPrint.length === 0) return;
 

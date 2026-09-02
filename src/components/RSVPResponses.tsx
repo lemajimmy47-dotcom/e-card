@@ -24,7 +24,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
 
   // Search and Sort states
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'name' | 'rsvpStatus' | 'none'>('none');
+  const [sortBy, setSortBy] = useState<'name' | 'rsvpStatus' | 'none'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   
   // Multi-Filter sidebar states
@@ -350,9 +350,62 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
           </div>
         </div>
 
-        {/* Column 2: Main RSVP Records Table */}
-        <div className="flex-1 border border-white/10 rounded-2xl overflow-hidden bg-white/5 text-xs h-fit self-start">
-        <div className="overflow-x-auto">
+        {/* Column 2: Main RSVP Records Table & Search Toolbar */}
+        <div className="flex-1 space-y-3 h-fit self-start">
+          {/* Quick Search Toolbar above Table */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-80">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-4 h-4" />
+              </span>
+              <input
+                id="search-rsvp-guest-input"
+                type="text"
+                placeholder={isEn ? "Search guest name, phone or code..." : "Tafuta jina la mgeni, simu au kadi..."}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 rounded-xl border border-white/10 bg-[#050b18]/70 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-xs transition"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-white text-xs font-bold"
+                  title="Futa utafutaji"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 custom-scrollbar">
+              {[
+                { id: 'ALL', label: isEn ? 'All' : 'Wote', count: guests.length },
+                { id: 'Atahudhuria', label: isEn ? 'Attending' : 'Wanakuja', count: guests.filter(g => g.rsvpStatus === 'Atahudhuria').length, color: 'text-emerald-400 bg-emerald-500/10' },
+                { id: 'Hatahudhuria', label: isEn ? 'Declined' : 'Hawaji', count: countDeclined, color: 'text-rose-400 bg-rose-500/10' },
+                { id: 'Labda', label: isEn ? 'Maybe' : 'Labda', count: countMaybe, color: 'text-amber-400 bg-amber-500/10' },
+                { id: 'BADO', label: isEn ? 'Pending' : 'Bado', count: countNotResponded, color: 'text-slate-300 bg-white/10' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setFilterRsvpStatus(tab.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-[10.5px] font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 border ${
+                    filterRsvpStatus === tab.id
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
+                      : 'bg-white/5 border-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${filterRsvpStatus === tab.id ? 'bg-black/30 text-white' : (tab.color || 'bg-white/10 text-slate-300')}`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Main RSVP Records Table */}
+          <div className="border border-white/10 rounded-2xl overflow-hidden bg-white/5 text-xs">
+          <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white/5 border-b border-white/10 text-slate-400 font-mono font-bold uppercase text-[9px] tracking-wider">
@@ -437,7 +490,8 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+        </div>
       </div> {/* End of main multi-filter layout container */}
 
       {/* Navigation section */}

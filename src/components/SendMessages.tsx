@@ -766,24 +766,26 @@ Karibu sana!`);
     setEditingGuest(null);
   };
 
-  // Filtered guests based on message type - Memoized for performance
+  // Filtered guests based on message type - Memoized for performance, sorted alphabetically A-Z
   const filteredGuests = React.useMemo(() => {
-    return guests.filter(g => {
-      if (messageType === 'save_the_date') {
-        return g.rsvpStatus === 'Atahudhuria';
-      }
-      if (messageType === 'thank-you') {
-        if (thankYouAudience === 'attended') {
-          return g.checkedIn === true;
-        }
-        if (thankYouAudience === 'confirmed') {
+    return guests
+      .filter(g => {
+        if (messageType === 'save_the_date') {
           return g.rsvpStatus === 'Atahudhuria';
         }
-        // If 'all', return true
+        if (messageType === 'thank-you') {
+          if (thankYouAudience === 'attended') {
+            return g.checkedIn === true;
+          }
+          if (thankYouAudience === 'confirmed') {
+            return g.rsvpStatus === 'Atahudhuria';
+          }
+          // If 'all', return true
+          return true;
+        }
         return true;
-      }
-      return true;
-    });
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'sw'));
   }, [guests, messageType, thankYouAudience]);
 
   // Status Metrics - Memoized
