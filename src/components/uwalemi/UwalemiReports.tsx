@@ -1347,7 +1347,8 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
             const debtInfo = calculateMemberFeeDebt(m, state);
             const lateFee = debtInfo.lateFeePenalty || 0;
             const unpaidMonthsCount = debtInfo.unpaidCount || 0;
-            const penaltyMonths = Math.max(0, unpaidMonthsCount - 3);
+            const penaltyMonths = debtInfo.penaltyMonthsCount || 0;
+            const unpaidFromJuneCount = debtInfo.unpaidFromJuneCount || 0;
 
             let meetingPaid = 0;
             let meetingUnpaid = 0;
@@ -1404,7 +1405,11 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
 
             let feeDebtNote = 'Hakuna deni';
             if (unpaidMonthsCount > 0) {
-              feeDebtNote = `${unpaidMonthsCount} miezi (${penaltyMonths > 0 ? `${penaltyMonths} ya faini` : 'msamaha <=3M'})`;
+              if (penaltyMonths > 0) {
+                feeDebtNote = `${unpaidMonthsCount} miezi (${penaltyMonths} ya faini Mz 6+)`;
+              } else {
+                feeDebtNote = `${unpaidMonthsCount} miezi (msamaha <=3M Mz 6+)`;
+              }
             }
 
             return {
@@ -1486,12 +1491,12 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
 
                 <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
                   <div className="flex items-center justify-between text-amber-400 mb-1">
-                    <span className="text-[11px] font-semibold">Faini za Ada (&gt;Miezi 3)</span>
+                    <span className="text-[11px] font-semibold">Faini za Ada (&gt;Miezi 3, Mz 6+)</span>
                     <Scale className="w-4 h-4" />
                   </div>
                   <span className="text-xl font-black text-amber-400">{formatTZS(totalLateFeePenalty)}</span>
                   <span className="text-[10px] text-slate-400 block mt-1">
-                    TZS 5,000 kila mwezi unaozidi miezi 3
+                    Kuanzia Mwezi wa 6: TZS 5,000 kila mwezi unaozidi miezi 3
                   </span>
                 </div>
 

@@ -220,13 +220,14 @@ export interface UwalemiMemberFeeDebtInfo {
   status: string;
   monthlyFee: number;
   feeDebt: number; // Pure monthly fee debt
-  lateFeePenalty: number; // 5,000 TZS per month exceeding 3 months of arrears
-  penaltyMonthsCount: number; // Number of months exceeding 3
+  lateFeePenalty: number; // 5,000 TZS per month exceeding 3 months of arrears starting from Month 6 (June 2026)
+  penaltyMonthsCount: number; // Number of months exceeding 3 starting from Month 6 (June 2026)
+  unpaidFromJuneCount: number; // Total unpaid months on or after Month 6 (June 2026)
   otherFinesDebt: number; // Meeting or other group fines
   otherFinesPaid: number;
   totalFinesDebt: number; // lateFeePenalty + otherFinesDebt
   totalDebt: number; // feeDebt + totalFinesDebt
-  unpaidCount: number; // total unpaid monthly fees
+  unpaidCount: number; // total unpaid monthly fees across all time
   startYear?: number;
   startMonth?: number;
   startMonthName: string;
@@ -263,14 +264,16 @@ export function getDefaultFeeForMonth(year: number, month: number, memberFeeAmou
 
 /**
  * Calculates late fee penalty for monthly fee debt.
- * Rule: If unpaid months <= 3, penalty is 0 (grace period).
- * If unpaid months > 3, penalty is (unpaid months - 3) * 5,000 TZS.
+ * Rule: Faini ya kuchelewa ada inaanza kuhesabika kuanzia mwezi wa 6 (Juni 2026).
+ * Kama mwanachama anadaiwa zaidi ya miezi 3 kuanzia mwezi wa 6 (Juni 2026):
+ * Faini ni TZS 5,000 kwa kila mwezi unaozidi miezi 3 kuanzia mwezi huo wa 6.
+ * (Ikiwa inadaiwa miezi <= 3 kuanzia mwezi wa 6, faini ni TZS 0).
  */
-export function calculateLateFeePenalty(unpaidMonthsCount: number): { penalty: number; penaltyMonths: number } {
-  if (unpaidMonthsCount <= 3) {
+export function calculateLateFeePenalty(unpaidMonthsFromJuneCount: number): { penalty: number; penaltyMonths: number } {
+  if (unpaidMonthsFromJuneCount <= 3) {
     return { penalty: 0, penaltyMonths: 0 };
   }
-  const penaltyMonths = unpaidMonthsCount - 3;
+  const penaltyMonths = unpaidMonthsFromJuneCount - 3;
   return { penalty: penaltyMonths * 5000, penaltyMonths };
 }
 
@@ -378,7 +381,13 @@ export function calculateMemberFeeDebt(
   }
 
   const unpaidCount = unpaidItems.length;
-  const { penalty: lateFeePenalty, penaltyMonths: penaltyMonthsCount } = calculateLateFeePenalty(unpaidCount);
+
+  // Faini ya kuchelewesha ada: Huhesabiwa kuanzia mwezi wa 6 (Juni 2026) pekee
+  // Kama mwanachama anadaiwa zaidi ya miezi 3 kuanzia mwezi wa 6, faini ni TZS 5,000 kwa kila mwezi unaozidi miezi 3
+  const unpaidFromJuneItems = unpaidItems.filter(item => item.year > 2026 || (item.year === 2026 && item.month >= 6));
+  const unpaidFromJuneCount = unpaidFromJuneItems.length;
+  const { penalty: lateFeePenalty, penaltyMonths: penaltyMonthsCount } = calculateLateFeePenalty(unpaidFromJuneCount);
+
   const { finesPaid: otherFinesPaid, finesDebt: otherFinesDebt } = calculateMemberOtherFines(member.id, state);
   const totalFinesDebt = lateFeePenalty + otherFinesDebt;
   const totalDebt = feeDebt + totalFinesDebt;
@@ -414,6 +423,7 @@ export function calculateMemberFeeDebt(
     feeDebt,
     lateFeePenalty,
     penaltyMonthsCount,
+    unpaidFromJuneCount,
     otherFinesDebt,
     otherFinesPaid,
     totalFinesDebt,

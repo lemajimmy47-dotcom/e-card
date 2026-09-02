@@ -1715,7 +1715,8 @@ export const generateFinesReportPDF = (
     const debtInfo = calculateMemberFeeDebt(m, state);
     const lateFee = debtInfo.lateFeePenalty || 0;
     const unpaidMonthsCount = debtInfo.unpaidCount || 0;
-    const penaltyMonths = Math.max(0, unpaidMonthsCount - 3);
+    const penaltyMonths = debtInfo.penaltyMonthsCount || 0;
+    const unpaidFromJuneCount = debtInfo.unpaidFromJuneCount || 0;
 
     // Meeting fines in period
     let meetingPaid = 0;
@@ -1768,9 +1769,10 @@ export const generateFinesReportPDF = (
 
     let feeDebtNote = 'Hakuna';
     if (unpaidMonthsCount > 0) {
-      feeDebtNote = `${unpaidMonthsCount} mwezi (${penaltyMonths > 0 ? `${penaltyMonths} faini` : 'msamaha <=3M'})`;
-      if (unpaidMonthsCount > 1) {
-        feeDebtNote = `${unpaidMonthsCount} miezi (${penaltyMonths > 0 ? `${penaltyMonths} ya faini` : 'msamaha <=3M'})`;
+      if (penaltyMonths > 0) {
+        feeDebtNote = `${unpaidMonthsCount}M (${penaltyMonths} ya faini Mz 6+)`;
+      } else {
+        feeDebtNote = `${unpaidMonthsCount}M (msamaha <=3M Mz 6+)`;
       }
     }
 
@@ -1804,7 +1806,7 @@ export const generateFinesReportPDF = (
     head: [['MUHTASARI WA FAINI & ADHABU', 'IDADI / KIASI (TZS)', 'MAELEZO YA KANUNI']],
     body: [
       ['Wanachama Wenye Faini', `${totalMembersWithFines} kati ya ${members.length}`, 'Wenye faini ya kuchelewa ada au faini za vikao'],
-      ['Jumla ya Faini za Ada (>Miezi 3)', formatTZS(totalLateFeePenalty), 'TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni'],
+      ['Jumla ya Faini za Ada (>Miezi 3, Mz 6+)', formatTZS(totalLateFeePenalty), 'TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni kuanzia Mwezi wa 6 (Juni 2026)'],
       ['Faini za Vikao Zisizolipwa (Deni)', formatTZS(totalMeetingFinesDebt), 'Faini za kutofika/kuchelewa vikao ambazo hazijalipwa'],
       ['Faini za Vikao Zilizolipwa', formatTZS(totalMeetingFinesPaid), 'Makusanyo ya faini za vikao yaliyokamilika'],
       ['JUMLA YA FAINI ZINAZODAIWA', formatTZS(grandTotalFinesPending), 'Faini za ada zisizolipwa + faini za vikao zisizolipwa'],

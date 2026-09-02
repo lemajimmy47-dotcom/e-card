@@ -532,6 +532,13 @@ Lema, Nguvu Moja!`);
         role: 'Mjumbe',
         status: 'active',
         monthlyFee: 15000,
+        feeDebt: rec.feeDebt || rec.debtAmount || 40000,
+        lateFeePenalty: rec.lateFeePenalty || 0,
+        penaltyMonthsCount: 0,
+        unpaidFromJuneCount: 0,
+        otherFinesDebt: rec.otherFinesDebt || 0,
+        otherFinesPaid: 0,
+        totalFinesDebt: rec.totalFinesDebt || 0,
         totalDebt: rec.debtAmount || 40000,
         unpaidCount: rec.monthsCount || 4,
         startMonthName: rec.startMonth || 'Novemba 2023',
@@ -553,6 +560,13 @@ Lema, Nguvu Moja!`);
       role: 'Mjumbe',
       status: 'active',
       monthlyFee: 15000,
+      feeDebt: 40000,
+      lateFeePenalty: 0,
+      penaltyMonthsCount: 0,
+      unpaidFromJuneCount: 0,
+      otherFinesDebt: 0,
+      otherFinesPaid: 0,
+      totalFinesDebt: 0,
       totalDebt: 40000,
       unpaidCount: 4,
       startMonthName: 'Novemba 2023',
@@ -600,6 +614,7 @@ Lema, Nguvu Moja!`);
         feeDebt: rec.feeDebt ?? rec.debtAmount ?? 0,
         lateFeePenalty: rec.lateFeePenalty ?? 0,
         penaltyMonthsCount: Math.max(0, (rec.monthsCount ?? 0) - 3),
+        unpaidFromJuneCount: 0,
         otherFinesDebt: rec.otherFinesDebt ?? 0,
         otherFinesPaid: 0,
         totalFinesDebt: rec.totalFinesDebt ?? ((rec.lateFeePenalty ?? 0) + (rec.otherFinesDebt ?? 0)),
@@ -851,7 +866,7 @@ Lema, Nguvu Moja!`);
                 <button
                   type="button"
                   onClick={() => insertTag('{fainiAda}')}
-                  title="Faini ya Ucheleweshaji Ada (5,000/mwezi baada ya mwezi 3)"
+                  title="Faini ya Ucheleweshaji Ada (Kuanzia Mwezi 6, TZS 5,000/mwezi baada ya miezi 3)"
                   className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[10.5px] font-mono border border-rose-500/40 cursor-pointer font-bold"
                 >
                   {"{fainiAda}"}

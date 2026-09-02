@@ -3105,7 +3105,8 @@ async function startServer() {
 
               feeDebtVal = totalFeeDebt;
               monthsCountVal = unpaidArr.length;
-              const penaltyMonths = Math.max(0, unpaidArr.length - 3);
+              const unpaidFromJune = unpaidArr.filter(u => u.y > 2026 || (u.y === 2026 && u.m >= 6));
+              const penaltyMonths = Math.max(0, unpaidFromJune.length - 3);
               lateFeeVal = penaltyMonths * 5000;
 
               // Meeting fines
@@ -3141,12 +3142,12 @@ async function startServer() {
             }
           }
 
-          const penaltyMonthsCount = Math.max(0, monthsCountVal - 3);
+          const penaltyMonthsCount = lateFeeVal > 0 ? Math.floor(lateFeeVal / 5000) : 0;
           let finesSummary = 'Hakuna faini';
           if (totalFinesVal > 0) {
             const parts: string[] = [];
             if (lateFeeVal > 0) {
-              parts.push(`Faini ya kuchelewa ada: TZS ${lateFeeVal.toLocaleString()} (${penaltyMonthsCount} ${penaltyMonthsCount === 1 ? 'mwezi wa ziada' : 'miezi ya ziada'})`);
+              parts.push(`Faini ya kuchelewa ada (kuanzia Mwezi 6): TZS ${lateFeeVal.toLocaleString()} (${penaltyMonthsCount} ${penaltyMonthsCount === 1 ? 'mwezi wa ziada' : 'miezi ya ziada'})`);
             }
             if (otherFinesVal > 0) {
               parts.push(`Faini za vikao: TZS ${otherFinesVal.toLocaleString()}`);

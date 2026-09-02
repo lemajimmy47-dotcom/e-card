@@ -470,7 +470,7 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
                   }`}
                 >
                   <span className="block text-[11px]">Faini ya Ada</span>
-                  <span className="text-[9px] text-slate-400 font-normal">Kuchelewa (&gt;3M)</span>
+                  <span className="text-[9px] text-slate-400 font-normal">Mz 6+ (&gt;3M)</span>
                 </button>
 
                 <button

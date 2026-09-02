@@ -21,7 +21,8 @@ import {
   Shield,
   Phone,
   ArrowRightLeft,
-  Receipt
+  Receipt,
+  Scale
 } from 'lucide-react';
 
 interface Props {
@@ -287,6 +288,16 @@ export const UwalemiSettings: React.FC<Props> = ({ state, onSaveState }) => {
               />
               <p className="text-[11px] text-slate-400">
                 Hutozwa kwa mwanachama anayeingia kikaoni baada ya muda uliopangwa (kuchelewa).
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-xl flex items-start gap-3">
+            <Scale className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1">
+              <div className="font-bold text-amber-300">Kanuni ya Faini ya Kuchelewesha Ada (Kuanzia Mwezi 6 / Juni 2026):</div>
+              <p className="text-slate-300 leading-relaxed text-[11px]">
+                Faini ya kuchelewesha ada inaanza kuhesabiwa kuanzia <strong className="text-white">Mwezi wa 6 (Juni 2026)</strong>. Mwanachama anayedaiwa zaidi ya <strong className="text-white">miezi 3</strong> kuanzia mwezi huo hutozwa faini ya <strong className="text-amber-400 font-mono">TZS 5,000</strong> kwa kila mwezi unaozidi miezi 3 ya kwanza.
               </p>
             </div>
           </div>
