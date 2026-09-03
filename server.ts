@@ -565,25 +565,31 @@ Respond strictly in JSON format:
       const isNegativeRsvp = (
         lowerText.includes('sitahudhuria') || lowerText.includes('sintahudhuria') || lowerText.includes('sitohudhuria') ||
         lowerText.includes('stahudhuria') || lowerText.includes('hatahudhuria') || lowerText.includes('hatutahudhuria') ||
-        lowerText.includes('sitakuja') || lowerText.includes('hatutakuja') || lowerText.includes('sitafika') ||
-        lowerText.includes('siwezi') || lowerText.includes('sitaweza') || lowerText.includes('sitofika') ||
+        lowerText.includes('sitakuja') || lowerText.includes('stakuja') || lowerText.includes('siji') || lowerText.includes('hatuji') ||
+        lowerText.includes('hatutakuja') || lowerText.includes('sitafika') || lowerText.includes('stafika') || lowerText.includes('sitofika') ||
+        lowerText.includes('siwezi') || lowerText.includes('sitaweza') || lowerText.includes('sintaweza') || lowerText.includes('sitoweza') ||
         lowerText.includes('sitafanikiwa') || lowerText.includes('nisingeweza') || lowerText.includes('singewahi') ||
-        lowerText.includes('sitawahi') || lowerText.includes('hapana') || lowerText === 'no' || lowerText === '2' || lowerText === 'b'
+        lowerText.includes('sitawahi') || lowerText.includes('sitakuwepo') || lowerText.includes('stakuwepo') ||
+        lowerText.includes('hapana') || lowerText === 'no' || lowerText === '2' || lowerText === 'b' ||
+        lowerText.includes('samahani sita') || lowerText.includes('poleni sita') || lowerText.includes('udhuru')
       );
 
       const isPositiveRsvp = !isNegativeRsvp && (
         lowerText.includes('ndio') || lowerText.includes('ndiyo') || lowerText.includes('naam') || lowerText.includes('yes') ||
-        lowerText.includes('nitakuja') || lowerText.includes('nitahudhuria') || lowerText.includes('ntahudhuria') ||
-        lowerText.includes('ntakuja') || lowerText.includes('nakuja') || lowerText.includes('tutakuja') ||
-        lowerText.includes('tutahudhuria') || lowerText.includes('nitafika') || lowerText.includes('ntafika') ||
-        lowerText.includes('tutafika') || lowerText.includes('nitawepo') || lowerText.includes('ntawepo') ||
-        lowerText.includes('tutawepo') || lowerText.includes('nitaweza') || lowerText.includes('nitafanikiwa') ||
-        lowerText.includes('pamoja') || lowerText === '1' || lowerText === 'a' || lowerText === 'ok' || lowerText === 'sawa'
+        lowerText.includes('nitakuja') || lowerText.includes('ntakuja') || lowerText.includes('nakuja') || lowerText.includes('tutakuja') ||
+        lowerText.includes('nitahudhuria') || lowerText.includes('ntahudhuria') || lowerText.includes('tutahudhuria') ||
+        lowerText.includes('nitafika') || lowerText.includes('ntafika') || lowerText.includes('tutafika') ||
+        lowerText.includes('nitawepo') || lowerText.includes('ntawepo') || lowerText.includes('tutawepo') ||
+        lowerText.includes('nitakuwepo') || lowerText.includes('ntakuwepo') ||
+        lowerText.includes('nitaweza') || lowerText.includes('nitafanikiwa') ||
+        lowerText.includes('pamoja') || lowerText.includes('nipo') || lowerText.includes('niko') ||
+        lowerText === '1' || lowerText === 'a' || lowerText === 'ok' || lowerText === 'sawa' || lowerText === 'kuja' || lowerText === 'naja'
       );
 
       const isMaybeRsvp = !isNegativeRsvp && !isPositiveRsvp && (
         lowerText.includes('sina uhakika') || lowerText.includes('maybe') || lowerText.includes('labda') ||
         lowerText.includes('sijajua') || lowerText.includes('ntakujulisha') || lowerText.includes('nitakujulisha') ||
+        lowerText.includes('bado sijui') || lowerText.includes('bado') ||
         lowerText === '3' || lowerText === 'c'
       );
 

@@ -52,13 +52,16 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
   const handleSaveSimulation = () => {
     if (!selectedSimGuestId) return;
 
+    const nowIso = new Date().toISOString();
     const updated = guests.map(g => {
       if (g.id === selectedSimGuestId) {
         return {
           ...g,
           rsvpStatus: simStatus as any,
           rsvpGuestsCount: simStatus === 'Hatahudhuria' ? 0 : simCompanions,
-          rsvpComment: simComment ? simComment.trim() : undefined
+          rsvpComment: simComment ? simComment.trim() : undefined,
+          rsvpUpdatedAt: nowIso,
+          rsvpSeen: false
         };
       }
       return g;
@@ -66,6 +69,27 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
 
     onUpdateGuests(updated);
     setIsSimulatorOpen(false);
+  };
+
+  const handleQuickStatusChange = (guestId: string, newStatus: 'Atahudhuria' | 'Hatahudhuria' | 'Labda' | 'Bado') => {
+    const nowIso = new Date().toISOString();
+    const updated = guests.map(g => {
+      if (g.id === guestId) {
+        const count = newStatus === 'Atahudhuria' 
+          ? (g.rsvpGuestsCount || (g.cardType === 'DOUBLE' ? 2 : 1))
+          : (newStatus === 'Hatahudhuria' ? 0 : g.rsvpGuestsCount);
+        return {
+          ...g,
+          rsvpStatus: newStatus as any,
+          rsvpGuestsCount: count,
+          rsvpUpdatedAt: nowIso,
+          rsvpSeen: false
+        };
+      }
+      return g;
+    });
+
+    onUpdateGuests(updated);
   };
 
   const handlePrepopulateRSVPs = () => {
@@ -78,13 +102,16 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
       isEn ? 'I will come with my wife as invited!' : 'Nitakuja na mke wangu kama mlivyotualika!'
     ];
 
+    const nowIso = new Date().toISOString();
     const randomized = guests.map((g, idx) => {
       const isDeclined = statuses[idx % statusLength()] === 'Hatahudhuria';
       return {
         ...g,
         rsvpStatus: statuses[idx % statusLength()],
         rsvpGuestsCount: isDeclined ? 0 : (g.cardType === 'DOUBLE' ? 2 : 1),
-        rsvpComment: comments[idx % commentLength()]
+        rsvpComment: comments[idx % commentLength()],
+        rsvpUpdatedAt: nowIso,
+        rsvpSeen: false
       };
     });
 
@@ -454,16 +481,23 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
                     <td className="px-5 py-3 font-bold text-white">{g.name}</td>
                     <td className="px-5 py-3 font-mono text-slate-300">{g.phone}</td>
                     
-                    {/* Status Badge */}
+                    {/* Status Badge & Quick Change */}
                     <td className="px-5 py-3 text-center">
-                      <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold border inline-flex items-center space-x-1 ${
-                        g.rsvpStatus === 'Atahudhuria' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                        g.rsvpStatus === 'Hatahudhuria' ? 'bg-red-500/10 text-rose-350 border-red-500/20' :
-                        g.rsvpStatus === 'Labda' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                        'bg-white/5 text-slate-400 border-white/10'
-                      }`}>
-                        {g.rsvpStatus === 'Bado' || !g.rsvpStatus ? 'Bado Jibu' : g.rsvpStatus}
-                      </span>
+                      <select
+                        value={g.rsvpStatus || 'Bado'}
+                        onChange={(e) => handleQuickStatusChange(g.id, e.target.value as any)}
+                        className={`px-2.5 py-1 rounded-full text-[9.5px] font-bold border cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+                          g.rsvpStatus === 'Atahudhuria' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                          g.rsvpStatus === 'Hatahudhuria' ? 'bg-red-500/10 text-rose-350 border-red-500/30' :
+                          g.rsvpStatus === 'Labda' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                          'bg-white/5 text-slate-400 border-white/10'
+                        }`}
+                      >
+                        <option value="Atahudhuria" className="bg-[#0c1427] text-emerald-400 font-bold">🟢 Atahudhuria</option>
+                        <option value="Hatahudhuria" className="bg-[#0c1427] text-rose-400 font-bold">🔴 Hatahudhuria</option>
+                        <option value="Labda" className="bg-[#0c1427] text-amber-400 font-bold">🟡 Labda</option>
+                        <option value="Bado" className="bg-[#0c1427] text-slate-400 font-bold">⚪ Bado Jibu</option>
+                      </select>
                     </td>
 
                     <td className="px-5 py-3 text-center font-bold font-mono text-slate-200">
