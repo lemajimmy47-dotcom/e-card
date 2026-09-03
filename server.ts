@@ -947,17 +947,19 @@ const metaMediaCache = new Map<string, { mediaId: string; timestamp: number }>()
 async function attemptEhubAutoRecovery(apiKey: string, apiSecret: string, formattedPhone: string, text: string, currentSenderId: string): Promise<string | null> {
   try {
     console.log(`[eHub Auto-Recovery] Attempting to fetch approved Sender IDs for auto-healing...`);
+    const effectiveKey = (apiKey && !apiKey.startsWith("zs_")) ? apiKey : "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
+    const effectiveSecret = apiSecret || "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
     const timestamp = Math.floor(Date.now() / 1000);
     const method = "GET";
     const path = "/api/v1/sender-ids";
     const body = "";
     const payload = timestamp + "\n" + method + "\n" + path + "\n" + body;
-    const signature = crypto.createHmac("sha256", apiSecret).update(payload).digest("hex");
+    const signature = crypto.createHmac("sha256", effectiveSecret).update(payload).digest("hex");
 
     const res = await fetch("https://sms.ehub.co.tz" + path, {
       method: "GET",
       headers: {
-        "Authorization": "Bearer " + apiKey,
+        "Authorization": "Bearer " + effectiveKey,
         "X-Timestamp": timestamp.toString(),
         "X-Signature": signature,
         "Accept": "application/json",
@@ -1001,32 +1003,55 @@ async function attemptEhubAutoRecovery(apiKey: string, apiSecret: string, format
       if (isApproved) {
         const sid = item.sender_id || item.id;
         const itemId = item.id;
-        if (sid && isUuid(sid) && !candidates.includes(sid)) candidates.push(sid);
-        if (itemId && isUuid(itemId) && !candidates.includes(itemId)) candidates.push(itemId);
+        if (sid && isUuid(sid) && sid !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1" && !candidates.includes(sid)) candidates.push(sid);
+        if (itemId && isUuid(itemId) && itemId !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1" && !candidates.includes(itemId)) candidates.push(itemId);
       }
     }
+
+    // Ensure known approved eHub Sender IDs are present
+    const isUwalemi = text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("kikundi") || text.includes("Ada"));
+    const preferredList = isUwalemi
+      ? ["19f41b59-19d0-4f98-b8c9-9d5b1ac31308", "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397"]
+      : ["339330f1-4e6a-4bf7-a9f8-eaae2a9dd397", "19f41b59-19d0-4f98-b8c9-9d5b1ac31308"];
+
+    for (const pid of preferredList) {
+      if (!candidates.includes(pid)) {
+        candidates.push(pid);
+      }
+    }
+
+    // Sort to prioritize preferred based on message context
+    candidates.sort((a, b) => {
+      if (a === preferredList[0]) return -1;
+      if (b === preferredList[0]) return 1;
+      return 0;
+    });
 
     console.log(`[eHub Auto-Recovery] Candidate UUID Sender IDs to try:`, candidates);
 
     for (const candidateSenderId of candidates) {
-      if (candidateSenderId === currentSenderId) continue;
+      if (candidateSenderId === currentSenderId && candidateSenderId !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1") continue;
 
       console.log(`[eHub Auto-Recovery] Retrying dispatch with candidate Sender ID: '${candidateSenderId}'...`);
       const retryTs = Math.floor(Date.now() / 1000);
       const sendPath = "/api/v1/sms/send";
+      let cleanPhone = formattedPhone.replace(/[^0-9]/g, "");
+      if (cleanPhone.startsWith("0")) cleanPhone = "255" + cleanPhone.substring(1);
+      if (cleanPhone.startsWith("7") || cleanPhone.startsWith("6")) cleanPhone = "255" + cleanPhone;
+
       const bodyObj = {
         sender_id: candidateSenderId,
-        to: formattedPhone,
+        to: cleanPhone,
         message: text
       };
       const bodyStr = JSON.stringify(bodyObj);
       const retryPayload = retryTs + "\nPOST\n" + sendPath + "\n" + bodyStr;
-      const retrySig = crypto.createHmac("sha256", apiSecret).update(retryPayload).digest("hex");
+      const retrySig = crypto.createHmac("sha256", effectiveSecret).update(retryPayload).digest("hex");
 
       const retryRes = await fetch("https://sms.ehub.co.tz" + sendPath, {
         method: "POST",
         headers: {
-          "Authorization": "Bearer " + apiKey,
+          "Authorization": "Bearer " + effectiveKey,
           "X-Timestamp": retryTs.toString(),
           "X-Signature": retrySig,
           "Content-Type": "application/json",
@@ -1909,10 +1934,31 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
     return "SMS Simulation";
   }
 
+  const apiKey = (settings.apiKey || "").trim();
+  const apiSecret = (settings.apiSecret || "").trim();
+  const isEhub = settings.provider === "ehub";
+  const isMeseji = !isEhub && (settings.provider === "meseji" || (apiKey && apiKey.startsWith("zs_") && !apiSecret));
+  const effectiveProvider = isEhub ? "ehub" : (isMeseji ? "meseji" : settings.provider);
+
   let senderId = (settings.senderId || "").trim();
-  if (!senderId) {
-    if (settings.provider === "meseji") {
-      senderId = "MESEJI";
+  const APPROVED_EHUB_IDS = ["339330f1-4e6a-4bf7-a9f8-eaae2a9dd397", "19f41b59-19d0-4f98-b8c9-9d5b1ac31308"];
+  if (isEhub) {
+    // Resolve approved UUID for eHub (EVENT CARD: 339330f1-4e6a-4bf7-a9f8-eaae2a9dd397, UWALEMI: 19f41b59-19d0-4f98-b8c9-9d5b1ac31308)
+    const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+    if (!isUuid(senderId) || senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !APPROVED_EHUB_IDS.includes(senderId)) {
+      if (senderId.toUpperCase().includes("UWALEMI") || (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("kikundi") || text.includes("Ada")))) {
+        senderId = "19f41b59-19d0-4f98-b8c9-9d5b1ac31308";
+      } else {
+        senderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
+      }
+    }
+  } else if (!senderId || (isMeseji && (senderId.includes("-") || senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || senderId === "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397"))) {
+    if (isMeseji) {
+      if (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("Ada"))) {
+        senderId = "UWALEMI";
+      } else {
+        senderId = "EVENT CARD";
+      }
     } else if (settings.provider === "beem") {
       senderId = "INFO";
     } else if (settings.provider === "nextsms") {
@@ -1930,34 +1976,19 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
     headers: { "Content-Type": "application/json" },
   };
 
-  const apiKey = (settings.apiKey || "").trim();
-  const apiSecret = (settings.apiSecret || "").trim();
-
-  if (settings.provider !== "simulation" && settings.provider !== "custom" && !apiKey) {
-    throw new Error(`API Key ya SMS haijawekwa kwa ajili ya mtoa huduma (${settings.provider}). Tafadhali ingia kwenye Mipangilio ya SMS (Settings Icon) kisha uweke API Key na Sender ID yako.`);
+  if (effectiveProvider !== "simulation" && effectiveProvider !== "custom" && !apiKey && !isEhub) {
+    throw new Error(`API Key ya SMS haijawekwa kwa ajili ya mtoa huduma (${effectiveProvider}). Tafadhali ingia kwenye Mipangilio ya SMS (Settings Icon) kisha uweke API Key na Sender ID yako.`);
   }
 
-  if (settings.provider === "meseji") {
-    requestUrl = settings.url || "https://meseji.co.tz/api/v1/sms/send";
-    if (requestUrl.endsWith("/api/v1") || requestUrl.endsWith("/api/v1/")) {
-      requestUrl = requestUrl.replace(/\/$/, "") + "/sms/send";
-    }
-
-    const mesejiHeaders: any = {
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    };
-
-    if (apiKey.startsWith("zs_")) {
-      mesejiHeaders["x-api-key"] = apiKey;
-    } else {
-      mesejiHeaders["x-api-key"] = apiKey;
-      mesejiHeaders["Authorization"] = "Bearer " + apiKey;
-    }
+  if (effectiveProvider === "meseji") {
+    requestUrl = "https://meseji.co.tz/api/v1/sms/send";
 
     fetchOptions.headers = {
       ...fetchOptions.headers,
-      ...mesejiHeaders
+      "x-api-key": apiKey,
+      "Authorization": "Bearer " + apiKey,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
     };
     
     // Strictly formatted recipient (no +, digits only, 255...)
@@ -1971,14 +2002,9 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
       .filter(p => p.length >= 9)
       .join(',');
 
-    let effectiveSenderId = (senderId && senderId !== "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397" && senderId !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1") 
-      ? senderId 
-      : (settings.senderId || "UWALEMI");
-
+    let effectiveSenderId = senderId;
     if (['HARUSI', 'DEFAULT', 'CUSTOM'].includes(effectiveSenderId.toUpperCase())) {
-      effectiveSenderId = (settings.senderId && !['HARUSI', 'DEFAULT', 'CUSTOM'].includes(settings.senderId.toUpperCase()))
-        ? settings.senderId
-        : "UWALEMI";
+      effectiveSenderId = (text && (text.includes("UWALEMI") || text.includes("Uwalemi"))) ? "UWALEMI" : "EVENT CARD";
     }
 
     const bodyData: any = {
@@ -1994,89 +2020,79 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
     fetchOptions.body = JSON.stringify(bodyData);
     
     console.log(`[SMS] Meseji Dispatch: ${requestUrl}, Recipient: ${cleanPhone}, SenderID: ${effectiveSenderId}${scheduleTime ? ', ScheduleTime: ' + scheduleTime : ''}`);
-  } else if (settings.provider === "ehub") {
-    // If user provided a Meseji key (zs_...) under ehub, seamlessly handle via Meseji
-    if (apiKey && apiKey.startsWith("zs_")) {
-      console.log(`[SMS-AutoRoute] Meseji key detected under eHub provider. Routing to Meseji handler...`);
-      requestUrl = "https://meseji.co.tz/api/v1/sms/send";
-      fetchOptions.headers = {
-        ...fetchOptions.headers,
-        "x-api-key": apiKey,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      };
-      let cleanPhone = formattedPhone.replace(/[^0-9]/g, "");
-      if (cleanPhone.startsWith("0")) cleanPhone = "255" + cleanPhone.substring(1);
-      if (cleanPhone.startsWith("7") || cleanPhone.startsWith("6")) cleanPhone = "255" + cleanPhone;
-      const effectiveSenderId = (senderId && senderId !== "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397" && senderId !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1") 
-        ? senderId 
-        : "UWALEMI";
-      fetchOptions.body = JSON.stringify({
-        contacts: cleanPhone,
-        message: text,
-        sender_id: effectiveSenderId,
-        ...(scheduleTime ? { schedule_time: scheduleTime } : {})
-      });
-    } else {
-      requestUrl = settings.url || "https://sms.ehub.co.tz/api/v1/sms/send";
-      if (requestUrl.endsWith("/api/v1") || requestUrl.endsWith("/api/v1/")) {
-        requestUrl = requestUrl.replace(/\/$/, "") + "/sms/send";
-      }
-      
-      let effectiveSecret = apiSecret;
-      let effectiveKey = apiKey;
-      if (!effectiveSecret || !effectiveKey) {
-        try {
-          const db = await readDBLatest();
-          if (db.smsGatewaySettings?.provider === "ehub" && db.smsGatewaySettings.apiKey && db.smsGatewaySettings.apiSecret) {
-            effectiveKey = effectiveKey || db.smsGatewaySettings.apiKey;
-            effectiveSecret = effectiveSecret || db.smsGatewaySettings.apiSecret;
-          }
-        } catch {}
-      }
-
-      if (!effectiveSecret || !effectiveKey) {
-        throw new Error(`eHub API Secret au API Key haijawekwa. Tafadhali ingia kwenye Mipangilio ya SMS uweke API Key na API Secret za eHub.`);
-      }
-
-      const timestamp = Math.floor(Date.now() / 1000);
-      
-      let urlPath = "/api/v1/sms/send";
-      try {
-        const u = new URL(requestUrl);
-        urlPath = u.pathname;
-      } catch (e) {}
-
-      const method = "POST";
-      const bodyObj = {
-        sender_id: senderId,
-        to: formattedPhone,
-        message: text
-      };
-      const bodyStr = JSON.stringify(bodyObj);
-
-      // eHub payload: timestamp \n method \n path \n body
-      const payload = timestamp + "\n" + method + "\n" + urlPath + "\n" + bodyStr;
-      
-      const signature = crypto.createHmac("sha256", effectiveSecret)
-        .update(payload)
-        .digest("hex");
-        
-      fetchOptions.method = method;
-      fetchOptions.headers = {
-        ...fetchOptions.headers,
-        "Authorization": "Bearer " + effectiveKey,
-        "X-Timestamp": timestamp.toString(),
-        "X-Signature": signature,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": "EventCard-App/1.0"
-      };
-      
-      fetchOptions.body = bodyStr;
-      
-      console.log(`[SMS] eHub Dispatching to: ${requestUrl} (Path: ${urlPath}), SenderID: ${senderId}`);
+  } else if (effectiveProvider === "ehub") {
+    requestUrl = settings.url || "https://sms.ehub.co.tz/api/v1/sms/send";
+    if (requestUrl.endsWith("/api/v1") || requestUrl.endsWith("/api/v1/")) {
+      requestUrl = requestUrl.replace(/\/$/, "") + "/sms/send";
     }
+    
+    let effectiveKey = (apiKey && !apiKey.startsWith("zs_")) ? apiKey : "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
+    let effectiveSecret = apiSecret || "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
+
+    if (!effectiveSecret || !effectiveKey) {
+      try {
+        const db = await readDBLatest();
+        if (db.smsGatewaySettings?.provider === "ehub" && db.smsGatewaySettings.apiKey && db.smsGatewaySettings.apiSecret) {
+          effectiveKey = effectiveKey || db.smsGatewaySettings.apiKey;
+          effectiveSecret = effectiveSecret || db.smsGatewaySettings.apiSecret;
+        }
+      } catch {}
+    }
+
+    let effectiveSenderId = (senderId || "").trim();
+    const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+    if (!isUuid(effectiveSenderId) || effectiveSenderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !APPROVED_EHUB_IDS.includes(effectiveSenderId)) {
+      if (effectiveSenderId.toUpperCase().includes("UWALEMI") || (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("kikundi") || text.includes("Ada")))) {
+        effectiveSenderId = "19f41b59-19d0-4f98-b8c9-9d5b1ac31308";
+      } else {
+        effectiveSenderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
+      }
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    
+    let urlPath = "/api/v1/sms/send";
+    try {
+      const u = new URL(requestUrl);
+      urlPath = u.pathname;
+    } catch (e) {}
+
+    let cleanPhone = formattedPhone.replace(/[^0-9]/g, "");
+    if (cleanPhone.startsWith("0")) cleanPhone = "255" + cleanPhone.substring(1);
+    if (cleanPhone.startsWith("7") || cleanPhone.startsWith("6")) cleanPhone = "255" + cleanPhone;
+
+    const method = "POST";
+    const bodyObj: any = {
+      sender_id: effectiveSenderId,
+      to: cleanPhone,
+      message: text
+    };
+    if (scheduleTime) {
+      bodyObj.scheduled_at = scheduleTime;
+    }
+    const bodyStr = JSON.stringify(bodyObj);
+
+    // eHub payload: timestamp \n method \n path \n body
+    const payload = timestamp + "\n" + method + "\n" + urlPath + "\n" + bodyStr;
+    
+    const signature = crypto.createHmac("sha256", effectiveSecret)
+      .update(payload)
+      .digest("hex");
+      
+    fetchOptions.method = method;
+    fetchOptions.headers = {
+      ...fetchOptions.headers,
+      "Authorization": "Bearer " + effectiveKey,
+      "X-Timestamp": timestamp.toString(),
+      "X-Signature": signature,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "User-Agent": "EventCard-App/1.0"
+    };
+    
+    fetchOptions.body = bodyStr;
+    
+    console.log(`[SMS] eHub Dispatching to: ${requestUrl} (Path: ${urlPath}), SenderID: ${effectiveSenderId}, To: ${cleanPhone}`);
   } else if (settings.provider === "custom") {
     requestUrl = settings.url;
     try {
@@ -2253,25 +2269,6 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
         } catch (fbErr: any) {
           console.warn("[SMS-Fallback] Failover to eHub failed:", fbErr.message);
         }
-      } else if (settings.provider === "ehub") {
-        try {
-          const db = await readDBLatest();
-          const mesejiKey = db.uwalemiState?.groupSettings?.smsConfig?.apiKey || 
-            (db.smsGatewaySettings?.provider === "meseji" ? db.smsGatewaySettings.apiKey : "") || 
-            "zs_58f969bdb643ffd53f419df5c85d67c2e61e45f955035b49";
-          if (mesejiKey && mesejiKey.startsWith("zs_")) {
-            console.log(`[SMS-Fallback] eHub auth error. Automatically attempting delivery via configured Meseji.co.tz gateway...`);
-            const fallbackSettings = {
-              provider: "meseji",
-              apiKey: mesejiKey,
-              senderId: "MESEJI",
-              url: "https://meseji.co.tz/api/v1/sms/send"
-            };
-            return await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime);
-          }
-        } catch (fbErr: any) {
-          console.warn("[SMS-Fallback] Failover to Meseji failed:", fbErr.message);
-        }
       }
 
       if (settings.provider === "ehub") {
@@ -2306,7 +2303,7 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
 Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii kuwa "MESEJI" (kwa Meseji.co.tz) au uingie kwenye dashboard ya mtoa huduma wako kuiidhinisha. [Jibu la Gateway: ${sanitizedBody}]`);
     }
     
-    if (response.status === 500 && settings.provider === "meseji") {
+    if (response.status === 500 && (settings.provider === "meseji" || isMeseji || effectiveProvider === "meseji")) {
       let cleanPhone = formattedPhone.replace(/[^0-9]/g, "");
       if (cleanPhone.startsWith("0")) cleanPhone = "255" + cleanPhone.substring(1);
       if (cleanPhone.startsWith("7") || cleanPhone.startsWith("6")) cleanPhone = "255" + cleanPhone;
@@ -2322,7 +2319,7 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
           retryBody.schedule_time = scheduleTime;
         }
         try {
-          const retryRes = await fetch(requestUrl, {
+          const retryRes = await fetch("https://meseji.co.tz/api/v1/sms/send", {
             ...fetchOptions,
             headers: {
               ...fetchOptions.headers,
@@ -2352,7 +2349,51 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
         }
       }
 
-      const errorMsg = `Mtoa huduma (Meseji.co.tz) alirejesha hitilafu (500). Hii mara nyingi husababishwa na: 1) Salio lako la SMS (Credits) limeisha kwenye akaunti ya Meseji.co.tz, au 2) Sender ID uliyoweka ("${senderId}") haijaidhinishwa kwenye mtandao (badilisha Sender ID kuwa "MESEJI" inayokubalika papo hapo), au 3) API Token imekwisha muda. Tafadhali ingia Meseji.co.tz uhakiki salio au weka Sender ID kama "MESEJI". [Jibu la Gateway: ${sanitizedBody}]`;
+      // Try with alternate Meseji API key from DB if available and different
+      try {
+        const freshDb = await readDBLatest();
+        const cand1 = freshDb?.smsGatewaySettings?.apiKey;
+        const cand2 = freshDb?.uwalemiState?.groupSettings?.smsConfig?.apiKey;
+        const altKey = (cand1 && cand1.startsWith("zs_") && cand1 !== apiKey) 
+          ? cand1 
+          : ((cand2 && cand2.startsWith("zs_") && cand2 !== apiKey) ? cand2 : null);
+          
+        if (altKey) {
+          console.log(`[SMS-Meseji] Retrying with secondary Meseji API key...`);
+          const altRes = await fetch("https://meseji.co.tz/api/v1/sms/send", {
+            method: "POST",
+            headers: {
+              "x-api-key": altKey,
+              "Authorization": "Bearer " + altKey,
+              "Accept": "application/json",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              contacts: cleanPhone,
+              message: text,
+              sender_id: "MESEJI"
+            })
+          });
+          const altText = await altRes.text();
+          if (altRes.ok) {
+            let altOk = true;
+            try {
+              const p = JSON.parse(altText);
+              if (p.status === "fail" || p.status === "failed" || p.status === "error" || p.success === false || p.error) {
+                altOk = false;
+              }
+            } catch {}
+            if (altOk) {
+              console.log(`[SMS-Meseji] Secondary key retry succeeded!`);
+              return altText;
+            }
+          }
+        }
+      } catch (altErr) {
+        console.warn("[SMS-Meseji] Alternate key retry error:", altErr);
+      }
+
+      const errorMsg = `Mtoa huduma wa SMS (Meseji.co.tz) amerejesha hitilafu (500: Failed to send SMS). Hii husababishwa na hitilafu ya muda kwenye mtandao wa simu wa mtoa huduma (Carrier Gateway) au ukomo wa SMS kwa siku. Unaweza kutuma ujumbe huu kwa WhatsApp papo hapo au kuwasha Hali ya Majaribio (Simulation).`;
       throw new Error(errorMsg);
     }
     
@@ -2792,6 +2833,26 @@ async function startServer() {
         updated.auditLogs = currentLogs;
       }
 
+      // Ensure uwalemiState groupSettings smsConfig is valid eHub if not simulation
+      if (updated.uwalemiState?.groupSettings?.smsConfig) {
+        const uSms = updated.uwalemiState.groupSettings.smsConfig;
+        if (uSms.provider !== "simulation") {
+          uSms.provider = "ehub";
+          if (!uSms.apiKey || uSms.apiKey.startsWith("zs_")) {
+            uSms.apiKey = "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
+          }
+          if (!uSms.secretKey) {
+            uSms.secretKey = "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
+          }
+          if (uSms.senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !uSms.senderId || uSms.senderId === "UWALEMI" || uSms.senderId === "MESEJI") {
+            uSms.senderId = "19f41b59-19d0-4f98-b8c9-9d5b1ac31308";
+          } else if (uSms.senderId === "EVENT CARD") {
+            uSms.senderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
+          }
+          uSms.baseUrl = "https://sms.ehub.co.tz/api/v1/sms/send";
+        }
+      }
+
       await writeDB(updated);
       res.json({ success: true, message: "State saved successfully", state: updated });
     } catch (e: any) {
@@ -3024,16 +3085,29 @@ async function startServer() {
       const uwalemiState = db.uwalemiState || {};
       const globalSmsSettings = db.smsGatewaySettings || {};
       const configuredSms = uwalemiState.groupSettings?.smsConfig;
+      const isExplicitSimulation = configuredSms?.provider === 'simulation';
       
-      // Inherit or fallback to global SMS settings if not explicitly configured in UWALEMI
-      const resolvedProvider = configuredSms?.provider || (globalSmsSettings?.apiKey?.startsWith('zs_') ? 'meseji' : globalSmsSettings?.provider) || 'meseji';
-      const isMeseji = resolvedProvider === 'meseji' || (configuredSms?.apiKey?.startsWith('zs_')) || (globalSmsSettings?.apiKey?.startsWith('zs_'));
+      // Determine sender ID: resolve to UWALEMI approved UUID or EVENT CARD UUID
+      let resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+      const rawSid = (configuredSms?.senderId || globalSmsSettings?.senderId || '').trim();
+      if (rawSid === '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' || rawSid === 'EVENT CARD') {
+        resolvedSenderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
+      } else {
+        resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+      }
+
+      const activeApiKey = (configuredSms?.apiKey && !configuredSms.apiKey.startsWith('zs_')) 
+        ? configuredSms.apiKey 
+        : ((globalSmsSettings?.apiKey && !globalSmsSettings.apiKey.startsWith('zs_')) ? globalSmsSettings.apiKey : 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD');
+
+      const activeSecretKey = configuredSms?.secretKey || globalSmsSettings?.apiSecret || 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+
       const smsConfig = {
-        provider: isMeseji ? 'meseji' : resolvedProvider,
-        apiKey: configuredSms?.apiKey || globalSmsSettings?.apiKey || 'zs_58f969bdb643ffd53f419df5c85d67c2e61e45f955035b49',
-        senderId: configuredSms?.senderId || (isMeseji ? 'UWALEMI' : globalSmsSettings?.senderId) || 'UWALEMI',
-        baseUrl: configuredSms?.baseUrl || (isMeseji ? 'https://meseji.co.tz/api/v1/sms/send' : (globalSmsSettings?.url || 'https://meseji.co.tz/api/v1/sms/send')),
-        secretKey: configuredSms?.secretKey || globalSmsSettings?.apiSecret || ''
+        provider: isExplicitSimulation ? 'simulation' : 'ehub',
+        apiKey: activeApiKey,
+        senderId: resolvedSenderId,
+        baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
+        secretKey: activeSecretKey
       };
 
       const logs: any[] = [];
@@ -3193,13 +3267,12 @@ async function startServer() {
         } else {
           try {
             // Build the gateway settings object to leverage the resilient sendSMS handler
-            const isMeseji = (smsConfig.provider === 'meseji') || (smsConfig.apiKey && smsConfig.apiKey.startsWith('zs_'));
             const gatewaySettings: any = {
-              provider: isMeseji ? 'meseji' : (smsConfig.provider || 'meseji'),
-              apiKey: smsConfig.apiKey || globalSmsSettings?.apiKey || '',
-              apiSecret: smsConfig.secretKey || globalSmsSettings?.apiSecret || '',
-              senderId: smsConfig.senderId || (isMeseji ? 'UWALEMI' : globalSmsSettings?.senderId) || 'UWALEMI',
-              url: isMeseji ? 'https://meseji.co.tz/api/v1/sms/send' : (smsConfig.baseUrl || globalSmsSettings?.url || 'https://sms.ehub.co.tz/api/v1/sms/send')
+              provider: smsConfig.provider,
+              apiKey: smsConfig.apiKey,
+              apiSecret: smsConfig.secretKey,
+              senderId: smsConfig.senderId,
+              url: smsConfig.baseUrl || 'https://sms.ehub.co.tz/api/v1/sms/send'
             };
 
             let cleanPhone = phone.replace(/[^0-9]/g, '');
@@ -3276,14 +3349,28 @@ async function startServer() {
 
       const globalSmsSettings = db.smsGatewaySettings || {};
       const configuredSms = uwalemiState.groupSettings?.smsConfig;
-      const resolvedProvider = configuredSms?.provider || (globalSmsSettings?.apiKey?.startsWith('zs_') ? 'meseji' : globalSmsSettings?.provider) || 'meseji';
-      const isMeseji = resolvedProvider === 'meseji' || (configuredSms?.apiKey?.startsWith('zs_')) || (globalSmsSettings?.apiKey?.startsWith('zs_'));
+      const isExplicitSimulation = configuredSms?.provider === 'simulation';
+      
+      let resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+      const rawSid = (configuredSms?.senderId || globalSmsSettings?.senderId || '').trim();
+      if (rawSid === '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' || rawSid === 'EVENT CARD') {
+        resolvedSenderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
+      } else {
+        resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+      }
+
+      const activeApiKey = (configuredSms?.apiKey && !configuredSms.apiKey.startsWith('zs_')) 
+        ? configuredSms.apiKey 
+        : ((globalSmsSettings?.apiKey && !globalSmsSettings.apiKey.startsWith('zs_')) ? globalSmsSettings.apiKey : 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD');
+
+      const activeSecretKey = configuredSms?.secretKey || globalSmsSettings?.apiSecret || 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+
       const smsConfig = {
-        provider: isMeseji ? 'meseji' : resolvedProvider,
-        apiKey: configuredSms?.apiKey || globalSmsSettings?.apiKey || 'zs_58f969bdb643ffd53f419df5c85d67c2e61e45f955035b49',
-        senderId: configuredSms?.senderId || (isMeseji ? 'UWALEMI' : globalSmsSettings?.senderId) || 'UWALEMI',
-        baseUrl: configuredSms?.baseUrl || (isMeseji ? 'https://meseji.co.tz/api/v1/sms/send' : (globalSmsSettings?.url || 'https://meseji.co.tz/api/v1/sms/send')),
-        secretKey: configuredSms?.secretKey || globalSmsSettings?.apiSecret || '',
+        provider: isExplicitSimulation ? 'simulation' : 'ehub',
+        apiKey: activeApiKey,
+        senderId: resolvedSenderId,
+        baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
+        secretKey: activeSecretKey,
         autoSendMonthlyReminder: configuredSms?.autoSendMonthlyReminder ?? true
       };
       
@@ -3386,13 +3473,12 @@ Lema, Nguvu Moja!`;
           deliveredCount++;
         } else {
           try {
-            const isMeseji = (smsConfig.provider === 'meseji') || (smsConfig.apiKey && smsConfig.apiKey.startsWith('zs_'));
             const gatewaySettings: any = {
-              provider: isMeseji ? 'meseji' : (smsConfig.provider || 'meseji'),
-              apiKey: smsConfig.apiKey || globalSmsSettings?.apiKey || '',
-              apiSecret: smsConfig.secretKey || globalSmsSettings?.apiSecret || '',
-              senderId: smsConfig.senderId || (isMeseji ? 'UWALEMI' : globalSmsSettings?.senderId) || 'UWALEMI',
-              url: isMeseji ? 'https://meseji.co.tz/api/v1/sms/send' : (smsConfig.baseUrl || globalSmsSettings?.url || 'https://sms.ehub.co.tz/api/v1/sms/send')
+              provider: smsConfig.provider,
+              apiKey: smsConfig.apiKey,
+              apiSecret: smsConfig.secretKey,
+              senderId: smsConfig.senderId,
+              url: smsConfig.baseUrl || 'https://sms.ehub.co.tz/api/v1/sms/send'
             };
 
             let cleanPhone = phone.replace(/[^0-9]/g, '');
@@ -3858,9 +3944,25 @@ Lema, Nguvu Moja!`;
       // Auto-approve any configured sender ID so that users are never blocked in the UI
       if (settings.senderIdStatus !== "approved") {
         settings.senderIdStatus = "approved";
-        db.smsGatewaySettings = settings;
-        await writeDB(db);
       }
+
+      if (settings.provider === "ehub") {
+        if (settings.senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !settings.senderId || settings.senderId === "EVENT CARD") {
+          settings.senderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
+        }
+        if (!settings.apiKey || settings.apiKey.startsWith("zs_")) {
+          settings.apiKey = "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
+        }
+        if (!settings.apiSecret) {
+          settings.apiSecret = "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
+        }
+        if (!settings.url) {
+          settings.url = "https://sms.ehub.co.tz/api/v1/sms/send";
+        }
+      }
+
+      db.smsGatewaySettings = settings;
+      await writeDB(db);
       
       res.json(settings);
     } catch (e: any) {
@@ -3899,6 +4001,20 @@ Lema, Nguvu Moja!`;
           }
         } catch (e) {
           // ignore json parse error
+        }
+      }
+
+      if (newSettings.provider === 'ehub') {
+        if (newSettings.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1' || !newSettings.senderId || newSettings.senderId === 'EVENT CARD') {
+          newSettings.senderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
+        } else if (newSettings.senderId === 'UWALEMI') {
+          newSettings.senderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+        }
+        if (!newSettings.apiKey || newSettings.apiKey.startsWith('zs_')) {
+          newSettings.apiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+        }
+        if (!newSettings.apiSecret) {
+          newSettings.apiSecret = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
         }
       }
 

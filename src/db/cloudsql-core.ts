@@ -663,12 +663,24 @@ export async function fetchFullStateFromDB(): Promise<any> {
     }
 
     const firstSms = sqlSmsSettings.find(s => s.id === "settings") || sqlSmsSettings[0];
+    let resolvedSenderId = firstSms?.senderId || "";
+    if (resolvedSenderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || (firstSms?.provider === "ehub" && resolvedSenderId === "EVENT CARD")) {
+      resolvedSenderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
+    }
+    const isEhub = firstSms?.provider === "ehub";
+    const resolvedApiKey = (isEhub && (!firstSms?.apiKey || firstSms.apiKey.startsWith("zs_")))
+      ? "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD"
+      : (firstSms?.apiKey || "");
+    const resolvedApiSecret = (isEhub && !firstSms?.apiSecret)
+      ? "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf"
+      : (firstSms?.apiSecret || "");
+
     const smsGatewaySettings = firstSms ? {
       provider: firstSms.provider || "simulation",
-      url: firstSms.url || "",
-      apiKey: firstSms.apiKey || "",
-      apiSecret: firstSms.apiSecret || "",
-      senderId: firstSms.senderId || "",
+      url: firstSms.url || (isEhub ? "https://sms.ehub.co.tz/api/v1/sms/send" : ""),
+      apiKey: resolvedApiKey,
+      apiSecret: resolvedApiSecret,
+      senderId: resolvedSenderId,
       senderIdStatus: firstSms.senderIdStatus || "approved",
       whatsappUrl: firstSms.whatsappUrl || "",
       customHeaders: firstSms.customHeaders || "{}",
@@ -728,9 +740,42 @@ export async function fetchFullStateFromDB(): Promise<any> {
       activeEventId: "",
     };
 
-    const uwalemiState = (sqlUwalemi && sqlUwalemi.length > 0 && sqlUwalemi[0].data) 
-      ? sqlUwalemi[0].data 
+    const rawUwalemiState = (sqlUwalemi && sqlUwalemi.length > 0 && sqlUwalemi[0].data) 
+      ? (sqlUwalemi[0].data as any)
       : null;
+
+    let uwalemiState = rawUwalemiState;
+    if (uwalemiState && typeof uwalemiState === "object") {
+      if (!uwalemiState.groupSettings) {
+        uwalemiState.groupSettings = {};
+      }
+      const uSms = uwalemiState.groupSettings.smsConfig;
+      if (!uSms || uSms.provider === "meseji" || !uSms.provider || (uSms.apiKey && uSms.apiKey.startsWith("zs_")) || !uSms.apiKey) {
+        uwalemiState.groupSettings.smsConfig = {
+          provider: "ehub",
+          apiKey: "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD",
+          secretKey: "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf",
+          senderId: "19f41b59-19d0-4f98-b8c9-9d5b1ac31308",
+          baseUrl: "https://sms.ehub.co.tz/api/v1/sms/send",
+          autoSendReceipts: uSms?.autoSendReceipts !== undefined ? uSms.autoSendReceipts : true,
+          autoSendMeetingAlerts: uSms?.autoSendMeetingAlerts !== undefined ? uSms.autoSendMeetingAlerts : false,
+          autoSendMonthlyReminder: uSms?.autoSendMonthlyReminder !== undefined ? uSms.autoSendMonthlyReminder : false,
+        };
+      } else if (uSms.provider === "ehub") {
+        if (!uSms.apiKey || uSms.apiKey.startsWith("zs_")) {
+          uSms.apiKey = "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
+        }
+        if (!uSms.secretKey) {
+          uSms.secretKey = "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
+        }
+        if (uSms.senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !uSms.senderId || uSms.senderId === "UWALEMI" || uSms.senderId === "EVENT CARD") {
+          uSms.senderId = "19f41b59-19d0-4f98-b8c9-9d5b1ac31308";
+        }
+        if (!uSms.baseUrl) {
+          uSms.baseUrl = "https://sms.ehub.co.tz/api/v1/sms/send";
+        }
+      }
+    }
 
     return {
       eventsList,
@@ -1208,9 +1253,23 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
 
     // 3.12. Save UWALEMI Community State to PostgreSQL
     if (data.uwalemiState && typeof data.uwalemiState === "object") {
+      const uState = { ...data.uwalemiState };
+      if (uState.groupSettings && typeof uState.groupSettings === "object") {
+        const uSms = uState.groupSettings.smsConfig;
+        if (uSms && (uSms.provider === "ehub" || !uSms.provider || uSms.provider === "meseji" || (uSms.apiKey && uSms.apiKey.startsWith("zs_")))) {
+          uState.groupSettings.smsConfig = {
+            ...uSms,
+            provider: "ehub",
+            apiKey: (!uSms.apiKey || uSms.apiKey.startsWith("zs_")) ? "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD" : uSms.apiKey,
+            secretKey: (!uSms.secretKey) ? "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf" : uSms.secretKey,
+            senderId: (uSms.senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !uSms.senderId || uSms.senderId === "UWALEMI" || uSms.senderId === "EVENT CARD") ? "19f41b59-19d0-4f98-b8c9-9d5b1ac31308" : uSms.senderId,
+            baseUrl: uSms.baseUrl || "https://sms.ehub.co.tz/api/v1/sms/send"
+          };
+        }
+      }
       await db.insert(schema.uwalemiStateTable).values({
         id: "state",
-        data: data.uwalemiState,
+        data: uState,
       }).onConflictDoUpdate({
         target: schema.uwalemiStateTable.id,
         set: {

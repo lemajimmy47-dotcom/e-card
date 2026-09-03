@@ -36,7 +36,8 @@ import {
   Scale,
   CreditCard,
   Layers,
-  ShieldCheck
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 
 interface Props {
@@ -101,17 +102,59 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   }, [initialTemplate, initialRecipients]);
 
   // Gateway Config State
-  const [gatewayConfig, setGatewayConfig] = useState<UwalemiSmsConfig>(
-    state.groupSettings?.smsConfig || {
-      provider: 'simulation',
-      apiKey: '',
-      secretKey: '',
-      senderId: 'UWALEMI',
-      autoSendReceipts: true,
-      autoSendMeetingAlerts: true,
-      autoSendMonthlyReminder: true
+  const [gatewayConfig, setGatewayConfig] = useState<UwalemiSmsConfig>(() => {
+    const existing = state.groupSettings?.smsConfig;
+    if (existing && existing.provider === 'ehub' && existing.apiKey && !existing.apiKey.startsWith('zs_')) {
+      return {
+        ...existing,
+        senderId: (existing.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1' || !existing.senderId || existing.senderId === 'UWALEMI' || existing.senderId === 'MESEJI')
+          ? '19f41b59-19d0-4f98-b8c9-9d5b1ac31308'
+          : existing.senderId,
+        baseUrl: existing.baseUrl || 'https://sms.ehub.co.tz/api/v1/sms/send'
+      };
     }
-  );
+    // Default directly to active eHub configuration
+    return {
+      provider: 'ehub',
+      apiKey: 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD',
+      secretKey: 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf',
+      senderId: '19f41b59-19d0-4f98-b8c9-9d5b1ac31308',
+      baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
+      autoSendReceipts: existing?.autoSendReceipts !== undefined ? existing.autoSendReceipts : true,
+      autoSendMeetingAlerts: existing?.autoSendMeetingAlerts !== undefined ? existing.autoSendMeetingAlerts : true,
+      autoSendMonthlyReminder: existing?.autoSendMonthlyReminder !== undefined ? existing.autoSendMonthlyReminder : true
+    };
+  });
+
+  // Auto-sync outdated or invalid Meseji credentials to active eHub on mount
+  useEffect(() => {
+    const current = state.groupSettings?.smsConfig;
+    const isOutdated = !current || 
+      current.provider === 'meseji' || 
+      (current.apiKey && current.apiKey.startsWith('zs_')) || 
+      !current.apiKey || 
+      (current.provider === 'ehub' && (current.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1' || current.senderId === 'UWALEMI' || current.senderId === 'MESEJI'));
+
+    if (isOutdated) {
+      const fixedConfig: UwalemiSmsConfig = {
+        provider: 'ehub',
+        apiKey: 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD',
+        secretKey: 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf',
+        senderId: '19f41b59-19d0-4f98-b8c9-9d5b1ac31308',
+        baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
+        autoSendReceipts: current?.autoSendReceipts !== undefined ? current.autoSendReceipts : true,
+        autoSendMeetingAlerts: current?.autoSendMeetingAlerts !== undefined ? current.autoSendMeetingAlerts : true,
+        autoSendMonthlyReminder: current?.autoSendMonthlyReminder !== undefined ? current.autoSendMonthlyReminder : true
+      };
+      setGatewayConfig(fixedConfig);
+      const updatedSettings = {
+        ...state.groupSettings,
+        smsConfig: fixedConfig
+      };
+      onSaveState({ ...state, groupSettings: updatedSettings }).catch(() => {});
+      setTimeout(() => handleCheckBalance(), 500);
+    }
+  }, []);
 
   const [isTestingReminders, setIsTestingReminders] = useState(false);
   const [reminderTestResult, setReminderTestResult] = useState<{
@@ -139,7 +182,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     try {
       const q = new URLSearchParams({
         source: 'uwalemi',
-        provider: gatewayConfig.provider || 'meseji',
+        provider: gatewayConfig.provider || 'ehub',
         apiKey: gatewayConfig.apiKey || '',
         secretKey: gatewayConfig.secretKey || '',
         senderId: gatewayConfig.senderId || ''
@@ -163,43 +206,78 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     }
   };
 
+  const handleSetEhub = async (targetSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308') => {
+    try {
+      const updatedConfig: UwalemiSmsConfig = {
+        ...gatewayConfig,
+        provider: 'ehub',
+        apiKey: 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD',
+        secretKey: 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf',
+        senderId: targetSenderId,
+        baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send'
+      };
+      setGatewayConfig(updatedConfig);
+      const updatedSettings = {
+        ...state.groupSettings,
+        smsConfig: updatedConfig
+      };
+      const updatedState = { ...state, groupSettings: updatedSettings };
+      await onSaveState(updatedState);
+      setSendResult(null);
+      setTimeout(() => handleCheckBalance(), 300);
+      return updatedConfig;
+    } catch (e: any) {
+      console.warn("handleSetEhub failed:", e);
+    }
+  };
+
   const handleSyncGlobalEhub = async () => {
     try {
       const res = await fetch('/api/state');
+      let apiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+      let secretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+      let senderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+      let url = 'https://sms.ehub.co.tz/api/v1/sms/send';
+
       if (res.ok) {
         const fullState = await res.json();
         const globalSms = fullState.smsGatewaySettings;
-        if (globalSms && globalSms.provider === 'ehub' && globalSms.apiKey) {
-          const updatedConfig: UwalemiSmsConfig = {
-            ...gatewayConfig,
-            provider: 'ehub',
-            apiKey: globalSms.apiKey,
-            secretKey: globalSms.apiSecret || '',
-            senderId: globalSms.senderId || '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397',
-            baseUrl: globalSms.url || 'https://sms.ehub.co.tz/api/v1/sms/send'
-          };
-          setGatewayConfig(updatedConfig);
-          const updatedSettings = {
-            ...state.groupSettings,
-            smsConfig: updatedConfig
-          };
-          const updatedState = { ...state, groupSettings: updatedSettings };
-          await onSaveState(updatedState);
-          setSendResult(null);
-          alert('Mipangilio ya eHub SMS (yenye salio lililothibitishwa) imesawazishwa na kuhifadhiwa kikamilifu! Sasa unaweza kutuma SMS kwa wajumbe.');
-          setTimeout(() => handleCheckBalance(), 300);
-          return;
+        if (globalSms && globalSms.provider === 'ehub' && globalSms.apiKey && !globalSms.apiKey.startsWith('zs_')) {
+          apiKey = globalSms.apiKey;
+          secretKey = globalSms.apiSecret || secretKey;
+          url = globalSms.url || url;
         }
       }
-      alert('Hakuna mipangilio ya eHub iliyopatikana kwenye mfumo mkuu.');
+
+      const updatedConfig: UwalemiSmsConfig = {
+        ...gatewayConfig,
+        provider: 'ehub',
+        apiKey,
+        secretKey,
+        senderId,
+        baseUrl: url
+      };
+      setGatewayConfig(updatedConfig);
+      const updatedSettings = {
+        ...state.groupSettings,
+        smsConfig: updatedConfig
+      };
+      const updatedState = { ...state, groupSettings: updatedSettings };
+      await onSaveState(updatedState);
+      setSendResult(null);
+      alert('Mipangilio ya eHub SMS (yenye salio lililothibitishwa) imesawazishwa na kuhifadhiwa kikamilifu kwa ajili ya UWALEMI!');
+      setTimeout(() => handleCheckBalance(), 300);
     } catch (e: any) {
       alert('Hitilafu: ' + (e.message || e));
     }
   };
 
-  const handleQuickFixSenderId = async (newSenderId = 'MESEJI') => {
+  const handleQuickFixSenderId = async (newSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308') => {
     const updatedConfig: UwalemiSmsConfig = {
       ...gatewayConfig,
+      provider: 'ehub',
+      apiKey: (!gatewayConfig.apiKey || gatewayConfig.apiKey.startsWith('zs_')) ? 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD' : gatewayConfig.apiKey,
+      secretKey: (!gatewayConfig.secretKey) ? 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf' : gatewayConfig.secretKey,
       senderId: newSenderId
     };
     setGatewayConfig(updatedConfig);
@@ -210,7 +288,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     const updatedState = { ...state, groupSettings: updatedSettings };
     await onSaveState(updatedState);
     setSendResult(null);
-    alert(`Sender ID imebadilishwa kuwa "${newSenderId}" na kuhifadhiwa! Sasa unaweza kujaribu kutuma tena ujumbe.`);
+    alert(`Sender ID ya eHub imewekwa na kuhifadhiwa! Sasa unaweza kutuma ujumbe.`);
   };
 
   const handleSwitchToSimulation = async () => {
@@ -1052,16 +1130,14 @@ Lema, Nguvu Moja!`);
                 {!sendResult.success && (
                   <div className="mt-2 pt-3 border-t border-rose-900/40 flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-slate-400 font-semibold">Ufumbuzi wa Haraka:</span>
-                    {gatewayConfig.senderId !== 'MESEJI' && (
-                      <button
-                        type="button"
-                        onClick={() => handleQuickFixSenderId('MESEJI')}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white font-medium flex items-center gap-1.5 transition-all cursor-pointer shadow"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Weka Sender ID kuwa "MESEJI"
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleSetEhub('19f41b59-19d0-4f98-b8c9-9d5b1ac31308')}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-1.5 transition-all cursor-pointer shadow"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-300" />
+                      Weka eHub SMS (Salio Linalofanya Kazi)
+                    </button>
                     <button
                       type="button"
                       onClick={handleSwitchToSimulation}
@@ -1432,24 +1508,26 @@ Lema, Nguvu Moja!`);
           </div>
 
           {/* Quick sync suggestion banner if using Meseji with error or wanting eHub */}
-          <div className="p-3.5 bg-indigo-950/40 border border-indigo-800/60 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-start gap-2.5 text-indigo-200">
-              <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+          <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/60 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-start gap-2.5 text-emerald-200">
+              <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold text-white">Je, unataka kutumia eHub SMS (Yenye salio la SMS 52 tayari)?</span>
-                <p className="text-[11px] text-indigo-300/90 mt-0.5">
-                  Akaunti yako ya eHub SMS tayari imethibitishwa na inafanya kazi kikamilifu. Bofya kitufe hiki kusawazisha papo hapo.
+                <span className="font-semibold text-white">eHub SMS Tanzania (Ina salio na inafanya kazi)</span>
+                <p className="text-[11px] text-emerald-300/90 mt-0.5">
+                  Akaunti ya eHub SMS yenye Sender ID ya "UWALEMI" imethibitishwa na inatuma ujumbe moja kwa moja.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleSyncGlobalEhub}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow shrink-0"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Sawazisha eHub SMS Sasa
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleSetEhub('19f41b59-19d0-4f98-b8c9-9d5b1ac31308')}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow shrink-0"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Weka eHub (UWALEMI)
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleSaveGateway} className="space-y-4 text-xs">
@@ -1472,21 +1550,36 @@ Lema, Nguvu Moja!`);
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-slate-300 font-semibold">Jina la Mtumaji (Sender ID):</label>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'UWALEMI' })}
-                    className="text-[10px] text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors font-bold"
-                  >
-                    Weka "UWALEMI" (Rasmi)
-                  </button>
-                  {gatewayConfig.provider === 'meseji' && (
+                  {gatewayConfig.provider === 'ehub' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setGatewayConfig({ 
+                          ...gatewayConfig, 
+                          senderId: '19f41b59-19d0-4f98-b8c9-9d5b1ac31308' 
+                        })}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors font-bold"
+                      >
+                        Weka "UWALEMI"
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGatewayConfig({ 
+                          ...gatewayConfig, 
+                          senderId: '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' 
+                        })}
+                        className="text-[10px] text-indigo-300 hover:text-white bg-indigo-950/60 border border-indigo-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      >
+                        Weka "EVENT CARD"
+                      </button>
+                    </>
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'MESEJI' })}
-                      className="text-[10px] text-slate-400 hover:text-white bg-slate-800/80 px-2 py-0.5 rounded cursor-pointer transition-colors"
-                      title="Chagua MESEJI"
+                      onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'UWALEMI' })}
+                      className="text-[10px] text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors font-bold"
                     >
-                      Weka "MESEJI"
+                      Weka "UWALEMI"
                     </button>
                   )}
                 </div>
@@ -1495,12 +1588,17 @@ Lema, Nguvu Moja!`);
                 type="text"
                 value={gatewayConfig.senderId || ''}
                 onChange={(e) => setGatewayConfig({ ...gatewayConfig, senderId: e.target.value })}
-                placeholder={gatewayConfig.provider === 'ehub' ? 'Sender ID au ID ya eHub' : 'mf. MESEJI au UWALEMI'}
+                placeholder={gatewayConfig.provider === 'ehub' ? 'Sender ID UUID ya eHub (19f41b59-19d0-4f98-b8c9-9d5b1ac31308)' : 'mf. UWALEMI'}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
               />
+              {gatewayConfig.provider === 'ehub' && (
+                <p className="text-[11px] text-emerald-400/90 mt-1">
+                  ✓ <strong>Sender ID ya UWALEMI (eHub):</strong> <span className="font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 text-white">19f41b59-19d0-4f98-b8c9-9d5b1ac31308</span> (Imeidhinishwa rasmi na inafanya kazi).
+                </p>
+              )}
               {gatewayConfig.provider === 'meseji' && (
                 <p className="text-[11px] text-slate-400 mt-1">
-                  💡 <strong>Kidokezo cha Meseji.co.tz:</strong> Tumia Sender ID ya <span className="font-mono text-emerald-400 font-bold">MESEJI</span> isipokuwa uwe umeshasajili na kuidhinishiwa jina lingine (kama UWALEMI) kwenye dashboard ya Meseji. Kutumia jina ambalo halijaidhinishwa husababisha hitilafu (500).
+                  💡 <strong>Kidokezo cha Meseji.co.tz:</strong> Tumia Sender ID ya <span className="font-mono text-emerald-400 font-bold">MESEJI</span> isipokuwa uwe umeshasajili na kuidhinishiwa jina lingine (kama UWALEMI) kwenye dashboard ya Meseji.
                 </p>
               )}
             </div>
@@ -1579,7 +1677,7 @@ Lema, Nguvu Moja!`);
                           className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          Tumia eHub SMS (Salio: 52 SMS)
+                          Tumia eHub SMS (Salio Lililothibitishwa)
                         </button>
                         <button
                           type="button"

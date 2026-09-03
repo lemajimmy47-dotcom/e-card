@@ -158,6 +158,9 @@ export default function SMSGatewayConfig() {
       .then(res => res.json())
       .then(data => {
         if (data && data.provider) {
+          if (data.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1') {
+            data.senderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
+          }
           setGatewaySettings(prev => ({ ...prev, ...data }));
           
           // Deserialize WhatsApp Cloud API settings if packed as generic JSON
@@ -473,6 +476,22 @@ export default function SMSGatewayConfig() {
               )}
               {gatewaySettings.provider === 'ehub' && (
                 <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' })}
+                      className="text-[10px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/30 transition-all font-semibold cursor-pointer"
+                    >
+                      ✓ EVENT CARD (eHub)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: '19f41b59-19d0-4f98-b8c9-9d5b1ac31308' })}
+                      className="text-[10px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/30 transition-all font-semibold cursor-pointer"
+                    >
+                      ✓ UWALEMI (eHub)
+                    </button>
+                  </div>
                   <button
                     onClick={fetchEhubIds}
                     disabled={isFetchingIds || !gatewaySettings.apiKey || !gatewaySettings.apiSecret}

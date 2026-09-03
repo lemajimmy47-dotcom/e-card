@@ -960,11 +960,13 @@ Karibu sana!`);
   };
 
   const [isDispatching, setIsDispatching] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const handleSendSingle = (guestId: string, channel: 'sms' | 'whatsapp') => {
     console.log(`[Diagnostic] Single send triggered: guestId=${guestId}, channel=${channel}`);
     const target = guests.find(g => g.id === guestId);
     if (target) {
+      setModalError(null);
       setActiveSendTarget({ guest: target, channel });
       setCopySuccess(false);
     } else {
@@ -1201,9 +1203,14 @@ Karibu sana!`);
       setActiveSendTarget(null);
     } catch (err: any) {
       console.error("[Diagnostic] Send Failure:", err);
-      alert("Hitilafu katika utumaji: " + err.message);
+      const errMsg = err.message || "Hitilafu katika utumaji wa ujumbe.";
+      setModalError(errMsg);
+      setToast({
+        message: errMsg,
+        type: 'error'
+      });
       setSendLogs(prev => [
-        `[${new Date().toLocaleTimeString()}] ✗ Imeshindwa kwa mgeni: ${target.name}. Sababu: ${err.message}`,
+        `[${new Date().toLocaleTimeString()}] ✗ Imeshindwa kwa mgeni: ${target.name}. Sababu: ${errMsg}`,
         ...prev
       ]);
     } finally {
@@ -2620,6 +2627,45 @@ Karibu sana!`);
                   </p>
                 )}
               </div>
+
+              {/* Error Notice if Gateway Failed */}
+              {modalError && (
+                <div className="p-3.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex flex-col gap-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                    <div>
+                      <div className="font-bold text-[13px] text-rose-200">{isEn ? 'Gateway Dispatch Notice:' : 'Hitilafu ya Lango la Ujumbe:'}</div>
+                      <div className="text-[11px] text-slate-300 mt-1 leading-relaxed">{modalError}</div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-rose-500/20">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalError(null);
+                        handleConfirmSent(activeSendTarget.guest.id, 'whatsapp');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] flex items-center gap-1.5 cursor-pointer transition shadow"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      {isEn ? 'Send via WhatsApp (Meta API)' : 'Tuma kwa WhatsApp (Meta API)'}
+                    </button>
+                    <a
+                      href={`https://wa.me/${cleanPhoneForWhatsapp(activeSendTarget.guest.phone)}?text=${encodeURIComponent(getGuestMessageText(activeSendTarget.guest, false, true))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => {
+                        setModalError(null);
+                        handleMarkManualSent(activeSendTarget.guest.id, 'whatsapp');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer border border-slate-700 transition"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+                      {isEn ? 'Open Direct WhatsApp Web' : 'Fungua WhatsApp ya Mgeni'}
+                    </a>
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex flex-col space-y-3 pt-2">
