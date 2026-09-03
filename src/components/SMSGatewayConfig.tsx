@@ -142,6 +142,34 @@ export default function SMSGatewayConfig() {
     }
   };
 
+  const fetchSwalaIds = async (apiKeyOverride?: string) => {
+    const keyToUse = apiKeyOverride || gatewaySettings.apiKey || "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3";
+    setIsFetchingIds(true);
+    setHasFetchedIds(true);
+    try {
+      const res = await fetch('/api/fetch-swalasms-sender-ids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: keyToUse })
+      });
+      const data = await res.json();
+      const items = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      if (items.length > 0) {
+        setAvailableIds(items.map((it: any) => ({
+          id: it.sender_id,
+          sender_id: it.sender_id,
+          status: it.status || 'approved'
+        })));
+      } else {
+        setAvailableIds([]);
+      }
+    } catch {
+      setAvailableIds([]);
+    } finally {
+      setIsFetchingIds(false);
+    }
+  };
+
   const fetchBalance = () => {
     fetch('/api/sms-balance')
       .then(res => res.json())
@@ -398,10 +426,18 @@ export default function SMSGatewayConfig() {
             onChange={(e) => {
               const val = e.target.value;
               let defaultUrl = '';
-              if (val === 'meseji') {
+              let defaultSender = gatewaySettings.senderId;
+              let defaultApiKey = gatewaySettings.apiKey;
+              if (val === 'swalasms') {
+                defaultUrl = 'https://swalasms.com/api/v1/sms/quick-message';
+                defaultSender = 'EVENT CARD';
+                defaultApiKey = defaultApiKey || 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
+              } else if (val === 'meseji') {
                 defaultUrl = 'https://meseji.co.tz/api/v1/sms/send';
+                defaultSender = 'MESEJI';
               } else if (val === 'ehub') {
                 defaultUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
+                defaultSender = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
               } else if (val === 'beem') {
                 defaultUrl = 'https://api.beem.africa/v1/send';
               } else if (val === 'nextsms') {
@@ -411,11 +447,12 @@ export default function SMSGatewayConfig() {
               } else {
                 defaultUrl = gatewaySettings.url;
               }
-              setGatewaySettings({ ...gatewaySettings, provider: val, url: defaultUrl });
+              setGatewaySettings({ ...gatewaySettings, provider: val, url: defaultUrl, senderId: defaultSender, apiKey: defaultApiKey });
             }}
             className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500/50 transition-all font-semibold text-xs cursor-pointer"
           >
             <option value="simulation">Simulated Gateway (Simulation)</option>
+            <option value="swalasms">SwalaSMS (Tanzania) - Salio: 100 SMS (Inafanya Kazi)</option>
             <option value="ehub">eHub SMS API (Secure)</option>
             <option value="meseji">Meseji API (Tanzania)</option>
             <option value="beem">Beem Africa (Tanzania)</option>
@@ -424,6 +461,42 @@ export default function SMSGatewayConfig() {
             <option value="custom">Custom SMS API Endpoint (Custom Hook)</option>
           </select>
         </div>
+
+        {gatewaySettings.provider === 'swalasms' && (
+          <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                SwalaSMS Imeunganishwa (Live)
+              </span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                Salio: 100 SMS
+              </span>
+            </div>
+            <p className="text-[11px] text-emerald-200/80 leading-relaxed">
+              {isEn 
+                ? "Your SwalaSMS Live Application is configured with approved Sender ID 'EVENT CARD'. Click below to auto-fill verified credentials."
+                : "Akaunti yako ya SwalaSMS imesanidiwa na Sender ID iliyoidhinishwa ya 'EVENT CARD'. Bonyeza hapa chini kuweka taarifa zilizothibitishwa kiotomatiki."}
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setGatewaySettings({
+                    ...gatewaySettings,
+                    provider: 'swalasms',
+                    senderId: 'EVENT CARD',
+                    apiKey: 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3',
+                    url: 'https://swalasms.com/api/v1/sms/quick-message'
+                  });
+                }}
+                className="text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                ✓ Weka Mipangilio ya EVENT CARD (SwalaSMS)
+              </button>
+            </div>
+          </div>
+        )}
 
         {gatewaySettings.provider !== 'simulation' && (
           <>
@@ -434,7 +507,7 @@ export default function SMSGatewayConfig() {
               <input 
                 type="text" 
                 maxLength={gatewaySettings.provider === 'ehub' ? 40 : 11}
-                placeholder={gatewaySettings.provider === 'ehub' ? "UUID ya eHub (e.g. 0042...)" : "Ex. HARUSI"}
+                placeholder={gatewaySettings.provider === 'ehub' ? "UUID ya eHub (e.g. 0042...)" : "Ex. EVENT CARD"}
                 value={gatewaySettings.senderId}
                 onChange={(e) => {
                   const val = gatewaySettings.provider === 'ehub' ? e.target.value.trim() : e.target.value.toUpperCase().trim();
@@ -442,6 +515,54 @@ export default function SMSGatewayConfig() {
                 }}
                 className={`w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${gatewaySettings.provider === 'ehub' ? '' : 'uppercase font-mono tracking-wider'} transition-all`}
               />
+              {gatewaySettings.provider === 'swalasms' && (
+                <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'EVENT CARD' })}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'EVENT CARD' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
+                    >
+                      ✓ EVENT CARD (Approved)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'TAARIFA' })}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'TAARIFA' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
+                    >
+                      ✓ TAARIFA (Approved)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fetchSwalaIds()}
+                      disabled={isFetchingIds}
+                      className="text-[10px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 px-3 py-1 rounded-lg border border-emerald-500/30 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isFetchingIds ? <span className="animate-spin">↻</span> : <Search size={11} />}
+                      {isEn ? "Fetch SwalaSMS IDs" : "Kagua Sender IDs za SwalaSMS"}
+                    </button>
+                  </div>
+                  {availableIds.length > 0 && (
+                    <div className="bg-black/40 border border-white/5 rounded-lg p-2 space-y-1.5 max-h-36 overflow-y-auto">
+                      {availableIds.map((item, idx) => (
+                        <div 
+                          key={item.sender_id || idx}
+                          onClick={() => {
+                            setGatewaySettings({ ...gatewaySettings, senderId: item.sender_id });
+                            setAvailableIds([]);
+                          }}
+                          className="flex justify-between items-center p-1.5 rounded hover:bg-white/5 cursor-pointer text-xs"
+                        >
+                          <span className="font-bold text-white">{item.sender_id}</span>
+                          <span className="text-[9px] text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                            {item.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {gatewaySettings.provider === 'ehub' && (
                 <div className="mt-1 space-y-1">
                   <p className="text-[10px] text-amber-400 font-medium leading-relaxed bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">

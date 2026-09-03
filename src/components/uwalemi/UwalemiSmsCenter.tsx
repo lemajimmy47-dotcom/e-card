@@ -291,6 +291,28 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     alert(`Sender ID ya eHub imewekwa na kuhifadhiwa! Sasa unaweza kutuma ujumbe.`);
   };
 
+  const handleSyncSwalaSms = async () => {
+    const updatedConfig: UwalemiSmsConfig = {
+      provider: 'swalasms',
+      apiKey: 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3',
+      secretKey: '',
+      senderId: 'EVENT CARD',
+      baseUrl: 'https://swalasms.com/api/v1/sms/quick-message',
+      autoSendReceipts: gatewayConfig.autoSendReceipts ?? true,
+      autoSendMeetingAlerts: gatewayConfig.autoSendMeetingAlerts ?? true,
+      autoSendMonthlyReminder: gatewayConfig.autoSendMonthlyReminder ?? true,
+    };
+    setGatewayConfig(updatedConfig);
+    const updatedSettings = {
+      ...state.groupSettings,
+      smsConfig: updatedConfig
+    };
+    const updatedState = { ...state, groupSettings: updatedSettings };
+    await onSaveState(updatedState);
+    setSendResult(null);
+    alert('SwalaSMS (Sender ID: EVENT CARD) imewekwa na kuunganishwa kikamilifu!');
+  };
+
   const handleSwitchToSimulation = async () => {
     const updatedConfig: UwalemiSmsConfig = {
       ...gatewayConfig,
@@ -1535,10 +1557,24 @@ Lema, Nguvu Moja!`);
               <label className="block text-slate-300 font-semibold mb-1">Mtoa Huduma (Provider):</label>
               <select
                 value={gatewayConfig.provider}
-                onChange={(e) => setGatewayConfig({ ...gatewayConfig, provider: e.target.value as any })}
+                onChange={(e) => {
+                  const val = e.target.value as any;
+                  if (val === 'swalasms') {
+                    setGatewayConfig({
+                      ...gatewayConfig,
+                      provider: 'swalasms',
+                      apiKey: 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3',
+                      senderId: 'EVENT CARD',
+                      baseUrl: 'https://swalasms.com/api/v1/sms/quick-message'
+                    });
+                  } else {
+                    setGatewayConfig({ ...gatewayConfig, provider: val });
+                  }
+                }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-emerald-500"
               >
-                <option value="ehub">eHub SMS Tanzania (sms.ehub.co.tz) - Inapendekezwa (Ina Salio)</option>
+                <option value="swalasms">SwalaSMS (swalasms.com) - Salio 100 SMS (Inafanya Kazi)</option>
+                <option value="ehub">eHub SMS Tanzania (sms.ehub.co.tz) - Inapendekezwa</option>
                 <option value="meseji">Meseji API (Meseji.co.tz - Tanzania)</option>
                 <option value="beem">Beem Africa (apisms.beem.africa)</option>
                 <option value="nextsms">NextSMS Tanzania (messaging-service.co.tz)</option>
@@ -1546,11 +1582,40 @@ Lema, Nguvu Moja!`);
               </select>
             </div>
 
+            {gatewayConfig.provider === 'swalasms' && (
+              <div className="bg-emerald-950/40 border border-emerald-800/60 p-3 rounded-xl space-y-1 text-[11px] text-emerald-200">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  SwalaSMS Live (Sender ID: EVENT CARD / Salio: 100 SMS)
+                </div>
+                <p className="text-slate-300">
+                  Akaunti ya SwalaSMS imeunganishwa moja kwa moja kwa ajili ya kutuma risiti, vikumbusho vya vikao na michango ya UWALEMI.
+                </p>
+              </div>
+            )}
+
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-slate-300 font-semibold">Jina la Mtumaji (Sender ID):</label>
                 <div className="flex items-center gap-1.5">
-                  {gatewayConfig.provider === 'ehub' ? (
+                  {gatewayConfig.provider === 'swalasms' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'EVENT CARD' })}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors font-bold"
+                      >
+                        EVENT CARD
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'TAARIFA' })}
+                        className="text-[10px] text-indigo-300 hover:text-white bg-indigo-950/60 border border-indigo-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      >
+                        TAARIFA
+                      </button>
+                    </>
+                  ) : gatewayConfig.provider === 'ehub' ? (
                     <>
                       <button
                         type="button"

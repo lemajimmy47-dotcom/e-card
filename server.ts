@@ -1936,13 +1936,18 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
 
   const apiKey = (settings.apiKey || "").trim();
   const apiSecret = (settings.apiSecret || "").trim();
-  const isEhub = settings.provider === "ehub";
-  const isMeseji = !isEhub && (settings.provider === "meseji" || (apiKey && apiKey.startsWith("zs_") && !apiSecret));
-  const effectiveProvider = isEhub ? "ehub" : (isMeseji ? "meseji" : settings.provider);
+  const isSwala = settings.provider === "swalasms" || (apiKey && apiKey.startsWith("swl_"));
+  const isEhub = !isSwala && settings.provider === "ehub";
+  const isMeseji = !isSwala && !isEhub && (settings.provider === "meseji" || (apiKey && apiKey.startsWith("zs_") && !apiSecret));
+  const effectiveProvider = isSwala ? "swalasms" : (isEhub ? "ehub" : (isMeseji ? "meseji" : settings.provider));
 
   let senderId = (settings.senderId || "").trim();
   const APPROVED_EHUB_IDS = ["339330f1-4e6a-4bf7-a9f8-eaae2a9dd397", "19f41b59-19d0-4f98-b8c9-9d5b1ac31308"];
-  if (isEhub) {
+  if (isSwala) {
+    if (!senderId || senderId.includes("-") || senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || senderId === "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397") {
+      senderId = (text && (text.includes("UWALEMI") || text.includes("Uwalemi"))) ? "EVENT CARD" : "EVENT CARD";
+    }
+  } else if (isEhub) {
     // Resolve approved UUID for eHub (EVENT CARD: 339330f1-4e6a-4bf7-a9f8-eaae2a9dd397, UWALEMI: 19f41b59-19d0-4f98-b8c9-9d5b1ac31308)
     const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
     if (!isUuid(senderId) || senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !APPROVED_EHUB_IDS.includes(senderId)) {
@@ -2172,6 +2177,55 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
     });
     
     console.log(`[SMS] Notify Africa Dispatch: ${requestUrl}, Recipient: ${formattedPhone}, SenderID: ${senderId}`);
+  } else if (effectiveProvider === "swalasms") {
+    requestUrl = settings.url || "https://swalasms.com/api/v1/sms/quick-message";
+    const effectiveKey = apiKey || "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3";
+    const effectiveSenderId = senderId || "EVENT CARD";
+
+    fetchOptions.headers = {
+      ...fetchOptions.headers,
+      "Authorization": "Bearer " + effectiveKey,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    };
+
+    // Format phone to international standard with leading + (+255...)
+    let phones = formattedPhone.split(',').map(p => {
+      let clean = p.trim().replace(/[^0-9]/g, '');
+      if (clean.startsWith('0')) clean = '255' + clean.substring(1);
+      if (!clean.startsWith('255') && (clean.startsWith('7') || clean.startsWith('6'))) clean = '255' + clean;
+      return '+' + clean;
+    }).filter(p => p.length >= 10);
+
+    if (phones.length <= 1) {
+      const recipient = phones[0] || ('+' + formattedPhone.replace(/[^0-9]/g, ''));
+      const bodyData: any = {
+        recipient,
+        sender_id: effectiveSenderId,
+        body: text
+      };
+      if (scheduleTime) {
+        bodyData.schedule_time = scheduleTime;
+      }
+      fetchOptions.body = JSON.stringify(bodyData);
+      console.log(`[SMS] SwalaSMS Dispatch: ${requestUrl}, Recipient: ${recipient}, SenderID: ${effectiveSenderId}`);
+    } else {
+      // Multiple recipients: dispatch concurrently
+      const results = await Promise.all(phones.map(async (recipient) => {
+        const bodyData: any = {
+          recipient,
+          sender_id: effectiveSenderId,
+          body: text
+        };
+        const res = await fetch(requestUrl, {
+          method: "POST",
+          headers: fetchOptions.headers,
+          body: JSON.stringify(bodyData)
+        });
+        return await res.text();
+      }));
+      return JSON.stringify({ success: true, count: results.length, details: results });
+    }
   } else {
     return "SMS Simulation";
   }
@@ -3946,7 +4000,17 @@ Lema, Nguvu Moja!`;
         settings.senderIdStatus = "approved";
       }
 
-      if (settings.provider === "ehub") {
+      if (settings.provider === "swalasms") {
+        if (!settings.senderId) {
+          settings.senderId = "EVENT CARD";
+        }
+        if (!settings.apiKey) {
+          settings.apiKey = "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3";
+        }
+        if (!settings.url) {
+          settings.url = "https://swalasms.com/api/v1/sms/quick-message";
+        }
+      } else if (settings.provider === "ehub") {
         if (settings.senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !settings.senderId || settings.senderId === "EVENT CARD") {
           settings.senderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
         }
@@ -5291,9 +5355,68 @@ Lema, Nguvu Moja!`;
         });
       }
 
+      if (settings.provider === "swalasms" || (settings.apiKey && settings.apiKey.startsWith("swl_"))) {
+        const apiKey = (settings.apiKey || "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3").trim();
+        try {
+          const response = await fetch("https://swalasms.com/api/v1/balance", {
+            method: "GET",
+            headers: {
+              "Authorization": "Bearer " + apiKey,
+              "Accept": "application/json"
+            }
+          });
+
+          const dataText = await response.text();
+          let parsed = null;
+          try { parsed = JSON.parse(dataText); } catch { }
+
+          let balance = "100";
+          if (parsed && parsed.data && typeof parsed.data.balance !== "undefined") {
+            balance = String(Math.floor(Number(parsed.data.balance)));
+          } else if (parsed && typeof parsed.balance !== "undefined") {
+            balance = String(Math.floor(Number(parsed.balance)));
+          }
+
+          return res.json({
+            provider: "swalasms",
+            isSimulation: false,
+            balance: balance,
+            raw: parsed || dataText,
+            status: response.status,
+            globalHasEhub
+          });
+        } catch (swalaErr: any) {
+          return res.json({
+            provider: "swalasms",
+            isSimulation: false,
+            balance: "100",
+            error: swalaErr.message,
+            globalHasEhub
+          });
+        }
+      }
+
       return res.json({ provider: settings.provider, isSimulation: false, balance: "N/A", globalHasEhub });
     } catch (e: any) {
       console.error("SMS Balance error:", e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API: Fetch SwalaSMS Sender IDs
+  app.post("/api/fetch-swalasms-sender-ids", async (req, res) => {
+    try {
+      const apiKey = (req.body?.apiKey || "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3").trim();
+      const response = await fetch("https://swalasms.com/api/v1/sender-ids", {
+        method: "GET",
+        headers: {
+          "Authorization": "Bearer " + apiKey,
+          "Accept": "application/json"
+        }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
   });

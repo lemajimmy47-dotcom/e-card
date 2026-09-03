@@ -8997,11 +8997,11 @@
     }
   },
   "smsGatewaySettings": {
-    "provider": "ehub",
-    "url": "https://sms.ehub.co.tz/api/v1/sms/send",
-    "apiKey": "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD",
-    "apiSecret": "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf",
-    "senderId": "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397",
+    "provider": "swalasms",
+    "url": "https://swalasms.com/api/v1/sms/quick-message",
+    "apiKey": "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3",
+    "apiSecret": "",
+    "senderId": "EVENT CARD",
     "senderIdStatus": "approved",
     "whatsappUrl": "{\"provider\":\"meta\",\"meta_token\":\"EAAacPFEFvhoBSNN25aU4hkZBY4FPTVu94f2sHEoARfmGxuGkTlRYa7YAG4QxProZA5RECwtfFyZCFWE9nLqCkhMjgmzqlqZBypCHSIyv94Hquo40xuckqPzxvZAiQA7EbWXlflXErlml7QEYBdFkddPd3zRdP0CBYaMgmvzBvVBIpTchLusUymOVCvAC1MRVPhwZDZD\",\"phone_number_id\":\"1282450938280618\",\"waba_id\":\"1342073738106214\",\"template_name\":\"mwaliko\",\"template_lang\":\"sw\"}",
     "customHeaders": "{}",
@@ -14373,11 +14373,11 @@
       "slogan": "Lema, Nguvu Moja.",
       "groupName": "UWALEMI",
       "smsConfig": {
-        "apiKey": "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD",
-        "provider": "ehub",
-        "senderId": "19f41b59-19d0-4f98-b8c9-9d5b1ac31308",
-        "secretKey": "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf",
-        "baseUrl": "https://sms.ehub.co.tz/api/v1/sms/send",
+        "apiKey": "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3",
+        "provider": "swalasms",
+        "senderId": "EVENT CARD",
+        "secretKey": "",
+        "baseUrl": "https://swalasms.com/api/v1/sms/quick-message",
         "autoSendReceipts": true,
         "autoSendMeetingAlerts": false,
         "autoSendMonthlyReminder": false

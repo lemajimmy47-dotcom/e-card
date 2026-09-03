@@ -137,7 +137,7 @@ export interface UwalemiMeeting {
 }
 
 export interface UwalemiSmsConfig {
-  provider: 'meseji' | 'beem' | 'nextsms' | 'ehub' | 'custom' | 'simulation';
+  provider: 'swalasms' | 'meseji' | 'beem' | 'nextsms' | 'ehub' | 'custom' | 'simulation';
   apiKey: string;
   secretKey: string;
   senderId: string;
