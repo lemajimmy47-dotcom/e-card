@@ -33,10 +33,47 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
 
   // Computations
   const totalGuests = guests.length;
-  const countAttending = guests.filter(g => g.rsvpStatus === 'Atahudhuria').reduce((acc, current) => acc + (current.rsvpGuestsCount || 1), 0);
-  const countDeclined = guests.filter(g => g.rsvpStatus === 'Hatahudhuria').length;
-  const countMaybe = guests.filter(g => g.rsvpStatus === 'Labda').length;
-  const countNotResponded = guests.filter(g => g.rsvpStatus === 'Bado' || !g.rsvpStatus).length;
+  const attendingGuests = guests.filter(g => g.rsvpStatus === 'Atahudhuria');
+  const countAttendingCards = attendingGuests.length;
+  const countAttendingPax = attendingGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' ? 2 : 1)), 0);
+  const attendingSingle = attendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
+  const attendingDouble = attendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
+
+  const declinedGuests = guests.filter(g => g.rsvpStatus === 'Hatahudhuria');
+  const countDeclined = declinedGuests.length;
+  const declinedSingle = declinedGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
+  const declinedDouble = declinedGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
+
+  const maybeGuests = guests.filter(g => g.rsvpStatus === 'Labda');
+  const countMaybe = maybeGuests.length;
+  const maybeSingle = maybeGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
+  const maybeDouble = maybeGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
+
+  const pendingGuests = guests.filter(g => g.rsvpStatus === 'Bado' || !g.rsvpStatus);
+  const countNotResponded = pendingGuests.length;
+  const pendingSingle = pendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
+  const pendingDouble = pendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
+
+  const countAttending = countAttendingPax;
+  const unseenCount = guests.filter(g => g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen).length;
+
+  // Automatically mark all as seen when page opens
+  React.useEffect(() => {
+    const hasUnseen = guests.some(g => g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen);
+    if (hasUnseen) {
+      const updated = guests.map(g => 
+        (g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen) ? { ...g, rsvpSeen: true } : g
+      );
+      onUpdateGuests(updated);
+    }
+  }, []);
+
+  const handleMarkAllSeen = () => {
+    const updated = guests.map(g => 
+      (g.rsvpStatus && g.rsvpStatus !== 'Bado') ? { ...g, rsvpSeen: true } : g
+    );
+    onUpdateGuests(updated);
+  };
 
   const handleLaunchSimulator = (guestId: string) => {
     setSelectedSimGuestId(guestId);
@@ -174,52 +211,86 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
           </h2>
           <p className="text-slate-350 mt-0.5">{isEn ? 'View statistics, number of attending guests, and congratulatory messages.' : 'Angalia takwimu, idadi ya wageni wanaokuja, na ujumbe wa pongezi walioandika wageni.'}</p>
         </div>
+
+        {unseenCount > 0 && (
+          <button
+            onClick={handleMarkAllSeen}
+            className="self-start sm:self-auto px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-white border border-blue-500/30 rounded-xl font-bold text-[11px] transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+          >
+            <CheckCircle className="w-4 h-4 text-blue-400" />
+            <span>{isEn ? `Mark all as read (${unseenCount})` : `Weka zote zimesomwa (${unseenCount})`}</span>
+          </button>
+        )}
       </div>
 
       {/* Numerical Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Attending card */}
-        <div className="backdrop-blur-md bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center space-x-3 text-white">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
-            <CheckCircle className="w-5 h-5" />
+        <div className="backdrop-blur-md bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex flex-col justify-between text-white space-y-2">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Attending' : 'Wanakuja (Attending)'}</p>
+              <p className="text-lg font-extrabold text-emerald-400 mt-0.5">{countAttendingCards} {isEn ? 'Cards' : 'Kadi'} <span className="text-xs font-normal text-slate-400">({countAttendingPax} pax)</span></p>
+            </div>
           </div>
-          <div>
-            <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Attending' : 'Wanakuja (Attending)'}</p>
-            <p className="text-lg font-extrabold text-emerald-400 mt-0.5">{countAttending} {isEn ? 'Guests' : 'Wageni'}</p>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-2 border-t border-emerald-500/20 text-slate-300">
+            <span>Single: <strong className="text-emerald-400 font-bold">{attendingSingle}</strong></span>
+            <span>Double: <strong className="text-purple-300 font-bold">{attendingDouble}</strong></span>
           </div>
         </div>
 
         {/* Declined card */}
-        <div className="backdrop-blur-md bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex items-center space-x-3 text-white">
-          <div className="w-10 h-10 rounded-xl bg-red-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-red-500/20">
-            <XCircle className="w-5 h-5" />
+        <div className="backdrop-blur-md bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex flex-col justify-between text-white space-y-2">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/15 text-rose-400 flex items-center justify-center shrink-0 border border-red-500/20">
+              <XCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Declined' : 'Hawaji (Declined)'}</p>
+              <p className="text-lg font-extrabold text-rose-400 mt-0.5">{countDeclined} {isEn ? 'Cards' : 'Kadi'}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Declined' : 'Hawaji (Declined)'}</p>
-            <p className="text-lg font-extrabold text-rose-400 mt-0.5">{countDeclined} {isEn ? 'Cards' : 'Kadi'}</p>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-2 border-t border-rose-500/20 text-slate-300">
+            <span>Single: <strong className="text-rose-400 font-bold">{declinedSingle}</strong></span>
+            <span>Double: <strong className="text-purple-300 font-bold">{declinedDouble}</strong></span>
           </div>
         </div>
 
         {/* Maybe Card */}
-        <div className="backdrop-blur-md bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center space-x-3 text-white">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
-            <HelpCircle className="w-5 h-5" />
+        <div className="backdrop-blur-md bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex flex-col justify-between text-white space-y-2">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
+              <HelpCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Maybe' : 'Hawana Uhakika'}</p>
+              <p className="text-lg font-extrabold text-amber-400 mt-0.5">{countMaybe} {isEn ? 'Cards' : 'Kadi'}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Maybe' : 'Hawana Uhakika'}</p>
-            <p className="text-lg font-extrabold text-amber-400 mt-0.5">{countMaybe} {isEn ? 'Guests' : 'Wageni'}</p>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-2 border-t border-amber-500/20 text-slate-300">
+            <span>Single: <strong className="text-amber-400 font-bold">{maybeSingle}</strong></span>
+            <span>Double: <strong className="text-purple-300 font-bold">{maybeDouble}</strong></span>
           </div>
         </div>
 
         {/* Pending Card */}
-        <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center space-x-3 text-white">
-          <div className="w-10 h-10 rounded-xl bg-white/10 text-slate-300 flex items-center justify-center shrink-0 border border-white/10">
-            <MessageSquare className="w-5 h-5" />
+        <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-between text-white space-y-2">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-white/10 text-slate-300 flex items-center justify-center shrink-0 border border-white/10">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Pending' : 'Bado Kujibu'}</p>
+              <p className="text-lg font-extrabold text-white mt-0.5">{countNotResponded} {isEn ? 'Cards' : 'Kadi'}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Pending' : 'Bado Kujibu'}</p>
-            <p className="text-lg font-extrabold text-white mt-0.5">{countNotResponded} {isEn ? 'Cards' : 'Kadi'}</p>
+          <div className="flex items-center justify-between text-[11px] font-mono pt-2 border-t border-white/10 text-slate-300">
+            <span>Single: <strong className="text-slate-200 font-bold">{pendingSingle}</strong></span>
+            <span>Double: <strong className="text-purple-300 font-bold">{pendingDouble}</strong></span>
           </div>
         </div>
 

@@ -6,7 +6,8 @@ import {
 import { 
   FileText, Clipboard, CheckCircle, TrendingUp, 
   Download, Printer, Activity, Search,
-  Users, Check, Smartphone, BarChart3
+  Users, Check, Smartphone, BarChart3,
+  XCircle, HelpCircle, Clock
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { EventDetails, Guest, ContributionPayment } from '../types';
@@ -89,17 +90,38 @@ export default function EventReports({
   const doubleCardsCount = guests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
   const vipCardsCount = guests.filter(g => g.cardType?.toUpperCase() === 'VIP').length;
 
-  const attendingCount = guests.filter(g => g.rsvpStatus === 'Atahudhuria').length;
-  const totalRsvpPax = guests.filter(g => g.rsvpStatus === 'Atahudhuria').reduce((acc, current) => acc + (current.rsvpGuestsCount || 1), 0);
-  const declinedCount = guests.filter(g => g.rsvpStatus === 'Hatahudhuria').length;
-  const maybeCount = guests.filter(g => g.rsvpStatus === 'Labda').length;
-  const pendingCount = guests.filter(g => !g.rsvpStatus || g.rsvpStatus === 'Bado').length;
+  const attendingGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Atahudhuria'), [guests]);
+  const attendingCount = attendingGuests.length;
+  const attendingSingle = useMemo(() => attendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [attendingGuests]);
+  const attendingDouble = useMemo(() => attendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [attendingGuests]);
+  const attendingVip = useMemo(() => attendingGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [attendingGuests]);
+  const totalRsvpPax = useMemo(() => attendingGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' ? 2 : 1)), 0), [attendingGuests]);
 
-  const checkedInCount = guests.filter(g => g.checkedIn).length;
+  const declinedGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Hatahudhuria'), [guests]);
+  const declinedCount = declinedGuests.length;
+  const declinedSingle = useMemo(() => declinedGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [declinedGuests]);
+  const declinedDouble = useMemo(() => declinedGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [declinedGuests]);
+  const declinedVip = useMemo(() => declinedGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [declinedGuests]);
+
+  const maybeGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Labda'), [guests]);
+  const maybeCount = maybeGuests.length;
+  const maybeSingle = useMemo(() => maybeGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [maybeGuests]);
+  const maybeDouble = useMemo(() => maybeGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [maybeGuests]);
+  const maybeVip = useMemo(() => maybeGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [maybeGuests]);
+
+  const pendingGuests = useMemo(() => guests.filter(g => !g.rsvpStatus || g.rsvpStatus === 'Bado'), [guests]);
+  const pendingCount = pendingGuests.length;
+  const pendingSingle = useMemo(() => pendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [pendingGuests]);
+  const pendingDouble = useMemo(() => pendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [pendingGuests]);
+  const pendingVip = useMemo(() => pendingGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [pendingGuests]);
+
+  const checkedInGuests = useMemo(() => guests.filter(g => g.checkedIn), [guests]);
+  const checkedInCount = checkedInGuests.length;
+  const checkedInSingle = useMemo(() => checkedInGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [checkedInGuests]);
+  const checkedInDouble = useMemo(() => checkedInGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [checkedInGuests]);
   const expectedButNotArrived = Math.max(0, attendingCount - checkedInCount);
-  const arrivedPax = guests.filter(g => g.checkedIn).reduce((acc, curr) => {
-    // If ticket is double and they checked in, could be up to 2 people or rsvp count
-    const count = curr.rsvpStatus === 'Atahudhuria' ? (curr.rsvpGuestsCount || 1) : 1;
+  const arrivedPax = checkedInGuests.reduce((acc, curr) => {
+    const count = curr.rsvpStatus === 'Atahudhuria' ? (curr.rsvpGuestsCount || (curr.cardType === 'DOUBLE' ? 2 : 1)) : (curr.cardType === 'DOUBLE' ? 2 : 1);
     return acc + count;
   }, 0);
 
@@ -449,11 +471,11 @@ export default function EventReports({
 
     if (selectedReport === 'Overall') {
       cardsData = [
-        { label: "HAWAJAAHIDI", value: `${pledgeStatusData.totals.noPledgeCount} Wageni`, color: [100, 116, 139] },
-        { label: "WALIOAHIDI TU", value: `${pledgeStatusData.totals.unpaidPledgeCount} Wageni`, color: [217, 119, 6] },
-        { label: "LIPA NUSU", value: `${pledgeStatusData.totals.partiallyPaidCount} Wageni`, color: [2, 132, 199] },
-        { label: "LIPA YOTE", value: `${pledgeStatusData.totals.fullyPaidCount} Wageni`, color: [22, 163, 74] },
-        { label: "WENYE MADENI", value: `${pledgeStatusData.totals.unpaidPledgeCount + pledgeStatusData.totals.partiallyPaidCount} Active`, color: [147, 51, 234] }
+        { label: isEn ? "CONFIRMED (YES)" : "WATAHUDHURIA (YES)", value: `${attendingCount} (S:${attendingSingle} D:${attendingDouble})`, color: [22, 163, 74] },
+        { label: isEn ? "DECLINED (NO)" : "HAWATAKUJA (NO)", value: `${declinedCount} (S:${declinedSingle} D:${declinedDouble})`, color: [225, 29, 72] },
+        { label: isEn ? "MAYBE / UNDECIDED" : "HAWANA UHAKIKA", value: `${maybeCount} (S:${maybeSingle} D:${maybeDouble})`, color: [217, 119, 6] },
+        { label: isEn ? "PENDING RESPONSE" : "BADO HAWAJACONFIRM", value: `${pendingCount} (S:${pendingSingle} D:${pendingDouble})`, color: [100, 116, 139] },
+        { label: isEn ? "TOTAL CARDS" : "JUMLA YA KADI", value: `${totalGuestsCount} (S:${singleCardsCount} D:${doubleCardsCount})`, color: [15, 23, 42] }
       ];
     } else if (selectedReport === 'Attendance_Only') {
       cardsData = [
@@ -525,15 +547,23 @@ export default function EventReports({
     }
 
     if (selectedReport === 'Overall') {
-      // Quick message stats bar
+      // RSVP category breakdown + message stats bar
       doc.setFillColor(241, 245, 249);
-      doc.rect(10, tableStartY, pageWidth - 20, 6, 'F');
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
+      doc.rect(10, tableStartY, pageWidth - 20, 12, 'F');
+      doc.setFontSize(6.8);
+      doc.setTextColor(30, 41, 59);
       doc.setFont("helvetica", "bold");
-      const dispatchSummaryStr = `UJUMBE ULIOFIKISHWA: SMS Zilizoshughulikiwa: ${totalSmsSent}  •  WhatsApp Zilizotumwa: ${totalWhatsappSent}  •  Ujio Bado Kufika: ${expectedButNotArrived}`;
-      doc.text(dispatchSummaryStr, 13, tableStartY + 4.2);
-      tableStartY += 10;
+      const rsvpBreakdownStr = isEn
+        ? `RSVP BREAKDOWN: Attending: ${attendingCount} (Single: ${attendingSingle}, Double: ${attendingDouble} - ${totalRsvpPax} Pax) | Declined: ${declinedCount} (S: ${declinedSingle}, D: ${declinedDouble}) | Maybe: ${maybeCount} (S: ${maybeSingle}, D: ${maybeDouble}) | Pending: ${pendingCount} (S: ${pendingSingle}, D: ${pendingDouble})`
+        : `AINA ZA KADI: Watahudhuria: ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble} - Watu: ${totalRsvpPax}) | Hawatakuja: ${declinedCount} (Single: ${declinedSingle}, Double: ${declinedDouble}) | Hawana Uhakika: ${maybeCount} (Single: ${maybeSingle}, Double: ${maybeDouble}) | Bado Jibu: ${pendingCount} (Single: ${pendingSingle}, Double: ${pendingDouble})`;
+      doc.text(rsvpBreakdownStr, 12, tableStartY + 4.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(71, 85, 105);
+      const dispatchSummaryStr = `Jumla ya Kadi: ${totalGuestsCount} (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})  •  Waliofika: ${checkedInCount} (Single: ${checkedInSingle}, Double: ${checkedInDouble})  •  Uwiano: ${arivedPercent()}%  •  SMS Sent: ${totalSmsSent}  •  WA Sent: ${totalWhatsappSent}`;
+      doc.text(dispatchSummaryStr, 12, tableStartY + 9.5);
+      tableStartY += 16;
 
       const tableData = filteredGuests.map((g, idx) => [
         idx + 1,
@@ -541,7 +571,7 @@ export default function EventReports({
         g.phone || '-',
         g.cardType || 'SINGLE',
         g.rsvpStatus || 'BADO JIBU',
-        g.rsvpStatus === 'Atahudhuria' ? (g.rsvpGuestsCount || 1) : 0,
+        g.rsvpStatus === 'Atahudhuria' ? (g.rsvpGuestsCount || (g.cardType === 'DOUBLE' ? 2 : 1)) : 0,
         g.checkedIn ? 'NDIO (ARRIVED)' : 'BADO (ABSENT)',
         g.checkedInTime ? g.checkedInTime : '-',
         g.smsCount || (isStatusSent(g.smsStatus) ? 1 : 0),
@@ -868,12 +898,12 @@ export default function EventReports({
     
     text += `📋 1. RIPOTI YA MAHUDHURIO NA RSVP:\n`;
     text += `----------------------------------------\n`;
-    text += `• Kadi Zote Zilizopo (Total Cards): ${totalGuestsCount}\n`;
-    text += `• Waliothibitisha (RSVP Yes): ${attendingCount} Kadi (${totalRsvpPax} Watu)\n`;
-    text += `• Waliokataa Kuja (RSVP No): ${declinedCount}\n`;
-    text += `• Wasiouhakika (RSVP Maybe): ${maybeCount}\n`;
-    text += `• Bado Hawajajibu Kampeni: ${pendingCount}\n`;
-    text += `• Kadi Zilizofika na Kuskaniwa: ${checkedInCount} Kadi (${arivedPercent()}% uwiano)\n`;
+    text += `• Kadi Zote Zilizopo (Total Cards): ${totalGuestsCount} (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})\n`;
+    text += `• Watakaohudhuria (RSVP Yes): ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble}${attendingVip > 0 ? `, VIP: ${attendingVip}` : ''} — Watu: ${totalRsvpPax})\n`;
+    text += `• Hawatakuja (RSVP No / Declined): ${declinedCount} Kadi (Single: ${declinedSingle}, Double: ${declinedDouble}${declinedVip > 0 ? `, VIP: ${declinedVip}` : ''})\n`;
+    text += `• Hawana Uhakika (RSVP Maybe): ${maybeCount} Kadi (Single: ${maybeSingle}, Double: ${maybeDouble}${maybeVip > 0 ? `, VIP: ${maybeVip}` : ''})\n`;
+    text += `• Bado Hawajaconfirm (Pending): ${pendingCount} Kadi (Single: ${pendingSingle}, Double: ${pendingDouble}${pendingVip > 0 ? `, VIP: ${pendingVip}` : ''})\n`;
+    text += `• Kadi Zilizofika na Kuskaniwa: ${checkedInCount} Kadi (Single: ${checkedInSingle}, Double: ${checkedInDouble} — ${arivedPercent()}% uwiano)\n`;
     text += `• Ujumbe wa Kikampeni (SMS Sent): ${totalSmsSent}\n`;
     text += `• Ujumbe wa WA (WA Sent): ${totalWhatsappSent}\n\n`;
     
@@ -1007,12 +1037,12 @@ export default function EventReports({
     currentY += 12;
 
     const rsvpTableData = [
-      [isEn ? "Total Guests Listed" : "Jumla ya Wageni Walioorodheshwa", `${totalGuestsCount} ${isEn ? 'Guests' : 'Wageni'}`],
-      [isEn ? "Confirmed RSVP Yes (Attending)" : "Waliothibitisha Kupatikana (Yes)", `${attendingCount} ${isEn ? 'Cards' : 'Kadi'} (${totalRsvpPax} ${isEn ? 'Persons' : 'Watu'})`],
-      [isEn ? "Confirmed RSVP No (Declined)" : "Waliokataa (Declined)", `${declinedCount} ${isEn ? 'Guests' : 'Wageni'}`],
-      [isEn ? "Maybe / Undecided Answer" : "Wasiouhakika (Maybe)", `${maybeCount} ${isEn ? 'Guests' : 'Wageni'}`],
-      [isEn ? "Pending Response" : "Bado Hawajajibu Kampeni", `${pendingCount} ${isEn ? 'Guests' : 'Wageni'}`],
-      [isEn ? "Actual Checked-In Scan Arrivals" : "Mahudhurio Halisi (Arrived Scans)", `${checkedInCount} ${isEn ? 'Scans' : 'Kadi'} (${arivedPercent()}% ${isEn ? 'Admission Ratio' : 'uwiano wote'})`],
+      [isEn ? "Total Guests Listed" : "Jumla ya Wageni Walioorodheshwa", `${totalGuestsCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})`],
+      [isEn ? "Confirmed RSVP Yes (Attending)" : "Watakaohudhuria (RSVP Yes)", `${attendingCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${attendingSingle}, Double: ${attendingDouble}${attendingVip > 0 ? `, VIP: ${attendingVip}` : ''} — ${totalRsvpPax} ${isEn ? 'Pax' : 'Watu'})`],
+      [isEn ? "Confirmed RSVP No (Declined)" : "Hawatakuja (RSVP Declined)", `${declinedCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${declinedSingle}, Double: ${declinedDouble}${declinedVip > 0 ? `, VIP: ${declinedVip}` : ''})`],
+      [isEn ? "Maybe / Undecided Answer" : "Hawana Uhakika (RSVP Maybe)", `${maybeCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${maybeSingle}, Double: ${maybeDouble}${maybeVip > 0 ? `, VIP: ${maybeVip}` : ''})`],
+      [isEn ? "Pending / Unconfirmed" : "Bado Hawajaconfirm (Pending)", `${pendingCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${pendingSingle}, Double: ${pendingDouble}${pendingVip > 0 ? `, VIP: ${pendingVip}` : ''})`],
+      [isEn ? "Actual Checked-In Scan Arrivals" : "Mahudhurio Halisi (Arrived Scans)", `${checkedInCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${checkedInSingle}, Double: ${checkedInDouble} — ${arivedPercent()}% ${isEn ? 'Admission Ratio' : 'uwiano'})`],
     ];
 
     autoTable(doc, {
@@ -1680,58 +1710,212 @@ export default function EventReports({
         {selectedReport === 'Overall' && (
           <div className="space-y-6" id="view-overall-report">
             
-            {/* Visual metrics cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              
-              <div className="bg-slate-950/80 border border-white/5 p-4 rounded-2xl relative overflow-hidden">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase font-mono">1. Kadi Zilizosajiliwa</span>
-                  <Users className="w-4 h-4 text-blue-400" />
+            {/* 4 RSVP Status Categories with explicit Single & Double breakdown */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center px-1">
+                <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  <Clipboard className="w-4 h-4 text-sky-400" />
+                  {language === 'sw' ? 'Muhtasari wa RSVP & Aina za Kadi (Single & Double)' : 'RSVP Status Breakdown by Card Type (Single & Double)'}
+                </span>
+                <span className="text-[11px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
+                  {language === 'sw' ? 'Jumla ya Kadi:' : 'Total Cards:'} <strong className="text-white font-bold">{totalGuestsCount}</strong> (Single: <strong className="text-sky-300 font-bold">{singleCardsCount}</strong>, Double: <strong className="text-purple-300 font-bold">{doubleCardsCount}</strong>{vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                {/* 1. Watakaohudhuria (Attending / Yes) */}
+                <div className="bg-emerald-950/30 border border-emerald-500/30 p-4 rounded-2xl relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black tracking-widest text-emerald-400 uppercase font-mono flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        {isEn ? "1. Attending (Yes)" : "1. Watakaohudhuria"}
+                      </span>
+                      <span className="text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                        {totalGuestsCount > 0 ? Math.round((attendingCount / totalGuestsCount) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <p className="text-3xl font-mono font-black text-emerald-300">{attendingCount}</p>
+                      <span className="text-xs font-mono text-emerald-400/80 font-bold">{language === 'sw' ? 'Kadi' : 'Cards'}</span>
+                      <span className="text-[10px] font-mono text-slate-400 ml-auto">({totalRsvpPax} {language === 'sw' ? 'Watu/Pax' : 'Pax'})</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-emerald-500/20 flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-slate-300">
+                      Single: <strong className="text-emerald-400 font-bold text-sm">{attendingSingle}</strong>
+                    </span>
+                    <span className="text-slate-300">
+                      Double: <strong className="text-purple-300 font-bold text-sm">{attendingDouble}</strong>
+                    </span>
+                    {attendingVip > 0 && (
+                      <span className="text-amber-400">
+                        VIP: <strong className="font-bold">{attendingVip}</strong>
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <p className="text-2xl font-mono font-black text-white mt-1">{totalGuestsCount} Kadi</p>
-                <div className="flex justify-between text-[10px] text-slate-500 mt-2 font-mono">
-                  <span>Single: {singleCardsCount}</span>
-                  <span>Double: {doubleCardsCount}</span>
-                  <span>VIP: {vipCardsCount}</span>
+
+                {/* 2. Hawatakuja (Declined / No) */}
+                <div className="bg-rose-950/30 border border-rose-500/30 p-4 rounded-2xl relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black tracking-widest text-rose-400 uppercase font-mono flex items-center gap-1.5">
+                        <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                        {isEn ? "2. Declined (No)" : "2. Hawatakuja"}
+                      </span>
+                      <span className="text-[9px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                        {totalGuestsCount > 0 ? Math.round((declinedCount / totalGuestsCount) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <p className="text-3xl font-mono font-black text-rose-300">{declinedCount}</p>
+                      <span className="text-xs font-mono text-rose-400/80 font-bold">{language === 'sw' ? 'Kadi' : 'Cards'}</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-rose-500/20 flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-slate-300">
+                      Single: <strong className="text-rose-400 font-bold text-sm">{declinedSingle}</strong>
+                    </span>
+                    <span className="text-slate-300">
+                      Double: <strong className="text-purple-300 font-bold text-sm">{declinedDouble}</strong>
+                    </span>
+                    {declinedVip > 0 && (
+                      <span className="text-amber-400">
+                        VIP: <strong className="font-bold">{declinedVip}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Hawana Uhakika (Maybe / Undecided) */}
+                <div className="bg-amber-950/30 border border-amber-500/30 p-4 rounded-2xl relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase font-mono flex items-center gap-1.5">
+                        <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                        {isEn ? "3. Maybe (Undecided)" : "3. Hawana Uhakika"}
+                      </span>
+                      <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                        {totalGuestsCount > 0 ? Math.round((maybeCount / totalGuestsCount) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <p className="text-3xl font-mono font-black text-amber-300">{maybeCount}</p>
+                      <span className="text-xs font-mono text-amber-400/80 font-bold">{language === 'sw' ? 'Kadi' : 'Cards'}</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-amber-500/20 flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-slate-300">
+                      Single: <strong className="text-amber-400 font-bold text-sm">{maybeSingle}</strong>
+                    </span>
+                    <span className="text-slate-300">
+                      Double: <strong className="text-purple-300 font-bold text-sm">{maybeDouble}</strong>
+                    </span>
+                    {maybeVip > 0 && (
+                      <span className="text-amber-400">
+                        VIP: <strong className="font-bold">{maybeVip}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Bado Hawajaconfirm (Pending Response) */}
+                <div className="bg-slate-900/80 border border-slate-700/60 p-4 rounded-2xl relative overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase font-mono flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        {isEn ? "4. Unconfirmed (Pending)" : "4. Bado Hawajajibu"}
+                      </span>
+                      <span className="text-[9px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700 px-1.5 py-0.5 rounded">
+                        {totalGuestsCount > 0 ? Math.round((pendingCount / totalGuestsCount) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <p className="text-3xl font-mono font-black text-slate-200">{pendingCount}</p>
+                      <span className="text-xs font-mono text-slate-400 font-bold">{language === 'sw' ? 'Kadi' : 'Cards'}</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-slate-300">
+                      Single: <strong className="text-slate-300 font-bold text-sm">{pendingSingle}</strong>
+                    </span>
+                    <span className="text-slate-300">
+                      Double: <strong className="text-purple-300 font-bold text-sm">{pendingDouble}</strong>
+                    </span>
+                    {pendingVip > 0 && (
+                      <span className="text-amber-400">
+                        VIP: <strong className="font-bold">{pendingVip}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Quick Operational Summary Bar (Arrivals & Messages) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="bg-blue-950/20 border border-blue-500/20 p-3.5 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono font-bold text-blue-300 uppercase tracking-wider block">
+                      {isEn ? 'Arrived / Checked In' : 'Waliofika (Checked In)'}
+                    </span>
+                    <p className="text-lg font-black font-mono text-white mt-0.5">
+                      {checkedInCount} <span className="text-xs font-normal text-slate-400">Kadi ({arivedPercent()}% Ratio)</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right text-[10px] font-mono text-slate-400">
+                  <div>Single: <strong className="text-blue-300">{checkedInSingle}</strong></div>
+                  <div>Double: <strong className="text-purple-300">{checkedInDouble}</strong></div>
                 </div>
               </div>
 
-              <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-black tracking-widest text-emerald-400 uppercase font-mono">{isEn ? "2. RSVP Responded" : "2. Walioitikia RSVP"}</span>
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <div className="bg-purple-950/20 border border-purple-500/20 p-3.5 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono font-bold text-purple-300 uppercase tracking-wider block">
+                      {isEn ? 'SMS & WA Sent' : 'Ujumbe Uliotumwa'}
+                    </span>
+                    <p className="text-lg font-black font-mono text-white mt-0.5">
+                      {totalSmsSent + totalWhatsappSent} <span className="text-xs font-normal text-slate-400">Jumla</span>
+                    </p>
+                  </div>
                 </div>
-                <p className="text-2xl font-mono font-black text-emerald-300 mt-1">{attendingCount} Kadi ({totalRsvpPax} Watu)</p>
-                <div className="flex justify-between text-[10px] text-slate-500 mt-2 font-mono">
-                  <span>Inaleta: {totalRsvpPax} pax</span>
-                  <span className="text-rose-450">Declined: {declinedCount}</span>
-                </div>
-              </div>
-
-              <div className="bg-blue-500/5 border border-blue-500/10 p-4 rounded-2xl">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-black tracking-widest text-blue-400 uppercase font-mono">{isEn ? "3. Arrived / Checked In" : "3. Waliofika / Checked In"}</span>
-                  <Activity className="w-4 h-4 text-blue-400" />
-                </div>
-                <p className="text-2xl font-mono font-black text-blue-300 mt-1">{checkedInCount} {isEn ? "Guests" : "Wageni"} ({arivedPercent()}% Ratio)</p>
-                <div className="flex justify-between text-[10px] text-slate-500 mt-2 font-mono">
-                  <span>Check In: {checkedInCount}</span>
-                  <span>Expected: {attendingCount}</span>
+                <div className="text-right text-[10px] font-mono">
+                  <div className="text-sky-400">SMS: <strong>{totalSmsSent}</strong></div>
+                  <div className="text-emerald-400">WA: <strong>{totalWhatsappSent}</strong></div>
                 </div>
               </div>
 
-              <div className="bg-purple-500/5 border border-purple-500/10 p-4 rounded-2xl">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-black tracking-widest text-purple-400 uppercase font-mono">4. Mrejesho wa Ujumbe</span>
-                  <Smartphone className="w-4 h-4 text-purple-400" />
+              <div className="bg-slate-900/60 border border-white/5 p-3.5 rounded-2xl flex items-center justify-between sm:col-span-2 lg:col-span-1">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                      {isEn ? 'Expected Attendees' : 'Wanaotegemewa Ukumbini'}
+                    </span>
+                    <p className="text-lg font-black font-mono text-emerald-400 mt-0.5">
+                      {totalRsvpPax} <span className="text-xs font-normal text-slate-400">Watu (Pax)</span>
+                    </p>
+                  </div>
                 </div>
-                <p className="text-2xl font-mono font-black text-purple-300 mt-1">SMS & WA logs</p>
-                <div className="flex justify-between text-[10px] text-slate-500 mt-2 font-mono">
-                  <span className="text-sky-400">SMS Sent: {totalSmsSent}</span>
-                  <span className="text-emerald-400">WA Sent: {totalWhatsappSent}</span>
+                <div className="text-right text-[10px] font-mono text-slate-400">
+                  <div>Bado Kufika: <strong className="text-amber-400">{expectedButNotArrived}</strong></div>
                 </div>
               </div>
-
             </div>
 
             {/* 5 Pledge & Contribution Status Summary Cards requested by user */}

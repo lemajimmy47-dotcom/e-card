@@ -765,23 +765,23 @@ export default function App() {
 
   // --- RSVP Notification Badge Logic ---
   const unseenRsvps = useMemo(() => {
-    return guests.filter(g => g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen);
-  }, [guests]);
+    return activeGuests.filter(g => g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen);
+  }, [activeGuests]);
 
   const markRsvpsAsSeen = () => {
     if (unseenRsvps.length === 0) return;
-    const updatedGuests = guests.map(g => 
+    const updatedActive = activeGuests.map(g => 
       (g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen) ? { ...g, rsvpSeen: true } : g
     );
-    updateGuests(updatedGuests);
+    updateGuests(updatedActive, 'RSVP zote zimetiwa alama zimesomwa');
   };
 
   // Mark RSVPs as seen when entering the RSVP tab
   useEffect(() => {
-    if (activeTab === 'rsvp') {
+    if (activeTab === 'rsvp' && unseenRsvps.length > 0) {
       markRsvpsAsSeen();
     }
-  }, [activeTab]);
+  }, [activeTab, unseenRsvps.length]);
 
   // --- Render Layout ---
 

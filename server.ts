@@ -2843,6 +2843,11 @@ async function startServer() {
               mergedRsvpSeen = sg.rsvpSeen;
             }
 
+            // Always respect explicit client rsvpSeen update (e.g. marking as read in UI)
+            if (cg.rsvpSeen !== undefined) {
+              mergedRsvpSeen = cg.rsvpSeen;
+            }
+
             // 2. Keep server checked-in status if the server has checkedIn = true but client has it as false / falsy
             if (sg.checkedIn && !cg.checkedIn) {
               mergedCheckedIn = true;
