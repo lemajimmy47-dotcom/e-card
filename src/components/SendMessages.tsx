@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, RefreshCw, CheckCircle, MessageCircle, AlertCircle, PlayCircle, ArrowRight, X, Clipboard, Check, ExternalLink, Smartphone, MessageSquare } from 'lucide-react';
+import { Send, RefreshCw, CheckCircle, MessageCircle, AlertCircle, PlayCircle, ArrowRight, X, Clipboard, Check, ExternalLink, Smartphone, MessageSquare, Search, User, Filter } from 'lucide-react';
 import { EventDetails, Guest, TemplateSettings } from '../types';
 import { drawCardToCanvas, generateGuestCardImage, preloadImage } from '../utils/canvasHelper';
 import { safeLocalStorage } from '../utils/storage';
@@ -74,6 +74,8 @@ export default function SendMessages({ event, settings, guests, language, onUpda
   const [sendingProgress, setSendingProgress] = useState(0);
   const [messageType, setMessageType] = useState<'invitation' | 'reminder' | 'thank-you'>('invitation');
   const [thankYouAudience, setThankYouAudience] = useState<'all' | 'confirmed' | 'attended'>('attended');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending-sms' | 'pending-wa' | 'sent'>('all');
 
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleTime, setScheduleTime] = useState('');
@@ -766,10 +768,33 @@ Karibu sana!`);
     setEditingGuest(null);
   };
 
-  // Filtered guests based on message type - Memoized for performance, sorted alphabetically A-Z
+  // Filtered guests based on message type, search query and status - Memoized for performance, sorted alphabetically A-Z
   const filteredGuests = React.useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
     return guests
       .filter(g => {
+        // Search filter by name, phone, code or card category
+        if (query) {
+          const matchName = (g.name || '').toLowerCase().includes(query);
+          const matchPhone = (g.phone || '').toLowerCase().includes(query);
+          const matchCode = (g.code || '').toLowerCase().includes(query) || `eventcard-${g.code || g.id}`.toLowerCase().includes(query);
+          const matchType = (g.cardType || '').toLowerCase().includes(query);
+          if (!matchName && !matchPhone && !matchCode && !matchType) {
+            return false;
+          }
+        }
+
+        // Status filter
+        if (statusFilter === 'pending-sms' && isStatusSent(g.smsStatus)) {
+          return false;
+        }
+        if (statusFilter === 'pending-wa' && isStatusSent(g.whatsappStatus)) {
+          return false;
+        }
+        if (statusFilter === 'sent' && !isStatusSent(g.smsStatus) && !isStatusSent(g.whatsappStatus)) {
+          return false;
+        }
+
         if (messageType === 'save_the_date') {
           return g.rsvpStatus === 'Atahudhuria';
         }
@@ -786,7 +811,7 @@ Karibu sana!`);
         return true;
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'sw'));
-  }, [guests, messageType, thankYouAudience]);
+  }, [guests, messageType, thankYouAudience, searchQuery, statusFilter]);
 
   // Status Metrics - Memoized
   const { countSmsSent, countWhatsappSent, countPending } = React.useMemo(() => {
@@ -2151,7 +2176,81 @@ Karibu sana!`);
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Left Guest List and Actions (8 Cols) */}
-        <div className="lg:col-span-8 border border-white/10 rounded-2xl overflow-hidden bg-white/5 text-xs">
+        <div className="lg:col-span-8 border border-white/10 rounded-2xl overflow-hidden bg-white/5 text-xs flex flex-col">
+          {/* Guest Search & Filter Bar */}
+          <div className="p-3.5 sm:p-4 bg-white/[0.03] border-b border-white/10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Search Input Box */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                id="inp-search-guest-cards"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={isEn ? "Search guest by name, phone or card number..." : "Tafuta jina la mgeni, simu au kadi..."}
+                className="w-full bg-[#050b18] border border-white/15 focus:border-blue-400/80 rounded-xl pl-9 pr-8 py-2 text-white placeholder:text-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400/30 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+                  title="Futa utafutaji"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Quick Status Filter & Counter */}
+            <div className="flex items-center gap-2 flex-wrap justify-between sm:justify-end">
+              <div className="flex items-center bg-black/30 border border-white/10 rounded-xl p-0.5 text-[10px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    statusFilter === 'all' 
+                      ? 'bg-blue-600 text-white font-bold shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {isEn ? "All" : "Wote"} ({guests.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('pending-sms')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    statusFilter === 'pending-sms' 
+                      ? 'bg-blue-600 text-white font-bold shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {isEn ? "Pending SMS" : "Bado SMS"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('pending-wa')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    statusFilter === 'pending-wa' 
+                      ? 'bg-emerald-600 text-white font-bold shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {isEn ? "Pending WA" : "Bado WA"}
+                </button>
+              </div>
+
+              {/* Match Counter Badge */}
+              <div className="text-[10px] text-slate-400 font-mono px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 whitespace-nowrap">
+                {isEn ? (
+                  <span>Showing <strong className="text-white font-bold">{filteredGuests.length}</strong> / {guests.length}</span>
+                ) : (
+                  <span>Wageni <strong className="text-white font-bold">{filteredGuests.length}</strong> / {guests.length}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -2167,10 +2266,30 @@ Karibu sana!`);
               <tbody className="divide-y divide-white/5 text-white">
                 {filteredGuests.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-slate-500 italic">
-                      {messageType === 'save_the_date' 
-                        ? (isEn ? 'No guests confirmed attendance yet. Save the Date is sent to attending guests only.' : 'Hakuna wageni waliothibitisha kuhudhuria bado. Save the Date inatumwa kwa wale walioweka "Atahudhuria" pekee.')
-                        : (isEn ? 'No guests found.' : 'Hakuna wageni waliopatikana.')}
+                    <td colSpan={6} className="px-5 py-12 text-center text-slate-400">
+                      {searchQuery ? (
+                        <div className="flex flex-col items-center justify-center space-y-2">
+                          <Search className="w-7 h-7 text-slate-500 opacity-60" />
+                          <p className="font-semibold text-slate-300 text-xs">
+                            {isEn ? `No guests found matching "${searchQuery}"` : `Hakuna mgeni aliyepatikana kwa utafutaji wa "${searchQuery}"`}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}
+                            className="text-xs text-blue-400 hover:text-blue-300 underline font-semibold cursor-pointer pt-1"
+                          >
+                            {isEn ? "Clear search filter" : "Futa utafutaji & onyesha wageni wote"}
+                          </button>
+                        </div>
+                      ) : messageType === 'save_the_date' ? (
+                        <span className="italic text-slate-500">
+                          {isEn ? 'No guests confirmed attendance yet. Save the Date is sent to attending guests only.' : 'Hakuna wageni waliothibitisha kuhudhuria bado. Save the Date inatumwa kwa wale walioweka "Atahudhuria" pekee.'}
+                        </span>
+                      ) : (
+                        <span className="italic text-slate-500">
+                          {isEn ? 'No guests found.' : 'Hakuna wageni waliopatikana.'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ) : (
