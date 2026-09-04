@@ -41,16 +41,19 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
 
   const declinedGuests = guests.filter(g => g.rsvpStatus === 'Hatahudhuria');
   const countDeclined = declinedGuests.length;
+  const countDeclinedPax = declinedGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0);
   const declinedSingle = declinedGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const declinedDouble = declinedGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
   const maybeGuests = guests.filter(g => g.rsvpStatus === 'Labda');
   const countMaybe = maybeGuests.length;
+  const countMaybePax = maybeGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1)), 0);
   const maybeSingle = maybeGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const maybeDouble = maybeGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
   const pendingGuests = guests.filter(g => g.rsvpStatus === 'Bado' || !g.rsvpStatus);
   const countNotResponded = pendingGuests.length;
+  const countNotRespondedPax = pendingGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0);
   const pendingSingle = pendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const pendingDouble = pendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
@@ -251,7 +254,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
             </div>
             <div>
               <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Declined' : 'Hawaji (Declined)'}</p>
-              <p className="text-lg font-extrabold text-rose-400 mt-0.5">{countDeclined} {isEn ? 'Cards' : 'Kadi'}</p>
+              <p className="text-lg font-extrabold text-rose-400 mt-0.5">{countDeclined} {isEn ? 'Cards' : 'Kadi'} <span className="text-xs font-normal text-slate-400">({countDeclinedPax} pax)</span></p>
             </div>
           </div>
           <div className="flex items-center justify-between text-[11px] font-mono pt-2 border-t border-rose-500/20 text-slate-300">
@@ -268,7 +271,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
             </div>
             <div>
               <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Maybe' : 'Hawana Uhakika'}</p>
-              <p className="text-lg font-extrabold text-amber-400 mt-0.5">{countMaybe} {isEn ? 'Cards' : 'Kadi'}</p>
+              <p className="text-lg font-extrabold text-amber-400 mt-0.5">{countMaybe} {isEn ? 'Cards' : 'Kadi'} <span className="text-xs font-normal text-slate-400">({countMaybePax} pax)</span></p>
             </div>
           </div>
           <div className="flex items-center justify-between text-[11px] font-mono pt-2 border-t border-amber-500/20 text-slate-300">
@@ -285,7 +288,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
             </div>
             <div>
               <p className="text-[9px] text-slate-400 font-mono tracking-wider font-semibold uppercase">{isEn ? 'Pending' : 'Bado Kujibu'}</p>
-              <p className="text-lg font-extrabold text-white mt-0.5">{countNotResponded} {isEn ? 'Cards' : 'Kadi'}</p>
+              <p className="text-lg font-extrabold text-white mt-0.5">{countNotResponded} {isEn ? 'Cards' : 'Kadi'} <span className="text-xs font-normal text-slate-400">({countNotRespondedPax} pax)</span></p>
             </div>
           </div>
           <div className="flex items-center justify-between text-[11px] font-mono pt-2 border-t border-white/10 text-slate-300">

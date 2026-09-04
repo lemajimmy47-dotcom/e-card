@@ -89,28 +89,32 @@ export default function EventReports({
   const singleCardsCount = guests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const doubleCardsCount = guests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
   const vipCardsCount = guests.filter(g => g.cardType?.toUpperCase() === 'VIP').length;
+  const totalPaxCapacity = useMemo(() => guests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1)), 0), [guests]);
 
   const attendingGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Atahudhuria'), [guests]);
   const attendingCount = attendingGuests.length;
   const attendingSingle = useMemo(() => attendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [attendingGuests]);
   const attendingDouble = useMemo(() => attendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [attendingGuests]);
   const attendingVip = useMemo(() => attendingGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [attendingGuests]);
-  const totalRsvpPax = useMemo(() => attendingGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' ? 2 : 1)), 0), [attendingGuests]);
+  const totalRsvpPax = useMemo(() => attendingGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1)), 0), [attendingGuests]);
 
   const declinedGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Hatahudhuria'), [guests]);
   const declinedCount = declinedGuests.length;
+  const declinedPax = useMemo(() => declinedGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0), [declinedGuests]);
   const declinedSingle = useMemo(() => declinedGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [declinedGuests]);
   const declinedDouble = useMemo(() => declinedGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [declinedGuests]);
   const declinedVip = useMemo(() => declinedGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [declinedGuests]);
 
   const maybeGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Labda'), [guests]);
   const maybeCount = maybeGuests.length;
+  const maybePax = useMemo(() => maybeGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1)), 0), [maybeGuests]);
   const maybeSingle = useMemo(() => maybeGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [maybeGuests]);
   const maybeDouble = useMemo(() => maybeGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [maybeGuests]);
   const maybeVip = useMemo(() => maybeGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [maybeGuests]);
 
   const pendingGuests = useMemo(() => guests.filter(g => !g.rsvpStatus || g.rsvpStatus === 'Bado'), [guests]);
   const pendingCount = pendingGuests.length;
+  const pendingPax = useMemo(() => pendingGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0), [pendingGuests]);
   const pendingSingle = useMemo(() => pendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [pendingGuests]);
   const pendingDouble = useMemo(() => pendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [pendingGuests]);
   const pendingVip = useMemo(() => pendingGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [pendingGuests]);
@@ -471,11 +475,11 @@ export default function EventReports({
 
     if (selectedReport === 'Overall') {
       cardsData = [
-        { label: isEn ? "CONFIRMED (YES)" : "WATAHUDHURIA (YES)", value: `${attendingCount} (S:${attendingSingle} D:${attendingDouble})`, color: [22, 163, 74] },
-        { label: isEn ? "DECLINED (NO)" : "HAWATAKUJA (NO)", value: `${declinedCount} (S:${declinedSingle} D:${declinedDouble})`, color: [225, 29, 72] },
-        { label: isEn ? "MAYBE / UNDECIDED" : "HAWANA UHAKIKA", value: `${maybeCount} (S:${maybeSingle} D:${maybeDouble})`, color: [217, 119, 6] },
-        { label: isEn ? "PENDING RESPONSE" : "BADO HAWAJACONFIRM", value: `${pendingCount} (S:${pendingSingle} D:${pendingDouble})`, color: [100, 116, 139] },
-        { label: isEn ? "TOTAL CARDS" : "JUMLA YA KADI", value: `${totalGuestsCount} (S:${singleCardsCount} D:${doubleCardsCount})`, color: [15, 23, 42] }
+        { label: isEn ? "CONFIRMED (YES)" : "WATAHUDHURIA (YES)", value: `${attendingCount} (${totalRsvpPax} Pax)`, color: [22, 163, 74] },
+        { label: isEn ? "DECLINED (NO)" : "HAWATAKUJA (NO)", value: `${declinedCount} (${declinedPax} Pax)`, color: [225, 29, 72] },
+        { label: isEn ? "MAYBE / UNDECIDED" : "HAWANA UHAKIKA", value: `${maybeCount} (${maybePax} Pax)`, color: [217, 119, 6] },
+        { label: isEn ? "PENDING RESPONSE" : "BADO HAWAJACONFIRM", value: `${pendingCount} (${pendingPax} Pax)`, color: [100, 116, 139] },
+        { label: isEn ? "TOTAL CARDS" : "JUMLA YA KADI", value: `${totalGuestsCount} (${totalPaxCapacity} Pax)`, color: [15, 23, 42] }
       ];
     } else if (selectedReport === 'Attendance_Only') {
       cardsData = [
@@ -554,14 +558,14 @@ export default function EventReports({
       doc.setTextColor(30, 41, 59);
       doc.setFont("helvetica", "bold");
       const rsvpBreakdownStr = isEn
-        ? `RSVP BREAKDOWN: Attending: ${attendingCount} (Single: ${attendingSingle}, Double: ${attendingDouble} - ${totalRsvpPax} Pax) | Declined: ${declinedCount} (S: ${declinedSingle}, D: ${declinedDouble}) | Maybe: ${maybeCount} (S: ${maybeSingle}, D: ${maybeDouble}) | Pending: ${pendingCount} (S: ${pendingSingle}, D: ${pendingDouble})`
-        : `AINA ZA KADI: Watahudhuria: ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble} - Watu: ${totalRsvpPax}) | Hawatakuja: ${declinedCount} (Single: ${declinedSingle}, Double: ${declinedDouble}) | Hawana Uhakika: ${maybeCount} (Single: ${maybeSingle}, Double: ${maybeDouble}) | Bado Jibu: ${pendingCount} (Single: ${pendingSingle}, Double: ${pendingDouble})`;
+        ? `RSVP BREAKDOWN: Attending: ${attendingCount} Cards (S: ${attendingSingle}, D: ${attendingDouble} - ${totalRsvpPax} Pax) | Declined: ${declinedCount} Cards (S: ${declinedSingle}, D: ${declinedDouble} - ${declinedPax} Pax) | Maybe: ${maybeCount} Cards (S: ${maybeSingle}, D: ${maybeDouble} - ${maybePax} Pax) | Pending: ${pendingCount} Cards (S: ${pendingSingle}, D: ${pendingDouble} - ${pendingPax} Pax)`
+        : `AINA ZA KADI: Watahudhuria: ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble} — ${totalRsvpPax} Watu) | Hawatakuja: ${declinedCount} Kadi (Single: ${declinedSingle}, Double: ${declinedDouble} — ${declinedPax} Watu) | Hawana Uhakika: ${maybeCount} Kadi (Single: ${maybeSingle}, Double: ${maybeDouble} — ${maybePax} Watu) | Bado Jibu: ${pendingCount} Kadi (Single: ${pendingSingle}, Double: ${pendingDouble} — ${pendingPax} Watu)`;
       doc.text(rsvpBreakdownStr, 12, tableStartY + 4.5);
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(6.5);
       doc.setTextColor(71, 85, 105);
-      const dispatchSummaryStr = `Jumla ya Kadi: ${totalGuestsCount} (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})  •  Waliofika: ${checkedInCount} (Single: ${checkedInSingle}, Double: ${checkedInDouble})  •  Uwiano: ${arivedPercent()}%  •  SMS Sent: ${totalSmsSent}  •  WA Sent: ${totalWhatsappSent}`;
+      const dispatchSummaryStr = `Jumla ya Kadi: ${totalGuestsCount} (${totalPaxCapacity} Pax) (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})  •  Waliofika: ${checkedInCount} (Single: ${checkedInSingle}, Double: ${checkedInDouble} — ${arrivedPax} Pax)  •  Uwiano: ${arivedPercent()}%  •  SMS: ${totalSmsSent}  •  WA: ${totalWhatsappSent}`;
       doc.text(dispatchSummaryStr, 12, tableStartY + 9.5);
       tableStartY += 16;
 
@@ -898,12 +902,12 @@ export default function EventReports({
     
     text += `📋 1. RIPOTI YA MAHUDHURIO NA RSVP:\n`;
     text += `----------------------------------------\n`;
-    text += `• Kadi Zote Zilizopo (Total Cards): ${totalGuestsCount} (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})\n`;
-    text += `• Watakaohudhuria (RSVP Yes): ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble}${attendingVip > 0 ? `, VIP: ${attendingVip}` : ''} — Watu: ${totalRsvpPax})\n`;
-    text += `• Hawatakuja (RSVP No / Declined): ${declinedCount} Kadi (Single: ${declinedSingle}, Double: ${declinedDouble}${declinedVip > 0 ? `, VIP: ${declinedVip}` : ''})\n`;
-    text += `• Hawana Uhakika (RSVP Maybe): ${maybeCount} Kadi (Single: ${maybeSingle}, Double: ${maybeDouble}${maybeVip > 0 ? `, VIP: ${maybeVip}` : ''})\n`;
-    text += `• Bado Hawajaconfirm (Pending): ${pendingCount} Kadi (Single: ${pendingSingle}, Double: ${pendingDouble}${pendingVip > 0 ? `, VIP: ${pendingVip}` : ''})\n`;
-    text += `• Kadi Zilizofika na Kuskaniwa: ${checkedInCount} Kadi (Single: ${checkedInSingle}, Double: ${checkedInDouble} — ${arivedPercent()}% uwiano)\n`;
+    text += `• Kadi Zote Zilizopo (Total Cards): ${totalGuestsCount} Kadi (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''} — Uwezo: ${totalPaxCapacity} Watu/Pax)\n`;
+    text += `• Watakaohudhuria (RSVP Yes): ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble}${attendingVip > 0 ? `, VIP: ${attendingVip}` : ''} — ${totalRsvpPax} Watu/Pax)\n`;
+    text += `• Hawatakuja (RSVP No / Declined): ${declinedCount} Kadi (Single: ${declinedSingle}, Double: ${declinedDouble}${declinedVip > 0 ? `, VIP: ${declinedVip}` : ''} — ${declinedPax} Watu/Pax)\n`;
+    text += `• Hawana Uhakika (RSVP Maybe): ${maybeCount} Kadi (Single: ${maybeSingle}, Double: ${maybeDouble}${maybeVip > 0 ? `, VIP: ${maybeVip}` : ''} — ${maybePax} Watu/Pax)\n`;
+    text += `• Bado Hawajaconfirm (Pending): ${pendingCount} Kadi (Single: ${pendingSingle}, Double: ${pendingDouble}${pendingVip > 0 ? `, VIP: ${pendingVip}` : ''} — ${pendingPax} Watu/Pax)\n`;
+    text += `• Kadi Zilizofika na Kuskaniwa: ${checkedInCount} Kadi (Single: ${checkedInSingle}, Double: ${checkedInDouble} — ${arivedPercent()}% uwiano, ${arrivedPax} Watu/Pax)\n`;
     text += `• Ujumbe wa Kikampeni (SMS Sent): ${totalSmsSent}\n`;
     text += `• Ujumbe wa WA (WA Sent): ${totalWhatsappSent}\n\n`;
     
@@ -1037,12 +1041,12 @@ export default function EventReports({
     currentY += 12;
 
     const rsvpTableData = [
-      [isEn ? "Total Guests Listed" : "Jumla ya Wageni Walioorodheshwa", `${totalGuestsCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})`],
+      [isEn ? "Total Guests Listed" : "Jumla ya Wageni Walioorodheshwa", `${totalGuestsCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''} — ${totalPaxCapacity} ${isEn ? 'Pax' : 'Watu'})`],
       [isEn ? "Confirmed RSVP Yes (Attending)" : "Watakaohudhuria (RSVP Yes)", `${attendingCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${attendingSingle}, Double: ${attendingDouble}${attendingVip > 0 ? `, VIP: ${attendingVip}` : ''} — ${totalRsvpPax} ${isEn ? 'Pax' : 'Watu'})`],
-      [isEn ? "Confirmed RSVP No (Declined)" : "Hawatakuja (RSVP Declined)", `${declinedCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${declinedSingle}, Double: ${declinedDouble}${declinedVip > 0 ? `, VIP: ${declinedVip}` : ''})`],
-      [isEn ? "Maybe / Undecided Answer" : "Hawana Uhakika (RSVP Maybe)", `${maybeCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${maybeSingle}, Double: ${maybeDouble}${maybeVip > 0 ? `, VIP: ${maybeVip}` : ''})`],
-      [isEn ? "Pending / Unconfirmed" : "Bado Hawajaconfirm (Pending)", `${pendingCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${pendingSingle}, Double: ${pendingDouble}${pendingVip > 0 ? `, VIP: ${pendingVip}` : ''})`],
-      [isEn ? "Actual Checked-In Scan Arrivals" : "Mahudhurio Halisi (Arrived Scans)", `${checkedInCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${checkedInSingle}, Double: ${checkedInDouble} — ${arivedPercent()}% ${isEn ? 'Admission Ratio' : 'uwiano'})`],
+      [isEn ? "Confirmed RSVP No (Declined)" : "Hawatakuja (RSVP Declined)", `${declinedCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${declinedSingle}, Double: ${declinedDouble}${declinedVip > 0 ? `, VIP: ${declinedVip}` : ''} — ${declinedPax} ${isEn ? 'Pax' : 'Watu'})`],
+      [isEn ? "Maybe / Undecided Answer" : "Hawana Uhakika (RSVP Maybe)", `${maybeCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${maybeSingle}, Double: ${maybeDouble}${maybeVip > 0 ? `, VIP: ${maybeVip}` : ''} — ${maybePax} ${isEn ? 'Pax' : 'Watu'})`],
+      [isEn ? "Pending / Unconfirmed" : "Bado Hawajaconfirm (Pending)", `${pendingCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${pendingSingle}, Double: ${pendingDouble}${pendingVip > 0 ? `, VIP: ${pendingVip}` : ''} — ${pendingPax} ${isEn ? 'Pax' : 'Watu'})`],
+      [isEn ? "Actual Checked-In Scan Arrivals" : "Mahudhurio Halisi (Arrived Scans)", `${checkedInCount} ${isEn ? 'Cards' : 'Kadi'} (Single: ${checkedInSingle}, Double: ${checkedInDouble} — ${arivedPercent()}% ${isEn ? 'Admission Ratio' : 'uwiano'}, ${arrivedPax} ${isEn ? 'Pax' : 'Watu'})`],
     ];
 
     autoTable(doc, {
@@ -1718,7 +1722,7 @@ export default function EventReports({
                   {language === 'sw' ? 'Muhtasari wa RSVP & Aina za Kadi (Single & Double)' : 'RSVP Status Breakdown by Card Type (Single & Double)'}
                 </span>
                 <span className="text-[11px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
-                  {language === 'sw' ? 'Jumla ya Kadi:' : 'Total Cards:'} <strong className="text-white font-bold">{totalGuestsCount}</strong> (Single: <strong className="text-sky-300 font-bold">{singleCardsCount}</strong>, Double: <strong className="text-purple-300 font-bold">{doubleCardsCount}</strong>{vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})
+                  {language === 'sw' ? 'Jumla ya Kadi:' : 'Total Cards:'} <strong className="text-white font-bold">{totalGuestsCount}</strong> <span className="text-slate-400 font-normal">({totalPaxCapacity} {language === 'sw' ? 'Watu/Pax' : 'Pax'})</span> (Single: <strong className="text-sky-300 font-bold">{singleCardsCount}</strong>, Double: <strong className="text-purple-300 font-bold">{doubleCardsCount}</strong>{vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})
                 </span>
               </div>
 
@@ -1772,6 +1776,7 @@ export default function EventReports({
                     <div className="mt-2 flex items-baseline gap-2">
                       <p className="text-3xl font-mono font-black text-rose-300">{declinedCount}</p>
                       <span className="text-xs font-mono text-rose-400/80 font-bold">{language === 'sw' ? 'Kadi' : 'Cards'}</span>
+                      <span className="text-[10px] font-mono text-slate-400 ml-auto">({declinedPax} {language === 'sw' ? 'Watu/Pax' : 'Pax'})</span>
                     </div>
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-rose-500/20 flex items-center justify-between text-[11px] font-mono">
@@ -1804,6 +1809,7 @@ export default function EventReports({
                     <div className="mt-2 flex items-baseline gap-2">
                       <p className="text-3xl font-mono font-black text-amber-300">{maybeCount}</p>
                       <span className="text-xs font-mono text-amber-400/80 font-bold">{language === 'sw' ? 'Kadi' : 'Cards'}</span>
+                      <span className="text-[10px] font-mono text-slate-400 ml-auto">({maybePax} {language === 'sw' ? 'Watu/Pax' : 'Pax'})</span>
                     </div>
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-amber-500/20 flex items-center justify-between text-[11px] font-mono">
@@ -1836,6 +1842,7 @@ export default function EventReports({
                     <div className="mt-2 flex items-baseline gap-2">
                       <p className="text-3xl font-mono font-black text-slate-200">{pendingCount}</p>
                       <span className="text-xs font-mono text-slate-400 font-bold">{language === 'sw' ? 'Kadi' : 'Cards'}</span>
+                      <span className="text-[10px] font-mono text-slate-400 ml-auto">({pendingPax} {language === 'sw' ? 'Watu/Pax' : 'Pax'})</span>
                     </div>
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono">
