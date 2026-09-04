@@ -261,6 +261,313 @@ function extractPaymentInfoFromText(text: string): { amount: number; reference?:
   return { amount: amt, reference: reference || undefined };
 }
 
+// -------------------------------------------------------------
+// AUTOMATED WHATSAPP NOTIFICATION ENGINE FOR RSVP UPDATES & CHANGES
+// -------------------------------------------------------------
+function formatTzPhoneForWhatsApp(phone: string): string {
+  if (!phone) return "";
+  let clean = String(phone).replace(/\D/g, "");
+  if (clean.startsWith("0")) {
+    clean = "255" + clean.substring(1);
+  } else if (!clean.startsWith("255") && clean.length === 9) {
+    clean = "255" + clean;
+  }
+  return clean;
+}
+
+async function sendWhatsAppDirectText(
+  recipientPhone: string,
+  messageText: string,
+  db: any,
+  logDescription: string = "RSVP Notification"
+): Promise<{ success: boolean; channel: string; error?: string; details?: any }> {
+  const cleanPhone = formatTzPhoneForWhatsApp(recipientPhone);
+  if (!cleanPhone || cleanPhone.length < 9) {
+    return { success: false, channel: "none", error: "Namba ya simu haijakamilika" };
+  }
+
+  // Find Meta credentials
+  let metaToken = process.env.META_WHATSAPP_TOKEN 
+    || db.smsGatewaySettings?.whatsappMetaToken 
+    || db.smsGatewaySettings?.metaToken 
+    || db.smsGatewaySettings?.meta_token 
+    || db.smsGatewaySettings?.metaAccessToken
+    || db.settings?.whatsappMetaToken 
+    || db.settings?.metaToken;
+
+  let phoneId = process.env.META_PHONE_NUMBER_ID 
+    || db.smsGatewaySettings?.whatsappMetaPhoneId 
+    || db.smsGatewaySettings?.metaPhoneNumberId 
+    || db.smsGatewaySettings?.phone_number_id 
+    || db.settings?.whatsappMetaPhoneId
+    || db.settings?.metaPhoneNumberId;
+
+  const rawWhatsappUrl = db.smsGatewaySettings?.whatsappUrl || db.settings?.whatsappUrl;
+  if ((!metaToken || !phoneId) && rawWhatsappUrl) {
+    try {
+      const wUrlData = typeof rawWhatsappUrl === 'string' && rawWhatsappUrl.trim().startsWith('{') 
+        ? JSON.parse(rawWhatsappUrl) 
+        : (typeof rawWhatsappUrl === 'object' ? rawWhatsappUrl : null);
+      if (wUrlData) {
+        if (!metaToken) metaToken = wUrlData.meta_token || wUrlData.metaToken || wUrlData.token || wUrlData.access_token;
+        if (!phoneId) phoneId = wUrlData.phone_number_id || wUrlData.metaPhoneNumberId || wUrlData.phoneId || wUrlData.phone_id;
+      }
+    } catch (e) {
+      // Ignored
+    }
+  }
+
+  const logEntry: any = {
+    id: 'walog-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+    timestamp: new Date().toISOString(),
+    fromPhone: 'SYSTEM',
+    recipientPhone: cleanPhone,
+    guestName: logDescription,
+    incomingMessage: `[Outbound Alert: ${logDescription}]`,
+    botReply: messageText,
+    phoneId: phoneId || "",
+    metaTokenExists: !!metaToken,
+    status: 'pending',
+    metaResponse: null,
+    error: null
+  };
+
+  // 1. Try Meta Official Cloud API text message
+  if (metaToken && phoneId) {
+    try {
+      console.log(`[WhatsApp Outbound Text] Sending alert to ${cleanPhone} via Meta Phone ID ${phoneId}...`);
+      const resMeta = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${metaToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+          type: 'text',
+          text: { preview_url: false, body: messageText }
+        })
+      });
+
+      const resMetaJson = await resMeta.json();
+      logEntry.metaResponse = resMetaJson;
+
+      if (resMeta.ok && !resMetaJson.error) {
+        logEntry.status = 'sent';
+        db.whatsappLogs = [logEntry, ...(db.whatsappLogs || [])].slice(0, 200);
+        console.log(`[WhatsApp Outbound Text] Sent successfully to ${cleanPhone}`);
+        return { success: true, channel: 'meta_whatsapp', details: resMetaJson };
+      } else {
+        const errMsg = resMetaJson.error ? (resMetaJson.error.message || JSON.stringify(resMetaJson.error)) : `HTTP ${resMeta.status}`;
+        logEntry.error = errMsg;
+        console.warn(`[Meta WhatsApp Alert Error to ${cleanPhone}]:`, errMsg);
+      }
+    } catch (sendErr: any) {
+      console.error(`[Meta WhatsApp Network Error to ${cleanPhone}]:`, sendErr);
+      logEntry.error = sendErr.message || "Network Error";
+    }
+  }
+
+  // 2. Try Custom WhatsApp Webhook if configured
+  if (rawWhatsappUrl && typeof rawWhatsappUrl === 'string' && !rawWhatsappUrl.trim().startsWith('{')) {
+    try {
+      const finalUrl = rawWhatsappUrl
+        .replace(/{to}/g, cleanPhone)
+        .replace(/{message}/g, encodeURIComponent(messageText));
+      const resWebhook = await fetch(finalUrl, { method: 'GET' });
+      const txt = await resWebhook.text();
+      if (resWebhook.ok) {
+        logEntry.status = 'custom_webhook_sent';
+        db.whatsappLogs = [logEntry, ...(db.whatsappLogs || [])].slice(0, 200);
+        return { success: true, channel: 'custom_whatsapp_webhook', details: txt };
+      }
+    } catch (webhookErr: any) {
+      console.warn(`[Custom WhatsApp Webhook Error to ${cleanPhone}]:`, webhookErr?.message);
+    }
+  }
+
+  // 3. Fallback to SMS Gateway if configured
+  if (db.smsGatewaySettings && db.smsGatewaySettings.provider && db.smsGatewaySettings.provider !== 'simulation') {
+    try {
+      console.log(`[WhatsApp Fallback to SMS] Sending to ${cleanPhone}...`);
+      const smsResult = await dispatchSMS(cleanPhone, messageText, 'sms', db.smsGatewaySettings);
+      logEntry.status = 'fallback_sms_sent';
+      logEntry.fallbackResult = smsResult;
+      db.whatsappLogs = [logEntry, ...(db.whatsappLogs || [])].slice(0, 200);
+      return { success: true, channel: 'fallback_sms', details: smsResult };
+    } catch (smsErr: any) {
+      console.warn(`[Fallback SMS Error to ${cleanPhone}]:`, smsErr?.message);
+      logEntry.status = 'failed';
+      logEntry.error = (logEntry.error ? logEntry.error + " | " : "") + `SMS Fallback failed: ${smsErr?.message}`;
+    }
+  }
+
+  if (logEntry.status === 'pending') {
+    logEntry.status = 'failed';
+    if (!logEntry.error) {
+      logEntry.error = "WhatsApp Gateway haijasanidiwa au Token haipo.";
+    }
+  }
+
+  db.whatsappLogs = [logEntry, ...(db.whatsappLogs || [])].slice(0, 200);
+  return { success: false, channel: 'failed', error: logEntry.error };
+}
+
+async function notifyAdminAndGuestOnRSVPChange(params: {
+  guest: any;
+  previousStatus: string;
+  newStatus: string;
+  previousGuestsCount?: number;
+  newGuestsCount?: number;
+  rsvpComment?: string;
+  tableNumber?: string;
+  db: any;
+  source: 'web_portal' | 'whatsapp_chatbot' | 'admin_panel';
+}) {
+  const { guest, previousStatus, newStatus, previousGuestsCount, newGuestsCount, rsvpComment, tableNumber, db, source } = params;
+  if (!guest || !newStatus) return;
+
+  const wasAnswered = previousStatus && previousStatus !== 'Bado';
+  const isStatusChanged = wasAnswered && previousStatus !== newStatus;
+  const isCountChanged = wasAnswered && !isStatusChanged && previousGuestsCount !== undefined && newGuestsCount !== undefined && previousGuestsCount !== newGuestsCount;
+  const isChangeOfMind = isStatusChanged || isCountChanged;
+
+  const guests = db.guests || [];
+  const attendingGuests = guests.filter((g: any) => g.rsvpStatus === 'Atahudhuria');
+  const attendingCards = attendingGuests.length;
+  const attendingPax = attendingGuests.reduce((acc: number, g: any) => acc + (Number(g.rsvpGuestsCount) || (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1)), 0);
+  const declinedGuests = guests.filter((g: any) => g.rsvpStatus === 'Hatahudhuria');
+  const declinedCards = declinedGuests.length;
+  const declinedPax = declinedGuests.reduce((acc: number, g: any) => acc + (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1), 0);
+  const maybeGuests = guests.filter((g: any) => g.rsvpStatus === 'Labda');
+  const maybeCards = maybeGuests.length;
+  const pendingGuests = guests.filter((g: any) => !g.rsvpStatus || g.rsvpStatus === 'Bado');
+  const pendingCards = pendingGuests.length;
+
+  const eventName = db.eventDetails?.name || 'Sherehe Yetu';
+  const venueName = db.eventDetails?.eventHallName || db.eventDetails?.venue || 'Ukumbini';
+  const nowTz = new Date().toLocaleString('sw-TZ', { timeZone: 'Africa/Dar_es_Salaam', dateStyle: 'short', timeStyle: 'short' });
+
+  // Gather Admin phone numbers
+  const adminPhones: string[] = [];
+  const cfgAdminPhone = db.smsGatewaySettings?.adminWhatsAppPhone || db.smsGatewaySettings?.adminPhone || db.settings?.adminWhatsAppPhone;
+  if (cfgAdminPhone) adminPhones.push(cfgAdminPhone);
+  if (db.eventDetails?.contact1) adminPhones.push(db.eventDetails.contact1);
+  if (db.eventDetails?.contact2) adminPhones.push(db.eventDetails.contact2);
+  if (db.eventDetails?.contact3) adminPhones.push(db.eventDetails.contact3);
+
+  const uniqueAdminPhones = Array.from(new Set(
+    adminPhones.map(p => formatTzPhoneForWhatsApp(p)).filter(p => p && p.length >= 9)
+  ));
+
+  const statusLabel = newStatus === 'Atahudhuria' ? 'Atahudhuria (Anakuja) ✅' : (newStatus === 'Hatahudhuria' ? 'Hatahudhuria (Haji/Udhuru) ❌' : 'Labda (Hana Uhakika) ⏳');
+  const paxStr = newStatus === 'Atahudhuria' ? ` (${newGuestsCount || 1} Pax/Watu)` : '';
+  const prevPaxStr = previousGuestsCount ? ` (${previousGuestsCount} Pax/Watu)` : '';
+
+  let adminAlert = "";
+  if (isChangeOfMind) {
+    adminAlert = `⚠️ *TAARIFA: MGENI AMEBADILISHA MAWAZO YA RSVP!* ⚠️\n\n` +
+      `Mgeni amebadilisha uamuzi wake wa ushiriki kwa sherehe ya *${eventName}*:\n\n` +
+      `• *Jina la Mgeni:* *${guest.name}*\n` +
+      `• *Namba ya Simu:* ${guest.phone || 'Haipo'}\n` +
+      `• *Aina ya Kadi:* ${guest.cardType || 'SINGLE'}\n` +
+      `• *Uamuzi Mpya (Sasa):* *${statusLabel}*${paxStr}\n` +
+      `• *Uamuzi wa Awali:* ${previousStatus}${prevPaxStr}\n` +
+      (rsvpComment && rsvpComment.trim() ? `• *Ujumbe/Sababu:* "${rsvpComment.trim()}"\n` : '') +
+      (tableNumber && tableNumber.trim() ? `• *Meza:* ${tableNumber.trim()}\n` : '') +
+      `• *Njia Iliyotumika:* ${source === 'whatsapp_chatbot' ? 'WhatsApp Chatbot 💬' : (source === 'web_portal' ? 'Tovuti ya Mwaliko 🌐' : 'Mfumo wa Admin 💻')}\n` +
+      `• *Muda:* ${nowTz}\n\n` +
+      `📊 *Muhtasari wa Mahudhurio Hadi Sasa:*\n` +
+      `✓ Wanaokuja: *${attendingCards} Kadi (${attendingPax} Watu)*\n` +
+      `✗ Hawaji: *${declinedCards} Kadi (${declinedPax} Watu)*\n` +
+      `? Hawana Uhakika: *${maybeCards} Kadi*\n` +
+      `⏳ Bado Kujibu: *${pendingCards} Kadi*`;
+  } else {
+    adminAlert = `🔔 *TAARIFA MPYA YA RSVP (MAJIBU YAMEPOKELEWA)* 🔔\n\n` +
+      `Mgeni amethibitisha majibu yake ya RSVP kwa ajili ya *${eventName}*:\n\n` +
+      `• *Jina la Mgeni:* *${guest.name}*\n` +
+      `• *Namba ya Simu:* ${guest.phone || 'Haipo'}\n` +
+      `• *Aina ya Kadi:* ${guest.cardType || 'SINGLE'}\n` +
+      `• *Majibu Yake:* *${statusLabel}*${paxStr}\n` +
+      (rsvpComment && rsvpComment.trim() ? `• *Ujumbe/Maoni:* "${rsvpComment.trim()}"\n` : '') +
+      (tableNumber && tableNumber.trim() ? `• *Meza:* ${tableNumber.trim()}\n` : '') +
+      `• *Njia Iliyotumika:* ${source === 'whatsapp_chatbot' ? 'WhatsApp Chatbot 💬' : (source === 'web_portal' ? 'Tovuti ya Mwaliko 🌐' : 'Mfumo wa Admin 💻')}\n` +
+      `• *Muda:* ${nowTz}\n\n` +
+      `📊 *Muhtasari wa Mahudhurio Hadi Sasa:*\n` +
+      `✓ Wanaokuja: *${attendingCards} Kadi (${attendingPax} Watu)*\n` +
+      `✗ Hawaji: *${declinedCards} Kadi (${declinedPax} Watu)*\n` +
+      `? Hawana Uhakika: *${maybeCards} Kadi*\n` +
+      `⏳ Bado Kujibu: *${pendingCards} Kadi*`;
+  }
+
+  // 1. Dispatch WhatsApp alert to each unique admin phone
+  for (const phone of uniqueAdminPhones) {
+    try {
+      await sendWhatsAppDirectText(
+        phone, 
+        adminAlert, 
+        db, 
+        isChangeOfMind ? `Admin Alert (RSVP Changed): ${guest.name}` : `Admin Alert (New RSVP): ${guest.name}`
+      );
+    } catch (aErr) {
+      console.warn(`[Admin WhatsApp Alert Error to ${phone}]:`, aErr);
+    }
+  }
+
+  // 2. Dispatch Confirmation to Guest if submitted via web portal and phone exists
+  if (source === 'web_portal' && guest.phone) {
+    const guestClean = formatTzPhoneForWhatsApp(guest.phone);
+    if (guestClean && guestClean.length >= 9) {
+      let guestMsg = "";
+      if (newStatus === 'Atahudhuria') {
+        guestMsg = `Habari *${guest.name}*! 👋🎉\n\n` +
+          (isChangeOfMind ? 'Mabadiliko ya ushiriki wako yamesajiliwa kikamilifu:\n\n' : 'Uthibitisho wako wa kuhudhuria umepokelewa na kusajiliwa kikamilifu:\n\n') +
+          `• *Sherehe:* *${eventName}*\n` +
+          `• *Hali:* *Nitahudhuria (Confirmed)*\n` +
+          `• *Idadi ya Wageni:* ${newGuestsCount || 1} Watu\n` +
+          `• *Tarehe:* ${db.eventDetails?.date || 'Siku ya Tukio'}\n` +
+          `• *Ukumbi:* ${venueName}\n` +
+          `• *Muda:* ${db.eventDetails?.time || ''} ${db.eventDetails?.period || ''}\n` +
+          (tableNumber && tableNumber.trim() ? `• *Meza Yako:* ${tableNumber.trim()}\n` : '') +
+          `\nKaribu sana na tunakusubiri kwa furaha tele! 🙏✨`;
+      } else if (newStatus === 'Hatahudhuria') {
+        guestMsg = `Habari *${guest.name}*! 👋\n\n` +
+          (isChangeOfMind ? 'Mabadiliko ya jibu lako yamesajiliwa:\n\n' : 'Tumepokea taarifa yako kuwa hutaweza kuhudhuria:\n\n') +
+          `• *Sherehe:* *${eventName}*\n` +
+          `• *Hali:* *Sitahudhuria (Declined)*\n\n` +
+          `Tunashukuru sana kwa kututaarifu mapema! Kama ungependa kushiriki kwa mchango au ahadi, waandaji watashukuru sana. 🙏`;
+      } else if (newStatus === 'Labda') {
+        guestMsg = `Habari *${guest.name}*! 👋\n\n` +
+          `Taarifa yako kuwa hauna uhakika bado imesajiliwa kwenye mfumo wa *${eventName}*.\n\n` +
+          `Utakapokuwa na uhakika zaidi, unaweza kusasisha wakati wowote kupitia kiungo chako au kwa kutujulisha hapa. Karibu sana! 🙏`;
+      }
+
+      if (guestMsg) {
+        try {
+          await sendWhatsAppDirectText(guestClean, guestMsg, db, `Guest Confirmation: ${guest.name}`);
+        } catch (gErr) {
+          console.warn(`[Guest Confirmation WhatsApp Error]:`, gErr);
+        }
+      }
+    }
+  }
+
+  // 3. Add to notifications lists in DB
+  const notifItem = {
+    id: 'notif-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+    type: 'rsvp',
+    title: isChangeOfMind ? `Mgeni Amebadilisha RSVP: ${guest.name}` : `Majibu Mapya ya RSVP: ${guest.name}`,
+    message: `${guest.name} ameweka jibu: ${newStatus}${newGuestsCount ? ` (${newGuestsCount} watu)` : ''}${isChangeOfMind ? ` (awali: ${previousStatus})` : ''}`,
+    timestamp: new Date().toISOString(),
+    read: false,
+    guestId: guest.id
+  };
+  db.committeeNotifications = [notifItem, ...(db.committeeNotifications || [])].slice(0, 100);
+  db.notifications = [notifItem, ...(db.notifications || [])].slice(0, 100);
+}
+
 async function processWhatsAppBotLogic(
   fromPhone: string, 
   textBody: string, 
@@ -455,9 +762,13 @@ Respond strictly in JSON format:
 
               actionReply = `Habari *${matchedGuest.name}*! 🎙️✨\n\n*SAUTI IMEELEWEKA NA AI*:\n_"${transcript}"_\n\n• *Malipo Yaliyosajiliwa:* TZS ${amt.toLocaleString()}\n• *Jumla Uliyolipa:* TZS ${updatedPaid.toLocaleString()}\n\nTunakushukuru sana kwa mchango wako! 🙏🎉`;
             } else if (intent === 'rsvp' && parsedAudio.rsvpStatus) {
+              const previousStatus = matchedGuest.rsvpStatus || 'Bado';
+              const previousPax = Number(matchedGuest.rsvpGuestsCount) || (matchedGuest.cardType === 'DOUBLE' || matchedGuest.cardType === 'COUPLE' ? 2 : 1);
+
               matchedGuest.rsvpStatus = parsedAudio.rsvpStatus;
               if (parsedAudio.guestCount) matchedGuest.rsvpGuestsCount = parsedAudio.guestCount;
               matchedGuest.rsvpUpdatedAt = new Date().toISOString();
+              matchedGuest.rsvpSeen = false;
 
               const gIdx = guests.findIndex((g: any) => g.id === matchedGuest.id);
               if (gIdx !== -1) { guests[gIdx] = matchedGuest; db.guests = guests; }
@@ -465,6 +776,19 @@ Respond strictly in JSON format:
               actionTaken = true;
 
               actionReply = `Habari *${matchedGuest.name}*! 🎙️✨\n\n*SAUTI IMEELEWEKA NA AI*:\n_"${transcript}"_\n\nUthibitisho wako wa *${parsedAudio.rsvpStatus}*${parsedAudio.guestCount ? ` (Wageni: ${parsedAudio.guestCount})` : ''} umesajiliwa kikamilifu! Karibu sana. 🙏`;
+
+              // Trigger Automated WhatsApp Notification to Admin
+              notifyAdminAndGuestOnRSVPChange({
+                guest: matchedGuest,
+                previousStatus,
+                newStatus: parsedAudio.rsvpStatus,
+                previousGuestsCount: previousPax,
+                newGuestsCount: Number(matchedGuest.rsvpGuestsCount) || (matchedGuest.cardType === 'DOUBLE' || matchedGuest.cardType === 'COUPLE' ? 2 : 1),
+                rsvpComment: `[Ujumbe wa Sauti]: "${transcript}"`,
+                tableNumber: matchedGuest.customFields?.tableNumber || matchedGuest.tableNumber,
+                db,
+                source: 'whatsapp_chatbot'
+              }).catch(err => console.error("[RSVP Voice Alert Error]:", err));
             } else {
               // Standard voice transcript feedback
               actionReply = `Habari *${matchedGuest.name}*! 🎙️✨\n\n*SAUTI YAKO IMESIKILIZWA NA AI*:\n_"${transcript}"_\n\nTunakushukuru kwa kuwasiliana nasi! Kama una swali kuhusu ukumbi, ahadi au usafiri, tutajibu hapa. 🙏`;
@@ -602,6 +926,9 @@ Respond strictly in JSON format:
       }
 
       if (newRsvp) {
+        const previousStatus = matchedGuest.rsvpStatus || 'Bado';
+        const previousPax = Number(matchedGuest.rsvpGuestsCount) || (matchedGuest.cardType === 'DOUBLE' || matchedGuest.cardType === 'COUPLE' ? 2 : 1);
+
         matchedGuest.rsvpStatus = newRsvp;
         matchedGuest.rsvpUpdatedAt = new Date().toISOString();
         matchedGuest.rsvpSeen = false;
@@ -631,6 +958,19 @@ Respond strictly in JSON format:
         } else {
           actionReply = `Habari *${matchedGuest.name}*! 👋\n\nTaarifa yako kuwa hujaweka uhakika imesajiliwa. Utakapokuwa tayari, tafadhali tutaarifu tena! Karibu sana. 🙏`;
         }
+
+        // Trigger Automated WhatsApp Notification to Admin
+        notifyAdminAndGuestOnRSVPChange({
+          guest: matchedGuest,
+          previousStatus,
+          newStatus: newRsvp,
+          previousGuestsCount: previousPax,
+          newGuestsCount: Number(matchedGuest.rsvpGuestsCount) || (matchedGuest.cardType === 'DOUBLE' || matchedGuest.cardType === 'COUPLE' ? 2 : 1),
+          rsvpComment: textBody,
+          tableNumber: matchedGuest.customFields?.tableNumber || matchedGuest.tableNumber,
+          db,
+          source: 'whatsapp_chatbot'
+        }).catch(err => console.error("[RSVP Text Alert Error]:", err));
       }
     }
 
@@ -3851,6 +4191,8 @@ Lema, Nguvu Moja!`;
       const db = await readDBLatest();
       const guests = db.guests || [];
       let found = false;
+      let matchedGuestBefore: any = null;
+      let updatedGuestAfter: any = null;
 
       const rawSearch = String(searchTarget).trim().toLowerCase();
       const cleanSearch = rawSearch.replace(/^#/, '');
@@ -3875,19 +4217,23 @@ Lema, Nguvu Moja!`;
 
         if (isMatch) {
           found = true;
+          matchedGuestBefore = { ...g };
           const currentCustomFields = g.customFields || {};
-          return {
+          const finalCount = rsvpStatus === "Atahudhuria" ? Number(rsvpGuestsCount || 1) : 0;
+          const finalTable = tableNumber !== undefined ? tableNumber : (currentCustomFields.tableNumber || "");
+          updatedGuestAfter = {
             ...g,
             rsvpStatus,
-            rsvpGuestsCount: rsvpStatus === "Atahudhuria" ? Number(rsvpGuestsCount || 1) : 0,
+            rsvpGuestsCount: finalCount,
             rsvpComment: rsvpComment || "",
             rsvpUpdatedAt: new Date().toISOString(),
             rsvpSeen: false,
             customFields: {
               ...currentCustomFields,
-              tableNumber: tableNumber !== undefined ? tableNumber : (currentCustomFields.tableNumber || "")
+              tableNumber: finalTable
             }
           };
+          return updatedGuestAfter;
         }
         return g;
       });
@@ -3899,9 +4245,66 @@ Lema, Nguvu Moja!`;
       db.guests = updatedGuests;
       await writeDB(db);
 
+      // Automated WhatsApp Notification to Admin & Confirmation to Guest
+      if (matchedGuestBefore && updatedGuestAfter) {
+        const previousStatus = matchedGuestBefore.rsvpStatus || 'Bado';
+        const previousGuestsCount = Number(matchedGuestBefore.rsvpGuestsCount) || (matchedGuestBefore.cardType === 'DOUBLE' || matchedGuestBefore.cardType === 'COUPLE' ? 2 : 1);
+        
+        notifyAdminAndGuestOnRSVPChange({
+          guest: updatedGuestAfter,
+          previousStatus,
+          newStatus: rsvpStatus,
+          previousGuestsCount,
+          newGuestsCount: Number(updatedGuestAfter.rsvpGuestsCount) || (updatedGuestAfter.cardType === 'DOUBLE' || updatedGuestAfter.cardType === 'COUPLE' ? 2 : 1),
+          rsvpComment,
+          tableNumber: updatedGuestAfter.customFields?.tableNumber,
+          db,
+          source: 'web_portal'
+        }).then(async () => {
+          try {
+            await writeDB(db);
+          } catch (e) {}
+        }).catch(err => {
+          console.error("[notifyAdminAndGuestOnRSVPChange error]:", err);
+        });
+      }
+
       res.json({ success: true, message: "RSVP updated successfully" });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API 4-TEST: Test WhatsApp Admin RSVP alert directly
+  app.post("/api/whatsapp/test-admin-alert", async (req, res) => {
+    try {
+      const db = await readDBLatest();
+      const testPhone = req.body?.phone || db.smsGatewaySettings?.adminWhatsAppPhone || db.eventDetails?.contact1 || '0755123456';
+      const cleanPhone = formatTzPhoneForWhatsApp(testPhone);
+      
+      const eventName = db.eventDetails?.name || 'Harusi Yetu';
+      const mockTestAlert = `🧪 *JARIBIO LA ARIFA YA WHATSAPP (RSVP TEST ALERT)* 🧪\n\n` +
+        `Mfumo wa *${eventName}* umefanikiwa kusanidi arifa za papo hapo za WhatsApp!\n\n` +
+        `• *Hali:* Mfumo uko hewani na tayari 🚀\n` +
+        `• *Kazi:* Kila mgeni anapothibitisha au *akibadilisha mawazo* yake ya RSVP, utapokea ujumbe kamili papo hapo.\n` +
+        `• *Namba Inayopokea:* ${cleanPhone}\n` +
+        `• *Muda:* ${new Date().toLocaleString('sw-TZ', { timeZone: 'Africa/Dar_es_Salaam' })}\n\n` +
+        `Hakuna taarifa yoyote ya mgeni itakayopita bila wewe kujua! 🎉`;
+
+      const result = await sendWhatsAppDirectText(cleanPhone, mockTestAlert, db, "Majaribio ya Arifa ya Admin");
+      await writeDB(db);
+
+      res.json({
+        success: result.success,
+        channel: result.channel,
+        error: result.error,
+        sentTo: cleanPhone,
+        message: result.success 
+          ? `Ujumbe wa majaribio umetumwa kwa mafanikio kwenda ${cleanPhone}!` 
+          : `Imeshindwa kutuma: ${result.error || 'Hitilafu ya WhatsApp Gateway'}`
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

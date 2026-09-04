@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, RefreshCw, Search } from 'lucide-react';
+import { Settings, Save, RefreshCw, Search, Bell, Send, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 export default function SMSGatewayConfig() {
@@ -28,6 +28,13 @@ export default function SMSGatewayConfig() {
   const [whatsappMetaWabaId, setWhatsappMetaWabaId] = useState('');
   const [whatsappMetaTemplateName, setWhatsappMetaTemplateName] = useState('kadi_mwaliko');
   const [whatsappMetaLang, setWhatsappMetaLang] = useState('sw');
+
+  // Automated RSVP WhatsApp Notification States
+  const [adminWhatsAppPhone, setAdminWhatsAppPhone] = useState('');
+  const [autoRsvpAlertsEnabled, setAutoRsvpAlertsEnabled] = useState(true);
+  const [guestRsvpConfirmEnabled, setGuestRsvpConfirmEnabled] = useState(true);
+  const [isTestingAdminAlert, setIsTestingAdminAlert] = useState(false);
+  const [adminAlertTestResult, setAdminAlertTestResult] = useState<any>(null);
   const [testPhone, setTestPhone] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [isTriggeringMeta, setIsTriggeringMeta] = useState(false);
@@ -81,6 +88,25 @@ export default function SMSGatewayConfig() {
       await fetch('/api/whatsapp-logs', { method: 'DELETE' });
       setWhatsappLogs([]);
     } catch (e) {}
+  };
+
+  const handleTestAdminAlert = async () => {
+    setIsTestingAdminAlert(true);
+    setAdminAlertTestResult(null);
+    try {
+      const res = await fetch('/api/whatsapp/test-admin-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: adminWhatsAppPhone })
+      });
+      const data = await res.json();
+      setAdminAlertTestResult(data);
+      fetchLogs();
+    } catch (err: any) {
+      setAdminAlertTestResult({ success: false, error: err.message || "Hitilafu ya muunganisho wa mfumo" });
+    } finally {
+      setIsTestingAdminAlert(false);
+    }
   };
 
   useEffect(() => {
@@ -226,9 +252,30 @@ export default function SMSGatewayConfig() {
             fetchEhubIds(data);
           }
         }
+        if (data) {
+          if (data.adminWhatsAppPhone !== undefined) {
+            setAdminWhatsAppPhone(data.adminWhatsAppPhone);
+          }
+          if (data.autoRsvpAlertsEnabled !== undefined) {
+            setAutoRsvpAlertsEnabled(data.autoRsvpAlertsEnabled !== false);
+          }
+          if (data.guestRsvpConfirmEnabled !== undefined) {
+            setGuestRsvpConfirmEnabled(data.guestRsvpConfirmEnabled !== false);
+          }
+        }
         setIsLoaded(true);
         fetchBalance();
         fetchLogs();
+
+        // If adminWhatsAppPhone is still empty, load event contact1 as default
+        fetch('/api/state')
+          .then(r => r.json())
+          .then(s => {
+            if (s && s.eventDetails && s.eventDetails.contact1) {
+              setAdminWhatsAppPhone(prev => prev || s.eventDetails.contact1);
+            }
+          })
+          .catch(() => {});
       })
       .catch(err => {
         console.error("Error fetching SMS gateway settings:", err);
@@ -279,6 +326,9 @@ export default function SMSGatewayConfig() {
 
     const payload = {
       ...gatewaySettings,
+      adminWhatsAppPhone: adminWhatsAppPhone.trim(),
+      autoRsvpAlertsEnabled,
+      guestRsvpConfirmEnabled,
       whatsappUrl: finalWhatsappUrl
     };
 
@@ -995,6 +1045,118 @@ export default function SMSGatewayConfig() {
                 </div>
               )}
             </div>
+
+        {/* AUTOMATED INSTANT RSVP & CHANGE-OF-MIND WHATSAPP NOTIFICATIONS */}
+        <div className="mt-8 border-t border-emerald-500/30 pt-6 space-y-4">
+          <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-500/20 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0">
+                  <Bell className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>{isEn ? "Automated WhatsApp RSVP Notifications & Change Alerts" : "Taarifa za Papo Hapo za WhatsApp (RSVP & Mabadiliko ya Mawazo)"}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      {autoRsvpAlertsEnabled ? (isEn ? "ACTIVE" : "IKO HEWANI") : (isEn ? "PAUSED" : "IMESIMAMA")}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-350 mt-0.5">
+                    {isEn 
+                      ? "Get real-time WhatsApp alerts when guests RSVP or change their minds on the web portal or via chat." 
+                      : "Pata ujumbe wa moja kwa moja kwenye WhatsApp kila mgeni anapojibu mwaliko mtandaoni, akibadilisha mawazo, au akijibu kwa sauti/maandishi."}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleTestAdminAlert}
+                disabled={isTestingAdminAlert}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold text-[11px] transition-all flex items-center gap-2 shrink-0 cursor-pointer shadow-lg shadow-emerald-900/30"
+              >
+                {isTestingAdminAlert ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                <span>{isTestingAdminAlert ? (isEn ? "Sending..." : "Inatuma...") : (isEn ? "Test WhatsApp Alert" : "Jaribu Arifa kwa WhatsApp")}</span>
+              </button>
+            </div>
+
+            {/* Config Form Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-300 block">
+                  {isEn ? "Admin / Host WhatsApp Number" : "Namba ya WhatsApp ya Msimamizi / Kamati"}
+                </label>
+                <input
+                  type="tel"
+                  placeholder="Mfano: 0755123456 au 255755123456"
+                  value={adminWhatsAppPhone}
+                  onChange={(e) => setAdminWhatsAppPhone(e.target.value)}
+                  className="w-full bg-[#050b18] border border-white/15 rounded-xl px-3.5 py-2 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 placeholder:text-slate-600"
+                />
+                <p className="text-[10px] text-slate-400">
+                  {isEn 
+                    ? "If empty, the system automatically uses the primary organizer phone (Contact 1) from Event Details." 
+                    : "Ikiachwa wazi, mfumo unatumia kiotomatiki namba ya kwanza ya msimamizi (Contact 1) kutoka kwenye Taarifa za Sherehe."}
+                </p>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-2.5 flex flex-col justify-center">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoRsvpAlertsEnabled}
+                    onChange={(e) => setAutoRsvpAlertsEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-[#050b18] border-white/20"
+                  />
+                  <span className="text-[11px] font-semibold text-slate-200">
+                    {isEn ? "Notify organizer when guest submits or changes RSVP" : "Arifu msimamizi kila mgeni anapojibu au akibadilisha mawazo ya RSVP"}
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={guestRsvpConfirmEnabled}
+                    onChange={(e) => setGuestRsvpConfirmEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-[#050b18] border-white/20"
+                  />
+                  <span className="text-[11px] font-semibold text-slate-200">
+                    {isEn ? "Send instant confirmation WhatsApp message to guest" : "Tuma ujumbe wa uthibitisho kwenye WhatsApp ya mgeni baada ya kujibu"}
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Test result status feedback */}
+            {adminAlertTestResult && (
+              <div className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
+                adminAlertTestResult.success 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}>
+                {adminAlertTestResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-0.5">
+                  <p className="font-bold">
+                    {adminAlertTestResult.success 
+                      ? (isEn ? "WhatsApp Alert Test Successful!" : "Jaribio la Arifa limefanikiwa!") 
+                      : (isEn ? "WhatsApp Alert Test Notice" : "Taarifa ya Jaribio")}
+                  </p>
+                  <p className="text-[11px] opacity-90">{adminAlertTestResult.message || adminAlertTestResult.error}</p>
+                  {adminAlertTestResult.channel && (
+                    <p className="text-[10px] font-mono text-slate-400 mt-1">
+                      Channel: <span className="text-white font-bold">{adminAlertTestResult.channel}</span> | Namba: <span className="text-white font-bold">{adminAlertTestResult.sentTo}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* WHATSAPP CHATBOT LIVE TEST & WEBHOOK LOGS */}
         <div className="mt-8 border-t border-white/10 pt-6 space-y-4">

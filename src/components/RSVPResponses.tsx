@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clipboard, CheckCircle, XCircle, HelpCircle, MessageSquare, AlertCircle, RefreshCw, Send, ArrowRight, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Clipboard, CheckCircle, XCircle, HelpCircle, MessageSquare, AlertCircle, RefreshCw, Send, ArrowRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Bell, CheckCircle2 } from 'lucide-react';
 import { EventDetails, Guest } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -26,6 +26,36 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'rsvpStatus' | 'none'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // WhatsApp Alert Test state
+  const [isTestingWhatsApp, setIsTestingWhatsApp] = useState(false);
+  const [whatsAppTestFeedback, setWhatsAppTestFeedback] = useState<{ success: boolean; message: string; channel?: string; sentTo?: string } | null>(null);
+
+  const handleTestWhatsAppAlert = async () => {
+    setIsTestingWhatsApp(true);
+    setWhatsAppTestFeedback(null);
+    try {
+      const res = await fetch('/api/whatsapp/test-admin-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: event.contact1 })
+      });
+      const data = await res.json();
+      setWhatsAppTestFeedback({
+        success: !!data.success,
+        message: data.message || (data.success ? 'Arifa ya WhatsApp imetumwa vizuri!' : 'Hitilafu: ' + (data.error || 'Haijatumiwa')),
+        channel: data.channel,
+        sentTo: data.sentTo
+      });
+    } catch (e: any) {
+      setWhatsAppTestFeedback({
+        success: false,
+        message: e.message || 'Hitilafu ya muunganisho wa mfumo'
+      });
+    } finally {
+      setIsTestingWhatsApp(false);
+    }
+  };
   
   // Multi-Filter sidebar states
   const [filterRsvpStatus, setFilterRsvpStatus] = useState<string>('ALL');
@@ -93,6 +123,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
     if (!selectedSimGuestId) return;
 
     const nowIso = new Date().toISOString();
+    const guestObj = guests.find(g => g.id === selectedSimGuestId);
     const updated = guests.map(g => {
       if (g.id === selectedSimGuestId) {
         return {
@@ -109,10 +140,26 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
 
     onUpdateGuests(updated);
     setIsSimulatorOpen(false);
+
+    // Trigger backend notification flow
+    if (guestObj) {
+      fetch('/api/rsvp-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestId: selectedSimGuestId,
+          phone: guestObj.phone,
+          rsvpStatus: simStatus,
+          rsvpGuestsCount: simStatus === 'Hatahudhuria' ? 0 : simCompanions,
+          rsvpComment: simComment ? simComment.trim() : ""
+        })
+      }).catch(err => console.warn("Simulator RSVP update error:", err));
+    }
   };
 
   const handleQuickStatusChange = (guestId: string, newStatus: 'Atahudhuria' | 'Hatahudhuria' | 'Labda' | 'Bado') => {
     const nowIso = new Date().toISOString();
+    const targetGuest = guests.find(g => g.id === guestId);
     const updated = guests.map(g => {
       if (g.id === guestId) {
         const count = newStatus === 'Atahudhuria' 
@@ -130,6 +177,24 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
     });
 
     onUpdateGuests(updated);
+
+    // Trigger backend notification flow
+    if (targetGuest) {
+      const count = newStatus === 'Atahudhuria' 
+        ? (targetGuest.rsvpGuestsCount || (targetGuest.cardType === 'DOUBLE' ? 2 : 1))
+        : 0;
+      fetch('/api/rsvp-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestId: guestId,
+          phone: targetGuest.phone,
+          rsvpStatus: newStatus,
+          rsvpGuestsCount: count,
+          rsvpComment: targetGuest.rsvpComment || ""
+        })
+      }).catch(err => console.warn("Quick status RSVP update error:", err));
+    }
   };
 
   const handlePrepopulateRSVPs = () => {
@@ -225,6 +290,69 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
           </button>
         )}
       </div>
+
+      {/* WHATSAPP AUTOMATED INSTANT ALERTS STATUS BANNER */}
+      <div className="bg-gradient-to-r from-emerald-950/40 via-blue-950/20 to-slate-900/40 border border-emerald-500/30 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <Bell className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>{isEn ? "Automated WhatsApp Alerts Active" : "Arifa za Moja kwa Moja za WhatsApp Ziko Hewani"}</span>
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                {event.contact1 ? `Simu: ${event.contact1}` : 'Kamati'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-350 mt-0.5">
+              {isEn 
+                ? "The system automatically notifies you on WhatsApp whenever a guest responds or changes their mind." 
+                : "Mfumo unakutumia ujumbe wa WhatsApp papo hapo kila mgeni anapojibu mwaliko mtandaoni au akibadilisha mawazo yake."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+          <button
+            type="button"
+            onClick={handleTestWhatsAppAlert}
+            disabled={isTestingWhatsApp}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[11px] font-bold rounded-xl transition flex items-center gap-1.5 border border-emerald-400/30 cursor-pointer shadow-md shadow-emerald-900/20"
+          >
+            {isTestingWhatsApp ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            <span>{isTestingWhatsApp ? (isEn ? "Sending..." : "Inatuma...") : (isEn ? "Test WhatsApp Alert" : "Jaribu Arifa ya WhatsApp")}</span>
+          </button>
+        </div>
+      </div>
+
+      {whatsAppTestFeedback && (
+        <div className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 ${
+          whatsAppTestFeedback.success 
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+            : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+        }`}>
+          <div className="flex items-center gap-2">
+            {whatsAppTestFeedback.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+            <div>
+              <p className="font-semibold">{whatsAppTestFeedback.message}</p>
+              {whatsAppTestFeedback.channel && (
+                <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                  Njia: {whatsAppTestFeedback.channel} | Ilipotumwa: {whatsAppTestFeedback.sentTo}
+                </p>
+              )}
+            </div>
+          </div>
+          <button 
+            onClick={() => setWhatsAppTestFeedback(null)}
+            className="text-[10px] opacity-70 hover:opacity-100 font-bold px-2 py-1 rounded hover:bg-white/10"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Numerical Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -552,7 +680,15 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
               ) : (
                 sortedGuests.map((g) => (
                   <tr key={g.id} className="hover:bg-white/5 transition border-b border-white/5">
-                    <td className="px-5 py-3 font-bold text-white">{g.name}</td>
+                    <td className="px-5 py-3 font-bold text-white">
+                      <div>{g.name}</div>
+                      {g.rsvpUpdatedAt && (
+                        <div className="text-[9.5px] text-blue-300/80 font-normal font-mono flex items-center gap-1 mt-0.5">
+                          <span>🕒 {isEn ? 'Updated:' : 'Ilibadilishwa:'}</span>
+                          <span>{new Date(g.rsvpUpdatedAt).toLocaleDateString()} {new Date(g.rsvpUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-5 py-3 font-mono text-slate-300">{g.phone}</td>
                     
                     {/* Status Badge & Quick Change */}
