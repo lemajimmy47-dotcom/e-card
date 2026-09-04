@@ -551,23 +551,33 @@ export default function EventReports({
     }
 
     if (selectedReport === 'Overall') {
-      // RSVP category breakdown + message stats bar
-      doc.setFillColor(241, 245, 249);
-      doc.rect(10, tableStartY, pageWidth - 20, 12, 'F');
-      doc.setFontSize(6.8);
+      // RSVP category breakdown + message stats bar formatted neatly across 3 rows so no text is truncated
+      const bannerHeight = 17;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(10, tableStartY, pageWidth - 20, bannerHeight, 1.5, 1.5, 'FD');
+
+      doc.setFontSize(7);
       doc.setTextColor(30, 41, 59);
       doc.setFont("helvetica", "bold");
-      const rsvpBreakdownStr = isEn
-        ? `RSVP BREAKDOWN: Attending: ${attendingCount} Cards (S: ${attendingSingle}, D: ${attendingDouble} - ${totalRsvpPax} Pax) | Declined: ${declinedCount} Cards (S: ${declinedSingle}, D: ${declinedDouble} - ${declinedPax} Pax) | Maybe: ${maybeCount} Cards (S: ${maybeSingle}, D: ${maybeDouble} - ${maybePax} Pax) | Pending: ${pendingCount} Cards (S: ${pendingSingle}, D: ${pendingDouble} - ${pendingPax} Pax)`
-        : `AINA ZA KADI: Watahudhuria: ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble} — ${totalRsvpPax} Watu) | Hawatakuja: ${declinedCount} Kadi (Single: ${declinedSingle}, Double: ${declinedDouble} — ${declinedPax} Watu) | Hawana Uhakika: ${maybeCount} Kadi (Single: ${maybeSingle}, Double: ${maybeDouble} — ${maybePax} Watu) | Bado Jibu: ${pendingCount} Kadi (Single: ${pendingSingle}, Double: ${pendingDouble} — ${pendingPax} Watu)`;
-      doc.text(rsvpBreakdownStr, 12, tableStartY + 4.5);
+      const line1 = isEn
+        ? `• ATTENDING (YES): ${attendingCount} Cards (Single: ${attendingSingle}, Double: ${attendingDouble} — ${totalRsvpPax} Pax)   |   • DECLINED (NO): ${declinedCount} Cards (Single: ${declinedSingle}, Double: ${declinedDouble} — ${declinedPax} Pax)`
+        : `• WATAHUDHURIA (YES): ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble} — ${totalRsvpPax} Watu)   |   • HAWATAKUJA (NO): ${declinedCount} Kadi (Single: ${declinedSingle}, Double: ${declinedDouble} — ${declinedPax} Watu)`;
+      doc.text(line1, 13, tableStartY + 4.5);
+
+      const line2 = isEn
+        ? `• MAYBE (UNDECIDED): ${maybeCount} Cards (Single: ${maybeSingle}, Double: ${maybeDouble} — ${maybePax} Pax)   |   • PENDING: ${pendingCount} Cards (Single: ${pendingSingle}, Double: ${pendingDouble} — ${pendingPax} Pax)`
+        : `• HAWANA UHAKIKA: ${maybeCount} Kadi (Single: ${maybeSingle}, Double: ${maybeDouble} — ${maybePax} Watu)   |   • BADO JIBU: ${pendingCount} Kadi (Single: ${pendingSingle}, Double: ${pendingDouble} — ${pendingPax} Watu)`;
+      doc.text(line2, 13, tableStartY + 9);
 
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.5);
+      doc.setFontSize(6.6);
       doc.setTextColor(71, 85, 105);
-      const dispatchSummaryStr = `Jumla ya Kadi: ${totalGuestsCount} (${totalPaxCapacity} Pax) (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})  •  Waliofika: ${checkedInCount} (Single: ${checkedInSingle}, Double: ${checkedInDouble} — ${arrivedPax} Pax)  •  Uwiano: ${arivedPercent()}%  •  SMS: ${totalSmsSent}  •  WA: ${totalWhatsappSent}`;
-      doc.text(dispatchSummaryStr, 12, tableStartY + 9.5);
-      tableStartY += 16;
+      const line3 = isEn
+        ? `• TOTAL CARDS: ${totalGuestsCount} (${totalPaxCapacity} Pax) (S: ${singleCardsCount}, D: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})   •   ARRIVED: ${checkedInCount} (${arrivedPax} Pax — ${arivedPercent()}%)   •   SMS SENT: ${totalSmsSent}   •   WA SENT: ${totalWhatsappSent}`
+        : `• JUMLA YA KADI: ${totalGuestsCount} (${totalPaxCapacity} Pax) (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})   •   WALIOFIKA: ${checkedInCount} (${arrivedPax} Pax — ${arivedPercent()}%)   •   SMS: ${totalSmsSent}   •   WHATSAPP: ${totalWhatsappSent}`;
+      doc.text(line3, 13, tableStartY + 13.5);
+      tableStartY += bannerHeight + 4;
 
       const tableData = filteredGuests.map((g, idx) => [
         idx + 1,
