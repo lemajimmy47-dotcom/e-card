@@ -53,7 +53,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
       const res = await fetch('/api/admin-alert-phone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: tempAlertPhone })
+        body: JSON.stringify({ phone: tempAlertPhone, eventId: event?.id })
       });
       const d = await res.json();
       if (d.success) {

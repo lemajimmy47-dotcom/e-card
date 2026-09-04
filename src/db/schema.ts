@@ -26,6 +26,7 @@ export const events = pgTable("events", {
   fundraisingGoal: integer("fundraising_goal").default(0),
   autoRsvpRemindersEnabled: boolean("auto_rsvp_reminders_enabled").default(false),
   contributionDeadline: text("contribution_deadline"),
+  adminAlertWhatsAppPhone: text("admin_alert_whatsapp_phone"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -107,6 +108,10 @@ export const smsGatewaySettings = pgTable("sms_gateway_settings", {
   whatsappUrl: text("whatsapp_url"),
   customHeaders: text("custom_headers").default("{}"),
   customBody: text("custom_body").default("{\n  \"to\": \"{to}\",\n  \"message\": \"{message}\"\n}"),
+  adminAlertWhatsAppPhone: text("admin_alert_whatsapp_phone"),
+  adminWhatsAppPhone: text("admin_whatsapp_phone"),
+  autoRsvpAlertsEnabled: boolean("auto_rsvp_alerts_enabled").default(true),
+  guestRsvpConfirmEnabled: boolean("guest_rsvp_confirm_enabled").default(true),
 });
 
 export const committeeMembers = pgTable("committee_members", {

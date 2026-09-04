@@ -226,6 +226,11 @@ export async function ensureTablesExist(): Promise<void> {
         ALTER TABLE "template_settings" ADD COLUMN IF NOT EXISTS "orientation" text DEFAULT 'portrait';
         ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "custom_fields" jsonb;
         ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "tags" jsonb;
+        ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "admin_alert_whatsapp_phone" text;
+        ALTER TABLE "sms_gateway_settings" ADD COLUMN IF NOT EXISTS "admin_alert_whatsapp_phone" text;
+        ALTER TABLE "sms_gateway_settings" ADD COLUMN IF NOT EXISTS "admin_whatsapp_phone" text;
+        ALTER TABLE "sms_gateway_settings" ADD COLUMN IF NOT EXISTS "auto_rsvp_alerts_enabled" boolean DEFAULT true;
+        ALTER TABLE "sms_gateway_settings" ADD COLUMN IF NOT EXISTS "guest_rsvp_confirm_enabled" boolean DEFAULT true;
       `);
     } catch (colErr) {
       console.warn("[CloudSQL] Column migration notice:", colErr);
@@ -585,6 +590,7 @@ export async function fetchFullStateFromDB(): Promise<any> {
       fundraisingGoal: e.fundraisingGoal || 0,
       autoRsvpRemindersEnabled: e.autoRsvpRemindersEnabled || false,
       contributionDeadline: e.contributionDeadline || "",
+      adminAlertWhatsAppPhone: (e as any).adminAlertWhatsAppPhone || "",
     }));
 
     // Find active event details (based on userAccount's activeEventId, falling back to first non-starter event)
@@ -685,6 +691,10 @@ export async function fetchFullStateFromDB(): Promise<any> {
       whatsappUrl: firstSms.whatsappUrl || "",
       customHeaders: firstSms.customHeaders || "{}",
       customBody: firstSms.customBody || "{\n  \"to\": \"{to}\",\n  \"message\": \"{message}\"\n}",
+      adminAlertWhatsAppPhone: (firstSms as any).adminAlertWhatsAppPhone || (firstSms as any).adminWhatsAppPhone || "",
+      adminWhatsAppPhone: (firstSms as any).adminWhatsAppPhone || (firstSms as any).adminAlertWhatsAppPhone || "",
+      autoRsvpAlertsEnabled: (firstSms as any).autoRsvpAlertsEnabled !== false,
+      guestRsvpConfirmEnabled: (firstSms as any).guestRsvpConfirmEnabled !== false,
     } : {
       provider: "simulation",
       url: "",
@@ -695,6 +705,10 @@ export async function fetchFullStateFromDB(): Promise<any> {
       whatsappUrl: "",
       customHeaders: "{}",
       customBody: "{\n  \"to\": \"{to}\",\n  \"message\": \"{message}\"\n}",
+      adminAlertWhatsAppPhone: "",
+      adminWhatsAppPhone: "",
+      autoRsvpAlertsEnabled: true,
+      guestRsvpConfirmEnabled: true,
     };
 
     const committee_members = sqlCommitteeMembers.map(m => ({
@@ -783,6 +797,7 @@ export async function fetchFullStateFromDB(): Promise<any> {
       guests,
       templateSettings: templateSettingsMap,
       smsGatewaySettings,
+      adminAlertWhatsAppPhone: smsGatewaySettings.adminAlertWhatsAppPhone || smsGatewaySettings.adminWhatsAppPhone || "",
       committee_members,
       committee_roles,
       saveTheDates,
@@ -851,6 +866,7 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
           fundraisingGoal: typeof ev.fundraisingGoal === "number" ? ev.fundraisingGoal : 0,
           autoRsvpRemindersEnabled: ev.autoRsvpRemindersEnabled === true,
           contributionDeadline: ev.contributionDeadline ? String(ev.contributionDeadline) : null,
+          adminAlertWhatsAppPhone: ev.adminAlertWhatsAppPhone ? String(ev.adminAlertWhatsAppPhone) : null,
         }).onConflictDoUpdate({
           target: schema.events.id,
           set: {
@@ -878,6 +894,7 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
             fundraisingGoal: sql`EXCLUDED.fundraising_goal`,
             autoRsvpRemindersEnabled: sql`EXCLUDED.auto_rsvp_reminders_enabled`,
             contributionDeadline: sql`EXCLUDED.contribution_deadline`,
+            adminAlertWhatsAppPhone: sql`EXCLUDED.admin_alert_whatsapp_phone`,
           },
         });
       }
@@ -1103,6 +1120,7 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
     // 3.7. Save SMS Settings
     if (data.smsGatewaySettings && typeof data.smsGatewaySettings === "object") {
       const s = data.smsGatewaySettings;
+      const adminPhone = data.adminAlertWhatsAppPhone || s.adminAlertWhatsAppPhone || s.adminWhatsAppPhone || null;
       await db.insert(schema.smsGatewaySettings).values({
         id: "settings",
         provider: s.provider ? String(s.provider) : "simulation",
@@ -1114,6 +1132,10 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
         whatsappUrl: s.whatsappUrl ? String(s.whatsappUrl) : null,
         customHeaders: s.customHeaders ? String(s.customHeaders) : "{}",
         customBody: s.customBody ? String(s.customBody) : "{}",
+        adminAlertWhatsAppPhone: adminPhone ? String(adminPhone) : null,
+        adminWhatsAppPhone: adminPhone ? String(adminPhone) : null,
+        autoRsvpAlertsEnabled: s.autoRsvpAlertsEnabled !== false,
+        guestRsvpConfirmEnabled: s.guestRsvpConfirmEnabled !== false,
       }).onConflictDoUpdate({
         target: schema.smsGatewaySettings.id,
         set: {
@@ -1126,6 +1148,10 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
           whatsappUrl: s.whatsappUrl ? String(s.whatsappUrl) : null,
           customHeaders: s.customHeaders ? String(s.customHeaders) : "{}",
           customBody: s.customBody ? String(s.customBody) : "{}",
+          adminAlertWhatsAppPhone: adminPhone ? String(adminPhone) : null,
+          adminWhatsAppPhone: adminPhone ? String(adminPhone) : null,
+          autoRsvpAlertsEnabled: s.autoRsvpAlertsEnabled !== false,
+          guestRsvpConfirmEnabled: s.guestRsvpConfirmEnabled !== false,
         }
       });
     }

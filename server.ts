@@ -4358,7 +4358,7 @@ Lema, Nguvu Moja!`;
   app.get("/api/admin-alert-phone", async (req, res) => {
     try {
       const db = await readDBLatest();
-      const phone = db.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminWhatsAppPhone || '';
+      const phone = db.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminWhatsAppPhone || db.eventDetails?.adminAlertWhatsAppPhone || '';
       res.json({ phone });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -4367,7 +4367,7 @@ Lema, Nguvu Moja!`;
 
   app.post("/api/admin-alert-phone", async (req, res) => {
     try {
-      const { phone } = req.body;
+      const { phone, eventId } = req.body;
       const db = await readDBLatest();
       const clean = String(phone || '').trim();
       
@@ -4375,6 +4375,14 @@ Lema, Nguvu Moja!`;
       if (!db.smsGatewaySettings) db.smsGatewaySettings = {};
       db.smsGatewaySettings.adminAlertWhatsAppPhone = clean;
       db.smsGatewaySettings.adminWhatsAppPhone = clean;
+
+      if (eventId && db.eventsList) {
+        const ev = db.eventsList.find((e: any) => e.id === eventId);
+        if (ev) ev.adminAlertWhatsAppPhone = clean;
+      }
+      if (db.eventDetails) {
+        db.eventDetails.adminAlertWhatsAppPhone = clean;
+      }
 
       await writeDB(db);
       console.log(`[Admin Alert Phone] Updated dedicated receiver phone to: ${clean}`);
@@ -4573,6 +4581,9 @@ Lema, Nguvu Moja!`;
       }
 
       db.smsGatewaySettings = newSettings;
+      if (newSettings.adminWhatsAppPhone || newSettings.adminAlertWhatsAppPhone) {
+        db.adminAlertWhatsAppPhone = String(newSettings.adminWhatsAppPhone || newSettings.adminAlertWhatsAppPhone).trim();
+      }
       await writeDB(db);
       res.json({ success: true, message: "Gateway settings saved successfully" });
     } catch (e: any) {
