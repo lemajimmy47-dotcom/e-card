@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, UserPlus, FileSpreadsheet, Search, Check, FileText, ArrowRight, Eye, Trash2, X, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, LayoutGrid, ChevronLeft, ChevronRight, Image as ImageIcon, Printer, AlertTriangle } from 'lucide-react';
+import { Users, UserPlus, FileSpreadsheet, Search, Check, FileText, ArrowRight, Eye, Trash2, X, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, LayoutGrid, ChevronLeft, ChevronRight, Image as ImageIcon, Printer, AlertTriangle, MessageCircle, Smartphone } from 'lucide-react';
 import { EventDetails, TemplateSettings, Guest } from '../types';
 import { drawCardToCanvas } from '../utils/canvasHelper';
 import { useLanguage } from '../context/LanguageContext';
@@ -283,6 +283,10 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
 
   // Selected tag filter state
   const [selectedTagFilter, setSelectedTagFilter] = useState('ALL');
+  // Selected WhatsApp filter state: 'ALL' | 'WHATSAPP' | 'SMS_ONLY' | 'UNCHECKED'
+  const [selectedWaFilter, setSelectedWaFilter] = useState<'ALL' | 'WHATSAPP' | 'SMS_ONLY' | 'UNCHECKED'>('ALL');
+  const [isCheckingWa, setIsCheckingWa] = useState(false);
+  const [waCheckSummary, setWaCheckSummary] = useState<string | null>(null);
 
   // Conflict queue state for Smart Duplicate Resolution
   const [conflictQueue, setConflictQueue] = useState<{ newGuest: Guest; existingGuest: Guest }[]>([]);
@@ -746,6 +750,64 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   const countSingle = guests.filter(g => g.cardType === 'SINGLE').length;
   const countUnclassified = guests.filter(g => g.cardType === 'UNCLASSIFIED').length;
   const totalCards = guests.length;
+  const countWhatsApp = guests.filter(g => g.hasWhatsApp === true).length;
+  const countSmsOnly = guests.filter(g => g.hasWhatsApp === false).length;
+
+  // Handler to check WhatsApp status of all guests or unverified guests
+  const handleCheckWhatsAppNumbers = async () => {
+    if (guests.length === 0 || isCheckingWa) return;
+    setIsCheckingWa(true);
+    setWaCheckSummary(null);
+
+    try {
+      const phonesToCheck = guests.map(g => g.phone).filter(p => !!p);
+      const res = await fetch('/api/whatsapp/check-numbers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phones: phonesToCheck })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.results) {
+        const updated = guests.map(g => {
+          if (!g.phone) return g;
+          const matchResult = data.results[g.phone] || Object.entries(data.results).find(([k]) => {
+            const kClean = k.replace(/\D/g, '').slice(-9);
+            const gClean = g.phone.replace(/\D/g, '').slice(-9);
+            return kClean && gClean && kClean === gClean;
+          })?.[1];
+
+          if (matchResult) {
+            return {
+              ...g,
+              hasWhatsApp: matchResult.hasWhatsApp,
+              waStatusDetail: matchResult.status,
+              waCheckedAt: new Date().toISOString()
+            };
+          }
+          return g;
+        });
+
+        const totalWa = updated.filter(g => g.hasWhatsApp === true).length;
+        const totalSms = updated.filter(g => g.hasWhatsApp === false).length;
+
+        onUpdateGuests(updated, `Uhakiki wa namba za WhatsApp umekamilika: WhatsApp (${totalWa}), SMS Pekee (${totalSms})`);
+
+        setWaCheckSummary(
+          isEn 
+            ? `Checked ${data.checkedCount || phonesToCheck.length} numbers: ${totalWa} on WhatsApp, ${totalSms} SMS-only.` 
+            : `Uhakiki umekamilika kwa namba ${data.checkedCount || phonesToCheck.length}: Wageni ${totalWa} wapo WhatsApp, ${totalSms} wanahitaji SMS ya kawaida.`
+        );
+      } else {
+        throw new Error(data.error || 'Failed to check numbers');
+      }
+    } catch (err: any) {
+      console.error("WhatsApp check error:", err);
+      setWaCheckSummary(isEn ? `Check error: ${err.message}` : `Hitilafu ya uhakiki: ${err.message}`);
+    } finally {
+      setIsCheckingWa(false);
+    }
+  };
 
   // Highlight potential duplicate phone numbers
   const duplicatePhoneMap = useMemo(() => {
@@ -798,7 +860,16 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
 
     const matchesTag = selectedTagFilter === 'ALL' || (g.tags && g.tags.includes(selectedTagFilter));
 
-    return matchesSearch && matchesTag;
+    let matchesWa = true;
+    if (selectedWaFilter === 'WHATSAPP') {
+      matchesWa = g.hasWhatsApp === true;
+    } else if (selectedWaFilter === 'SMS_ONLY') {
+      matchesWa = g.hasWhatsApp === false;
+    } else if (selectedWaFilter === 'UNCHECKED') {
+      matchesWa = g.hasWhatsApp === undefined || g.hasWhatsApp === 'unknown';
+    }
+
+    return matchesSearch && matchesTag && matchesWa;
   });
 
   const sortedGuests = [...filteredGuests].sort((a, b) => {
@@ -1214,7 +1285,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
       )}
 
       {/* Numeric Metrics cards wrapper */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         
         <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
           <p className="text-[9px] uppercase font-mono tracking-wider text-slate-400 font-bold">DOUBLE</p>
@@ -1236,7 +1307,38 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
           <p className="text-xl font-extrabold text-blue-300 mt-1">{totalCards}</p>
         </div>
 
+        <div className="backdrop-blur-md bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3 text-center col-span-2 sm:col-span-1">
+          <p className="text-[9px] uppercase font-mono tracking-wider text-emerald-400 font-bold flex items-center justify-center gap-1">
+            <MessageCircle className="w-3 h-3" />
+            <span>WhatsApp</span>
+          </p>
+          <p className="text-xl font-extrabold text-emerald-300 mt-1">{countWhatsApp}</p>
+        </div>
+
+        <div className="backdrop-blur-md bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3 text-center col-span-2 sm:col-span-1">
+          <p className="text-[9px] uppercase font-mono tracking-wider text-amber-400 font-bold flex items-center justify-center gap-1">
+            <Smartphone className="w-3 h-3" />
+            <span>SMS Only</span>
+          </p>
+          <p className="text-xl font-extrabold text-amber-300 mt-1">{countSmsOnly}</p>
+        </div>
+
       </div>
+
+      {waCheckSummary && (
+        <div className="p-3.5 rounded-xl border bg-emerald-500/10 border-emerald-500/20 text-emerald-300 flex items-center justify-between text-xs animate-fade-in font-medium">
+          <div className="flex items-center space-x-2">
+            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span>{waCheckSummary}</span>
+          </div>
+          <button 
+            onClick={() => setWaCheckSummary(null)} 
+            className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Action panel & search bar */}
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between pt-2">
@@ -1271,10 +1373,48 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
               </select>
             </div>
           )}
+
+          {/* WhatsApp Status Filter Dropdown */}
+          <div className="relative">
+            <select
+              value={selectedWaFilter}
+              onChange={(e) => setSelectedWaFilter(e.target.value as any)}
+              className="bg-[#090f1d] border border-emerald-500/30 rounded-xl px-3.5 py-2.5 text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-semibold cursor-pointer text-xs h-full w-full sm:w-auto"
+              title={isEn ? "Filter guests by WhatsApp availability" : "Chuja wageni kwa uwepo wao kwenye WhatsApp au SMS"}
+            >
+              <option value="ALL">{isEn ? "All WhatsApp & SMS" : "Wote (WhatsApp & SMS)"}</option>
+              <option value="WHATSAPP">{isEn ? `WhatsApp Valid (${countWhatsApp})` : `Wenye WhatsApp (${countWhatsApp})`}</option>
+              <option value="SMS_ONLY">{isEn ? `SMS Only (${countSmsOnly})` : `Hawapo WhatsApp / SMS Pekee (${countSmsOnly})`}</option>
+              <option value="UNCHECKED">{isEn ? "Not Verified Yet" : "Bado Hawajahakikiwa"}</option>
+            </select>
+          </div>
         </div>
 
         {/* Action Buttons to open modals */}
         <div className="flex flex-wrap gap-2 w-full sm:w-auto font-semibold">
+          {/* Check WhatsApp numbers button */}
+          {guests.length > 0 && (
+            <button
+              id="check-whatsapp-numbers-btn"
+              onClick={handleCheckWhatsAppNumbers}
+              disabled={isCheckingWa}
+              className="flex-1 sm:flex-initial bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-emerald-200 px-3.5 py-2.5 rounded-xl transition flex items-center justify-center space-x-1.5 cursor-pointer font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              title={isEn ? "Check which guest phone numbers are on WhatsApp" : "Hakiki namba za wageni wanaotumia WhatsApp na wasio na WhatsApp"}
+            >
+              {isCheckingWa ? (
+                <>
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" />
+                  <span>{isEn ? "Verifying WA..." : "Inahakiki WA..."}</span>
+                </>
+              ) : (
+                <>
+                  <MessageCircle className="w-4 h-4 text-emerald-400" />
+                  <span>{isEn ? "Verify WhatsApp" : "Hakiki Namba za WhatsApp"}</span>
+                </>
+              )}
+            </button>
+          )}
+
           {saveStatus === 'saving' ? (
             <div className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 font-bold text-xs select-none">
               <div className="w-3.5 h-3.5 rounded-full border border-blue-400 border-t-transparent animate-spin" />
@@ -1466,6 +1606,24 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                            }
                            return null;
                         })()}
+                      </div>
+                      {/* WhatsApp Identification Badge */}
+                      <div className="mt-1">
+                        {guest.hasWhatsApp === true ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" title="Namba hii ipo WhatsApp (Valid WhatsApp)">
+                            <MessageCircle className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>WhatsApp</span>
+                          </span>
+                        ) : guest.hasWhatsApp === false ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30" title="Namba hii haipo WhatsApp au inahitaji SMS (SMS Only)">
+                            <Smartphone className="w-2.5 h-2.5 text-amber-300" />
+                            <span>SMS Only</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] text-slate-400 bg-white/5 border border-white/10" title="Bado haijahakikiwa kwenye WhatsApp">
+                            <span>Haijahakikiwa</span>
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-3 text-center">

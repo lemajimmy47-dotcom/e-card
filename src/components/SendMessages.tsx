@@ -75,7 +75,7 @@ export default function SendMessages({ event, settings, guests, language, onUpda
   const [messageType, setMessageType] = useState<'invitation' | 'reminder' | 'thank-you'>('invitation');
   const [thankYouAudience, setThankYouAudience] = useState<'all' | 'confirmed' | 'attended'>('attended');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending-sms' | 'pending-wa' | 'sent'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending-sms' | 'pending-wa' | 'sent' | 'wa-only' | 'sms-only'>('all');
 
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleTime, setScheduleTime] = useState('');
@@ -792,6 +792,12 @@ Karibu sana!`);
           return false;
         }
         if (statusFilter === 'sent' && !isStatusSent(g.smsStatus) && !isStatusSent(g.whatsappStatus)) {
+          return false;
+        }
+        if (statusFilter === 'wa-only' && g.hasWhatsApp !== true) {
+          return false;
+        }
+        if (statusFilter === 'sms-only' && g.hasWhatsApp !== false) {
           return false;
         }
 
@@ -2256,6 +2262,30 @@ Karibu sana!`);
                 >
                   {isEn ? "Pending WA" : "Bado WA"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('wa-only')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    statusFilter === 'wa-only' 
+                      ? 'bg-teal-600 text-white font-bold shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title={isEn ? "Filter only guests with WhatsApp" : "Chuja wageni wenye namba ya WhatsApp pekee"}
+                >
+                  {isEn ? "WhatsApp" : "WhatsApp Pekee"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('sms-only')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    statusFilter === 'sms-only' 
+                      ? 'bg-amber-600 text-white font-bold shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title={isEn ? "Filter guests without WhatsApp (SMS Only)" : "Chuja wageni wasio na WhatsApp (SMS Pekee)"}
+                >
+                  {isEn ? "SMS Only" : "SMS Pekee"}
+                </button>
               </div>
 
               {/* Match Counter Badge */}
@@ -2317,7 +2347,20 @@ Karibu sana!`);
                         <div>{guest.name}</div>
                         {renderDeliveryIndicator(guest)}
                       </td>
-                      <td className="px-5 py-4 font-mono text-slate-300">{guest.phone}</td>
+                      <td className="px-5 py-4 font-mono text-slate-300">
+                        <div>{guest.phone}</div>
+                        {guest.hasWhatsApp === true ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 mt-1 rounded text-[8px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-sans">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>WhatsApp</span>
+                          </span>
+                        ) : guest.hasWhatsApp === false ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 mt-1 rounded text-[8px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 font-sans">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span>SMS Only</span>
+                          </span>
+                        ) : null}
+                      </td>
                       
                       {/* RSVP STATUS */}
                       <td className="px-5 py-3 text-center">

@@ -172,6 +172,9 @@ export interface Guest {
   category?: string;
   tags?: string[];
   customFields?: Record<string, string>;
+  hasWhatsApp?: boolean | 'checking' | 'unknown';
+  waCheckedAt?: string;
+  waStatusDetail?: string;
   lastSentChannel?: string;
   lastSentLang?: string;
 
