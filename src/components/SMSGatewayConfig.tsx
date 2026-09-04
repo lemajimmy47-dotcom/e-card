@@ -624,20 +624,24 @@ export default function SMSGatewayConfig() {
                   )}
                 </div>
               )}
-              {gatewaySettings.provider === 'meseji' && (!gatewaySettings.senderId || gatewaySettings.senderId === 'EVENT CARD' || gatewaySettings.senderId !== 'MESEJI') && (
-                <div className="mt-1 flex items-center justify-between text-[10px] text-amber-400 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-                  <span>
-                    {isEn 
-                      ? "Default approved Sender ID for Meseji is 'MESEJI'." 
-                      : "Sender ID ya msingi iliyoidhinishwa Meseji ni 'MESEJI'."}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'MESEJI' })}
-                    className="ml-2 text-[9px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-2 py-1 rounded border border-amber-500/30 transition-all shrink-0 cursor-pointer"
-                  >
-                    {isEn ? "Use MESEJI" : "Tumia MESEJI"}
-                  </button>
+              {gatewaySettings.provider === 'meseji' && (
+                <div className="mt-2 space-y-1.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'EVENT CARD' })}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'EVENT CARD' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
+                    >
+                      ✓ EVENT CARD (Approved)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'MESEJI' })}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'MESEJI' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
+                    >
+                      ✓ MESEJI (Default)
+                    </button>
+                  </div>
                 </div>
               )}
               {gatewaySettings.provider === 'ehub' && (

@@ -2362,13 +2362,16 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
   if (effectiveProvider === "meseji") {
     requestUrl = "https://meseji.co.tz/api/v1/sms/send";
 
-    fetchOptions.headers = {
+    const mesejiHeaders: any = {
       ...fetchOptions.headers,
       "x-api-key": apiKey,
-      "Authorization": "Bearer " + apiKey,
       "Content-Type": "application/json",
       "Accept": "application/json"
     };
+    if (!apiKey.startsWith("zs_")) {
+      mesejiHeaders["Authorization"] = "Bearer " + apiKey;
+    }
+    fetchOptions.headers = mesejiHeaders;
     
     // Strictly formatted recipient (no +, digits only, 255...)
     let cleanPhone = formattedPhone.split(',')
@@ -2680,20 +2683,29 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
       responseContent.toLowerCase().includes("token hash");
 
     if (isAuthError) {
-      if (settings.provider === "meseji") {
+      if (settings.provider === "meseji" || isMeseji || effectiveProvider === "meseji") {
         try {
+          console.log(`[SMS-Fallback] Meseji auth issue detected. Automatically attempting delivery via configured eHub SMS gateway...`);
           const db = await readDBLatest();
-          if (db.smsGatewaySettings && db.smsGatewaySettings.provider === "ehub" && db.smsGatewaySettings.apiKey && db.smsGatewaySettings.apiSecret) {
-            console.log(`[SMS-Fallback] Meseji token expired/invalid. Automatically attempting delivery via configured eHub SMS gateway...`);
-            const fallbackSettings = {
-              provider: "ehub",
-              apiKey: db.smsGatewaySettings.apiKey,
-              apiSecret: db.smsGatewaySettings.apiSecret,
-              senderId: db.smsGatewaySettings.senderId || "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397",
-              url: db.smsGatewaySettings.url || "https://sms.ehub.co.tz/api/v1/sms/send"
-            };
-            return await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime);
+          const fallbackKey = (db.smsGatewaySettings?.apiKey && !db.smsGatewaySettings.apiKey.startsWith("zs_"))
+            ? db.smsGatewaySettings.apiKey
+            : "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
+          const fallbackSecret = db.smsGatewaySettings?.apiSecret || "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
+
+          let fallbackSenderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
+          if (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("Ada") || text.includes("kikao") || text.includes("kikundi"))) {
+            fallbackSenderId = "19f41b59-19d0-4f98-b8c9-9d5b1ac31308";
           }
+
+          const fallbackSettings = {
+            provider: "ehub",
+            apiKey: fallbackKey,
+            apiSecret: fallbackSecret,
+            senderId: fallbackSenderId,
+            url: "https://sms.ehub.co.tz/api/v1/sms/send"
+          };
+
+          return await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime, templateParams, guestId, appOrigin, reqEventId, reqTemplateName, reqImageUrl, lang);
         } catch (fbErr: any) {
           console.warn("[SMS-Fallback] Failover to eHub failed:", fbErr.message);
         }
@@ -2747,15 +2759,18 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
           retryBody.schedule_time = scheduleTime;
         }
         try {
+          const retryHeaders: any = {
+            ...fetchOptions.headers,
+            "x-api-key": apiKey,
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          };
+          if (!apiKey.startsWith("zs_")) {
+            retryHeaders["Authorization"] = "Bearer " + apiKey;
+          }
           const retryRes = await fetch("https://meseji.co.tz/api/v1/sms/send", {
             ...fetchOptions,
-            headers: {
-              ...fetchOptions.headers,
-              "x-api-key": apiKey,
-              "Authorization": "Bearer " + apiKey,
-              "Accept": "application/json",
-              "Content-Type": "application/json"
-            },
+            headers: retryHeaders,
             body: JSON.stringify(retryBody)
           });
           const retryText = await retryRes.text();
@@ -2788,14 +2803,17 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
           
         if (altKey) {
           console.log(`[SMS-Meseji] Retrying with secondary Meseji API key...`);
+          const altHeaders: any = {
+            "x-api-key": altKey,
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          };
+          if (!altKey.startsWith("zs_")) {
+            altHeaders["Authorization"] = "Bearer " + altKey;
+          }
           const altRes = await fetch("https://meseji.co.tz/api/v1/sms/send", {
             method: "POST",
-            headers: {
-              "x-api-key": altKey,
-              "Authorization": "Bearer " + altKey,
-              "Accept": "application/json",
-              "Content-Type": "application/json"
-            },
+            headers: altHeaders,
             body: JSON.stringify({
               contacts: cleanPhone,
               message: text,
