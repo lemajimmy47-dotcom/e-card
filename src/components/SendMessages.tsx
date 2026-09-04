@@ -946,7 +946,13 @@ Karibu sana!`);
       '{contact_1_name}': event.contact1Name || "",
       '{contact_1_phone}': event.contact1 || "",
       '{contact_2_name}': event.contact2Name || "",
-      '{contact_2_phone}': event.contact2 || ""
+      '{contact_2_phone}': event.contact2 || "",
+      '{{13}}': event.contact3Name || "",
+      '{13}': event.contact3Name || "",
+      '{{14}}': event.contact3 || "",
+      '{14}': event.contact3 || "",
+      '{contact_3_name}': event.contact3Name || "",
+      '{contact_3_phone}': event.contact3 || ""
     };
 
     Object.keys(replacements).forEach(key => {
@@ -1130,7 +1136,13 @@ Karibu sana!`);
           '{contact_1_name}': event.contact1Name || "",
           '{contact_1_phone}': event.contact1 || "",
           '{contact_2_name}': event.contact2Name || "",
-          '{contact_2_phone}': event.contact2 || ""
+          '{contact_2_phone}': event.contact2 || "",
+          '{{13}}': event.contact3Name || "",
+          '{13}': event.contact3Name || "",
+          '{{14}}': event.contact3 || "",
+          '{14}': event.contact3 || "",
+          '{contact_3_name}': event.contact3Name || "",
+          '{contact_3_phone}': event.contact3 || ""
         };
 
         const regex = /\{\{[0-9]+\}\}|\{\{[a-zA-Z0-9_\-Hh]+\}\}|\{[a-zA-Z0-9_\-Hh]+\}/g;
@@ -1370,7 +1382,13 @@ Karibu sana!`);
         '{contact_1_name}': event.contact1Name || "",
         '{contact_1_phone}': event.contact1 || "",
         '{contact_2_name}': event.contact2Name || "",
-        '{contact_2_phone}': event.contact2 || ""
+        '{contact_2_phone}': event.contact2 || "",
+        '{{13}}': event.contact3Name || "",
+        '{13}': event.contact3Name || "",
+        '{{14}}': event.contact3 || "",
+        '{14}': event.contact3 || "",
+        '{contact_3_name}': event.contact3Name || "",
+        '{contact_3_phone}': event.contact3 || ""
       };
 
       const regex = /\{\{[0-9]+\}\}|\{\{[a-zA-Z0-9_\-Hh]+\}\}|\{[a-zA-Z0-9_\-Hh]+\}/g;

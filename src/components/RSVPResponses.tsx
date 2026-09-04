@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clipboard, CheckCircle, XCircle, HelpCircle, MessageSquare, AlertCircle, RefreshCw, Send, ArrowRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Bell, CheckCircle2 } from 'lucide-react';
+import { Clipboard, CheckCircle, XCircle, HelpCircle, MessageSquare, AlertCircle, RefreshCw, Send, ArrowRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Bell, CheckCircle2, Phone, Edit2, Check, X, ShieldCheck } from 'lucide-react';
 import { EventDetails, Guest } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -27,6 +27,48 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
   const [sortBy, setSortBy] = useState<'name' | 'rsvpStatus' | 'none'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
+  // WhatsApp Alert Receiver Phone state (Completely separate from RSVP 1-3 contacts)
+  const [adminAlertPhone, setAdminAlertPhone] = useState<string>('');
+  const [isEditingAlertPhone, setIsEditingAlertPhone] = useState(false);
+  const [tempAlertPhone, setTempAlertPhone] = useState<string>('');
+  const [isSavingAlertPhone, setIsSavingAlertPhone] = useState(false);
+  const [alertPhoneSavedMsg, setAlertPhoneSavedMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/admin-alert-phone')
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.phone) {
+          setAdminAlertPhone(d.phone);
+          setTempAlertPhone(d.phone);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveAlertPhone = async () => {
+    setIsSavingAlertPhone(true);
+    setAlertPhoneSavedMsg(null);
+    try {
+      const res = await fetch('/api/admin-alert-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: tempAlertPhone })
+      });
+      const d = await res.json();
+      if (d.success) {
+        setAdminAlertPhone(d.phone);
+        setIsEditingAlertPhone(false);
+        setAlertPhoneSavedMsg(isEn ? "Notification phone saved successfully!" : "Namba ya arifa imehifadhiwa vizuri!");
+        setTimeout(() => setAlertPhoneSavedMsg(null), 3500);
+      }
+    } catch (e: any) {
+      console.error("Failed to save alert phone:", e);
+    } finally {
+      setIsSavingAlertPhone(false);
+    }
+  };
+
   // WhatsApp Alert Test state
   const [isTestingWhatsApp, setIsTestingWhatsApp] = useState(false);
   const [whatsAppTestFeedback, setWhatsAppTestFeedback] = useState<{ success: boolean; message: string; channel?: string; sentTo?: string } | null>(null);
@@ -35,10 +77,11 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
     setIsTestingWhatsApp(true);
     setWhatsAppTestFeedback(null);
     try {
+      const targetPhone = adminAlertPhone || tempAlertPhone || undefined;
       const res = await fetch('/api/whatsapp/test-admin-alert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: event.contact1 })
+        body: JSON.stringify({ phone: targetPhone })
       });
       const data = await res.json();
       setWhatsAppTestFeedback({
@@ -292,40 +335,123 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
       </div>
 
       {/* WHATSAPP AUTOMATED INSTANT ALERTS STATUS BANNER */}
-      <div className="bg-gradient-to-r from-emerald-950/40 via-blue-950/20 to-slate-900/40 border border-emerald-500/30 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-            <Bell className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>{isEn ? "Automated WhatsApp Alerts Active" : "Arifa za Moja kwa Moja za WhatsApp Ziko Hewani"}</span>
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                {event.contact1 ? `Simu: ${event.contact1}` : 'Kamati'}
-              </span>
+      <div className="bg-gradient-to-r from-emerald-950/40 via-blue-950/20 to-slate-900/40 border border-emerald-500/30 rounded-2xl p-4 flex flex-col gap-3 shadow-lg">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 mt-0.5">
+              <Bell className="w-5 h-5" />
             </div>
-            <p className="text-[11px] text-slate-350 mt-0.5">
-              {isEn 
-                ? "The system automatically notifies you on WhatsApp whenever a guest responds or changes their mind." 
-                : "Mfumo unakutumia ujumbe wa WhatsApp papo hapo kila mgeni anapojibu mwaliko mtandaoni au akibadilisha mawazo yake."}
-            </p>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>{isEn ? "Automated WhatsApp Alerts Active" : "Arifa za Moja kwa Moja za WhatsApp Ziko Hewani"}</span>
+                </span>
+                
+                {/* Dedicated Alert Receiver Phone Badge */}
+                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center gap-1">
+                  <Phone className="w-2.5 h-2.5 text-emerald-400" />
+                  <span>{isEn ? "Alert Receiver Phone: " : "Mpokezi wa Arifa: "}</span>
+                  <strong>{adminAlertPhone || (isEn ? "None set" : "Haijawekwa")}</strong>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingAlertPhone(!isEditingAlertPhone);
+                    setTempAlertPhone(adminAlertPhone);
+                  }}
+                  className="text-[10px] text-blue-400 hover:text-blue-300 underline font-semibold flex items-center gap-1 cursor-pointer transition"
+                >
+                  <Edit2 className="w-2.5 h-2.5" />
+                  <span>{isEditingAlertPhone ? (isEn ? "Cancel" : "Funga") : (isEn ? "Change Number" : "Badili Namba")}</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-350 mt-1">
+                {isEn 
+                  ? "The system automatically notifies your dedicated phone on WhatsApp whenever a guest responds or changes their mind." 
+                  : "Mfumo unakutumia ujumbe wa WhatsApp papo hapo kila mgeni anapojibu mwaliko mtandaoni au akibadilisha mawazo yake."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={handleTestWhatsAppAlert}
+              disabled={isTestingWhatsApp}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[11px] font-bold rounded-xl transition flex items-center gap-1.5 border border-emerald-400/30 cursor-pointer shadow-md shadow-emerald-900/20"
+            >
+              {isTestingWhatsApp ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              <span>{isTestingWhatsApp ? (isEn ? "Sending..." : "Inatuma...") : (isEn ? "Test WhatsApp Alert" : "Jaribu Arifa ya WhatsApp")}</span>
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={handleTestWhatsAppAlert}
-            disabled={isTestingWhatsApp}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[11px] font-bold rounded-xl transition flex items-center gap-1.5 border border-emerald-400/30 cursor-pointer shadow-md shadow-emerald-900/20"
-          >
-            {isTestingWhatsApp ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            <span>{isTestingWhatsApp ? (isEn ? "Sending..." : "Inatuma...") : (isEn ? "Test WhatsApp Alert" : "Jaribu Arifa ya WhatsApp")}</span>
-          </button>
-        </div>
+        {/* INLINE EDIT FOR ALERT RECEIVER PHONE */}
+        <AnimatePresence>
+          {isEditingAlertPhone && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-black/40 border border-emerald-500/20 rounded-xl p-3 space-y-2 mt-1"
+            >
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{isEn ? "Custom WhatsApp Alert Receiver Phone (Admin Alert Receiver)" : "Namba Maalum ya Kupokea Arifa za WhatsApp (Msimamizi / Wewe Mwenyewe)"}</span>
+                </label>
+                <span className="text-[10px] text-amber-350 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                  {isEn ? "Independent from RSVP 1, 2, 3" : "Haiingiliani na RSVP 1, 2, wala 3"}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={tempAlertPhone}
+                  onChange={(e) => setTempAlertPhone(e.target.value)}
+                  placeholder={isEn ? "e.g. 07xxxxxxxx or any phone number" : "Mfano: 07xxxxxxxx au namba yako yoyote"}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveAlertPhone}
+                    disabled={isSavingAlertPhone}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow"
+                  >
+                    {isSavingAlertPhone ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    <span>{isSavingAlertPhone ? (isEn ? "Saving..." : "Inahifadhi...") : (isEn ? "Save Number" : "Hifadhi Namba")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingAlertPhone(false)}
+                    className="px-3 py-2 bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium rounded-xl transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                    <span>{isEn ? "Cancel" : "Ghairi"}</span>
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-[10.5px] text-slate-400 leading-relaxed">
+                {isEn 
+                  ? "💡 You can put your own personal phone number here. All instant guest alerts will be sent here, while the 3 RSVP hotline numbers in Event Details remain untouched for guest inquiries."
+                  : "💡 Unaweza kuweka namba yako binafsi hapa. Arifa zote za papo hapo za wageni zitatumwa kwenye namba hii pekee, huku zile namba 3 za RSVP za kwenye kadi zikibaki kama zilivyo kwa ajili ya wageni."}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {alertPhoneSavedMsg && (
+          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>{alertPhoneSavedMsg}</span>
+          </motion.div>
+        )}
       </div>
 
       {whatsAppTestFeedback && (

@@ -686,6 +686,20 @@ export default function EventDetailsForm({ initialData, isAlreadySaved, onSave, 
               </div>
 
             </div>
+
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-[11px] text-slate-350 flex items-start gap-2 mt-3">
+              <Phone className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-blue-300 font-bold block mb-0.5">
+                  {language === 'sw' ? 'Namba za Kamati kwenye Kadi (RSVP 1, 2 na 3):' : 'Committee Card Contacts (RSVP 1, 2 & 3):'}
+                </strong>
+                <span>
+                  {language === 'sw' 
+                    ? 'Namba hizi tatu zitachapishwa kwenye kadi na mialiko ya wageni kwa ajili ya maswali. Zimesimama kama mawasiliano ya sherehe, na namba yako ya kupokea arifa za WhatsApp imetengwa kivyake kwenye orodha ya Majibu ya RSVP.'
+                    : 'These three contacts appear on the cards and guest invitations for inquiries. Your dedicated WhatsApp alert receiver number is completely independent.'}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Event Official Image & Logo Section */}

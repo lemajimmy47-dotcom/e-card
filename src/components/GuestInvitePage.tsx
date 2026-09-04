@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
+import { Phone, MessageCircle } from 'lucide-react';
 import { EventDetails, TemplateSettings, Guest } from '../types';
 import { drawCardToCanvas } from '../utils/canvasHelper';
 import { useLanguage } from '../context/LanguageContext';
@@ -812,6 +813,107 @@ export default function GuestInvitePage({ guest, event, settings, viewMode: prop
           
           {rsvpUpdating && (
               <div className="text-[11px] text-center text-neutral-500 mt-4">{isEn ? "Submitting..." : "Inatuma..."}</div>
+          )}
+
+          {/* RSVP Hotlines (RSVP 1, RSVP 2, RSVP 3) */}
+          {(event.contact1 || event.contact2 || event.contact3) && (
+            <div className="bg-neutral-900/60 border border-white/5 rounded-3xl p-5 shadow-2xl backdrop-blur-md space-y-3 mt-4">
+              <div className="text-center">
+                <p className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center justify-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5" />
+                  <span>{isEn ? "RSVP & Assistance Contacts" : "Mawasiliano ya Maswali au RSVP"}</span>
+                </p>
+                <p className="text-[10.5px] text-neutral-400 mt-0.5">
+                  {isEn ? "Need assistance? Reach out to the committee organizers:" : "Je, una swali au unahitaji msaada? Wasiliana na wasimamizi wa sherehe:"}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                {event.contact1 && (
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col justify-between gap-2">
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 block">RSVP 1</span>
+                      <p className="text-xs font-bold text-white truncate">{event.contact1Name || (isEn ? "Contact 1" : "Msimamizi 1")}</p>
+                      <p className="text-[11px] font-mono text-neutral-300">{event.contact1}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <a 
+                        href={`tel:${event.contact1.replace(/\s+/g, '')}`} 
+                        className="flex-1 py-1.5 px-2 bg-emerald-600/80 hover:bg-emerald-600 text-white text-[10px] font-bold rounded-lg text-center flex items-center justify-center gap-1 transition"
+                      >
+                        <Phone className="w-2.5 h-2.5" />
+                        <span>{isEn ? "Call" : "Piga"}</span>
+                      </a>
+                      <a 
+                        href={`https://wa.me/${event.contact1.replace(/[^0-9]/g, '').replace(/^0/, '255')}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-1.5 px-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold rounded-lg text-center flex items-center justify-center gap-1 transition"
+                      >
+                        <MessageCircle className="w-2.5 h-2.5" />
+                        <span>Chat</span>
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {event.contact2 && (
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col justify-between gap-2">
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-blue-400 block">RSVP 2</span>
+                      <p className="text-xs font-bold text-white truncate">{event.contact2Name || (isEn ? "Contact 2" : "Msimamizi 2")}</p>
+                      <p className="text-[11px] font-mono text-neutral-300">{event.contact2}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <a 
+                        href={`tel:${event.contact2.replace(/\s+/g, '')}`} 
+                        className="flex-1 py-1.5 px-2 bg-blue-600/80 hover:bg-blue-600 text-white text-[10px] font-bold rounded-lg text-center flex items-center justify-center gap-1 transition"
+                      >
+                        <Phone className="w-2.5 h-2.5" />
+                        <span>{isEn ? "Call" : "Piga"}</span>
+                      </a>
+                      <a 
+                        href={`https://wa.me/${event.contact2.replace(/[^0-9]/g, '').replace(/^0/, '255')}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-1.5 px-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 text-[10px] font-bold rounded-lg text-center flex items-center justify-center gap-1 transition"
+                      >
+                        <MessageCircle className="w-2.5 h-2.5" />
+                        <span>Chat</span>
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {event.contact3 && (
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col justify-between gap-2">
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-purple-400 block">RSVP 3</span>
+                      <p className="text-xs font-bold text-white truncate">{event.contact3Name || (isEn ? "Contact 3" : "Msimamizi 3")}</p>
+                      <p className="text-[11px] font-mono text-neutral-300">{event.contact3}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <a 
+                        href={`tel:${event.contact3.replace(/\s+/g, '')}`} 
+                        className="flex-1 py-1.5 px-2 bg-purple-600/80 hover:bg-purple-600 text-white text-[10px] font-bold rounded-lg text-center flex items-center justify-center gap-1 transition"
+                      >
+                        <Phone className="w-2.5 h-2.5" />
+                        <span>{isEn ? "Call" : "Piga"}</span>
+                      </a>
+                      <a 
+                        href={`https://wa.me/${event.contact3.replace(/[^0-9]/g, '').replace(/^0/, '255')}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-1.5 px-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 text-[10px] font-bold rounded-lg text-center flex items-center justify-center gap-1 transition"
+                      >
+                        <MessageCircle className="w-2.5 h-2.5" />
+                        <span>Chat</span>
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
         )}

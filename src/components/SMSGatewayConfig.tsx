@@ -267,15 +267,10 @@ export default function SMSGatewayConfig() {
         fetchBalance();
         fetchLogs();
 
-        // If adminWhatsAppPhone is still empty, load event contact1 as default
-        fetch('/api/state')
-          .then(r => r.json())
-          .then(s => {
-            if (s && s.eventDetails && s.eventDetails.contact1) {
-              setAdminWhatsAppPhone(prev => prev || s.eventDetails.contact1);
-            }
-          })
-          .catch(() => {});
+        // Dedicated alert phone is loaded from its own setting
+        if (data && data.adminWhatsAppPhone) {
+          setAdminWhatsAppPhone(data.adminWhatsAppPhone);
+        }
       })
       .catch(err => {
         console.error("Error fetching SMS gateway settings:", err);
@@ -1084,19 +1079,19 @@ export default function SMSGatewayConfig() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-semibold text-slate-300 block">
-                  {isEn ? "Admin / Host WhatsApp Number" : "Namba ya WhatsApp ya Msimamizi / Kamati"}
+                  {isEn ? "Dedicated WhatsApp Alert Receiver Phone" : "Namba Maalum ya Kupokea Arifa za WhatsApp (Msimamizi / Wewe Mwenyewe)"}
                 </label>
                 <input
                   type="tel"
-                  placeholder="Mfano: 0755123456 au 255755123456"
+                  placeholder="Mfano: 0755123456 au namba yako yoyote ya WhatsApp"
                   value={adminWhatsAppPhone}
                   onChange={(e) => setAdminWhatsAppPhone(e.target.value)}
                   className="w-full bg-[#050b18] border border-white/15 rounded-xl px-3.5 py-2 text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 placeholder:text-slate-600"
                 />
                 <p className="text-[10px] text-slate-400">
                   {isEn 
-                    ? "If empty, the system automatically uses the primary organizer phone (Contact 1) from Event Details." 
-                    : "Ikiachwa wazi, mfumo unatumia kiotomatiki namba ya kwanza ya msimamizi (Contact 1) kutoka kwenye Taarifa za Sherehe."}
+                    ? "This number is completely independent from RSVP 1, 2, 3 in Event Details. Enter any phone number (including your personal WhatsApp) to receive instant alerts." 
+                    : "Namba hii imetengwa kabisa na haihusiani na namba za RSVP 1, 2, wala 3 za kwenye kadi. Unaweza kuweka namba yoyote ile (hata ya kwako binafsi) kupokea arifa za papo hapo."}
                 </p>
               </div>
 

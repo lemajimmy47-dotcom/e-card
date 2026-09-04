@@ -434,29 +434,52 @@ async function notifyAdminAndGuestOnRSVPChange(params: {
   const isCountChanged = wasAnswered && !isStatusChanged && previousGuestsCount !== undefined && newGuestsCount !== undefined && previousGuestsCount !== newGuestsCount;
   const isChangeOfMind = isStatusChanged || isCountChanged;
 
-  const guests = db.guests || [];
+  // Filter guests strictly to the current event so we do NOT mix guests from other events or test entries
+  const eventId = guest.eventId || db.eventDetails?.id;
+  const allDbGuests = db.guests || [];
+  const guests = allDbGuests.filter((g: any) => {
+    if (!eventId) return true;
+    return g.eventId === eventId || (!g.eventId && eventId === 'event-starter');
+  });
+
   const attendingGuests = guests.filter((g: any) => g.rsvpStatus === 'Atahudhuria');
   const attendingCards = attendingGuests.length;
   const attendingPax = attendingGuests.reduce((acc: number, g: any) => acc + (Number(g.rsvpGuestsCount) || (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1)), 0);
+  const attendingSingle = attendingGuests.filter((g: any) => !g.cardType || g.cardType === 'SINGLE').length;
+  const attendingDouble = attendingGuests.filter((g: any) => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
+
   const declinedGuests = guests.filter((g: any) => g.rsvpStatus === 'Hatahudhuria');
   const declinedCards = declinedGuests.length;
   const declinedPax = declinedGuests.reduce((acc: number, g: any) => acc + (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1), 0);
+  const declinedSingle = declinedGuests.filter((g: any) => !g.cardType || g.cardType === 'SINGLE').length;
+  const declinedDouble = declinedGuests.filter((g: any) => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
+
   const maybeGuests = guests.filter((g: any) => g.rsvpStatus === 'Labda');
   const maybeCards = maybeGuests.length;
+  const maybePax = maybeGuests.reduce((acc: number, g: any) => acc + (Number(g.rsvpGuestsCount) || (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1)), 0);
+  const maybeSingle = maybeGuests.filter((g: any) => !g.cardType || g.cardType === 'SINGLE').length;
+  const maybeDouble = maybeGuests.filter((g: any) => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
+
   const pendingGuests = guests.filter((g: any) => !g.rsvpStatus || g.rsvpStatus === 'Bado');
   const pendingCards = pendingGuests.length;
+  const pendingPax = pendingGuests.reduce((acc: number, g: any) => acc + (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1), 0);
+  const pendingSingle = pendingGuests.filter((g: any) => !g.cardType || g.cardType === 'SINGLE').length;
+  const pendingDouble = pendingGuests.filter((g: any) => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
   const eventName = db.eventDetails?.name || 'Sherehe Yetu';
   const venueName = db.eventDetails?.eventHallName || db.eventDetails?.venue || 'Ukumbini';
   const nowTz = new Date().toLocaleString('sw-TZ', { timeZone: 'Africa/Dar_es_Salaam', dateStyle: 'short', timeStyle: 'short' });
 
-  // Gather Admin phone numbers
+  // Gather Admin phone numbers - Dedicated alert receiver is completely separate from RSVP 1-3 contacts
   const adminPhones: string[] = [];
-  const cfgAdminPhone = db.smsGatewaySettings?.adminWhatsAppPhone || db.smsGatewaySettings?.adminPhone || db.settings?.adminWhatsAppPhone;
-  if (cfgAdminPhone) adminPhones.push(cfgAdminPhone);
-  if (db.eventDetails?.contact1) adminPhones.push(db.eventDetails.contact1);
-  if (db.eventDetails?.contact2) adminPhones.push(db.eventDetails.contact2);
-  if (db.eventDetails?.contact3) adminPhones.push(db.eventDetails.contact3);
+  const dedicatedAlertPhone = db.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminWhatsAppPhone || db.smsGatewaySettings?.adminPhone || db.settings?.adminWhatsAppPhone;
+  
+  if (dedicatedAlertPhone) {
+    adminPhones.push(dedicatedAlertPhone);
+  } else if (db.eventDetails?.contact1) {
+    // Only default to contact1 if the dedicated alert phone hasn't been set yet
+    adminPhones.push(db.eventDetails.contact1);
+  }
 
   const uniqueAdminPhones = Array.from(new Set(
     adminPhones.map(p => formatTzPhoneForWhatsApp(p)).filter(p => p && p.length >= 9)
@@ -480,10 +503,10 @@ async function notifyAdminAndGuestOnRSVPChange(params: {
       `• *Njia Iliyotumika:* ${source === 'whatsapp_chatbot' ? 'WhatsApp Chatbot 💬' : (source === 'web_portal' ? 'Tovuti ya Mwaliko 🌐' : 'Mfumo wa Admin 💻')}\n` +
       `• *Muda:* ${nowTz}\n\n` +
       `📊 *Muhtasari wa Mahudhurio Hadi Sasa:*\n` +
-      `✓ Wanaokuja: *${attendingCards} Kadi (${attendingPax} Watu)*\n` +
-      `✗ Hawaji: *${declinedCards} Kadi (${declinedPax} Watu)*\n` +
-      `? Hawana Uhakika: *${maybeCards} Kadi*\n` +
-      `⏳ Bado Kujibu: *${pendingCards} Kadi*`;
+      `✓ Wanaokuja: *${attendingCards} Kadi (${attendingPax} Watu)* [Single: ${attendingSingle}, Double: ${attendingDouble}]\n` +
+      `✗ Hawaji: *${declinedCards} Kadi (${declinedPax} Watu)* [Single: ${declinedSingle}, Double: ${declinedDouble}]\n` +
+      `? Hawana Uhakika: *${maybeCards} Kadi (${maybePax} Watu)* [Single: ${maybeSingle}, Double: ${maybeDouble}]\n` +
+      `⏳ Bado Kujibu: *${pendingCards} Kadi (${pendingPax} Watu)* [Single: ${pendingSingle}, Double: ${pendingDouble}]`;
   } else {
     adminAlert = `🔔 *TAARIFA MPYA YA RSVP (MAJIBU YAMEPOKELEWA)* 🔔\n\n` +
       `Mgeni amethibitisha majibu yake ya RSVP kwa ajili ya *${eventName}*:\n\n` +
@@ -496,10 +519,10 @@ async function notifyAdminAndGuestOnRSVPChange(params: {
       `• *Njia Iliyotumika:* ${source === 'whatsapp_chatbot' ? 'WhatsApp Chatbot 💬' : (source === 'web_portal' ? 'Tovuti ya Mwaliko 🌐' : 'Mfumo wa Admin 💻')}\n` +
       `• *Muda:* ${nowTz}\n\n` +
       `📊 *Muhtasari wa Mahudhurio Hadi Sasa:*\n` +
-      `✓ Wanaokuja: *${attendingCards} Kadi (${attendingPax} Watu)*\n` +
-      `✗ Hawaji: *${declinedCards} Kadi (${declinedPax} Watu)*\n` +
-      `? Hawana Uhakika: *${maybeCards} Kadi*\n` +
-      `⏳ Bado Kujibu: *${pendingCards} Kadi*`;
+      `✓ Wanaokuja: *${attendingCards} Kadi (${attendingPax} Watu)* [Single: ${attendingSingle}, Double: ${attendingDouble}]\n` +
+      `✗ Hawaji: *${declinedCards} Kadi (${declinedPax} Watu)* [Single: ${declinedSingle}, Double: ${declinedDouble}]\n` +
+      `? Hawana Uhakika: *${maybeCards} Kadi (${maybePax} Watu)* [Single: ${maybeSingle}, Double: ${maybeDouble}]\n` +
+      `⏳ Bado Kujibu: *${pendingCards} Kadi (${pendingPax} Watu)* [Single: ${pendingSingle}, Double: ${pendingDouble}]`;
   }
 
   // 1. Dispatch WhatsApp alert to each unique admin phone
@@ -1100,6 +1123,7 @@ function getParamsForCount(count: number, guestData: any, eventData: any, fallba
   const cardTypeFallback = isEn ? "Standard Card" : "Kadi ya Kawaida";
   const contact1Fallback = isEn ? "Contact 1" : "Msimamizi 1";
   const contact2Fallback = isEn ? "Contact 2" : "Msimamizi 2";
+  const contact3Fallback = isEn ? "Contact 3" : "Msimamizi 3";
 
   const translatePeriod = (p: string | null | undefined) => {
     const period = p || "Mchana";
@@ -1131,7 +1155,9 @@ function getParamsForCount(count: number, guestData: any, eventData: any, fallba
     isContribution ? "" : (eventData?.contact1Name || contact1Fallback), // 9. Contact 1 Name
     isContribution ? "" : (eventData?.contact1 || ""), // 10. Contact 1 Phone
     isContribution ? "" : (eventData?.contact2Name || contact2Fallback), // 11. Contact 2 Name
-    isContribution ? "" : (eventData?.contact2 || "") // 12. Contact 2 Phone
+    isContribution ? "" : (eventData?.contact2 || ""), // 12. Contact 2 Phone
+    isContribution ? "" : (eventData?.contact3Name || contact3Fallback), // 13. Contact 3 Name
+    isContribution ? "" : (eventData?.contact3 || "") // 14. Contact 3 Phone
   ] : [
     guestData?.name || guestFallback, // 1. Guest Name
     eventData?.hostName || hostFallback, // 2. Host Name
@@ -1145,7 +1171,9 @@ function getParamsForCount(count: number, guestData: any, eventData: any, fallba
     isContribution ? "" : (eventData?.contact1Name || contact1Fallback), // 10. Contact 1 Name
     isContribution ? "" : (eventData?.contact1 || ""), // 11. Contact 1 Phone
     isContribution ? "" : (eventData?.contact2Name || contact2Fallback), // 12. Contact 2 Name
-    isContribution ? "" : (eventData?.contact2 || "") // 13. Contact 2 Phone
+    isContribution ? "" : (eventData?.contact2 || ""), // 13. Contact 2 Phone
+    isContribution ? "" : (eventData?.contact3Name || contact3Fallback), // 14. Contact 3 Name
+    isContribution ? "" : (eventData?.contact3 || "") // 15. Contact 3 Phone
   ];
 
   if (Array.isArray(incomingParams) && incomingParams.length > 0) {
@@ -4279,7 +4307,7 @@ Lema, Nguvu Moja!`;
   app.post("/api/whatsapp/test-admin-alert", async (req, res) => {
     try {
       const db = await readDBLatest();
-      const testPhone = req.body?.phone || db.smsGatewaySettings?.adminWhatsAppPhone || db.eventDetails?.contact1 || '0755123456';
+      const testPhone = req.body?.phone || db.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminWhatsAppPhone || db.eventDetails?.contact1 || '0755123456';
       const cleanPhone = formatTzPhoneForWhatsApp(testPhone);
       
       const eventName = db.eventDetails?.name || 'Harusi Yetu';
@@ -4303,6 +4331,36 @@ Lema, Nguvu Moja!`;
           ? `Ujumbe wa majaribio umetumwa kwa mafanikio kwenda ${cleanPhone}!` 
           : `Imeshindwa kutuma: ${result.error || 'Hitilafu ya WhatsApp Gateway'}`
       });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Dedicated API: Get/Set WhatsApp Alert Receiver Phone (completely separate from RSVP 1-3)
+  app.get("/api/admin-alert-phone", async (req, res) => {
+    try {
+      const db = await readDBLatest();
+      const phone = db.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminAlertWhatsAppPhone || db.smsGatewaySettings?.adminWhatsAppPhone || '';
+      res.json({ phone });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin-alert-phone", async (req, res) => {
+    try {
+      const { phone } = req.body;
+      const db = await readDBLatest();
+      const clean = String(phone || '').trim();
+      
+      db.adminAlertWhatsAppPhone = clean;
+      if (!db.smsGatewaySettings) db.smsGatewaySettings = {};
+      db.smsGatewaySettings.adminAlertWhatsAppPhone = clean;
+      db.smsGatewaySettings.adminWhatsAppPhone = clean;
+
+      await writeDB(db);
+      console.log(`[Admin Alert Phone] Updated dedicated receiver phone to: ${clean}`);
+      res.json({ success: true, phone: clean, message: "Namba ya kupokea arifa imehifadhiwa kwa mafanikio!" });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

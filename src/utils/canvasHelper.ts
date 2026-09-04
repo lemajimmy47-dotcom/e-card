@@ -335,7 +335,7 @@ export function drawCardToCanvas(
     ctx.fillStyle = settings.textColor + 'C0';
     ctx.font = `${h * 0.018}px "${settings.fontFamily || 'Inter'}", sans-serif`;
     ctx.fillText("Mwasiliano ya Maswali au RSVPs:", w / 2, h * 0.94);
-    const contactText = [event.contact1, event.contact2].filter(Boolean).join('  /  ');
+    const contactText = [event.contact1, event.contact2, event.contact3].filter(Boolean).join('  /  ');
     ctx.fillText(contactText || "0755 000 111 / 0713 222 333", w / 2, h * 0.975);
 
     if (onImageLoaded) onImageLoaded();

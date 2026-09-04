@@ -453,6 +453,8 @@ Karibu sana!`);
         .replace(/{contact_1_phone}/g, eventDetails.contact1 || "")
         .replace(/{contact_2_name}/g, eventDetails.contact2Name || "")
         .replace(/{contact_2_phone}/g, eventDetails.contact2 || "")
+        .replace(/{contact_3_name}/g, eventDetails.contact3Name || "")
+        .replace(/{contact_3_phone}/g, eventDetails.contact3 || "")
         .replace(/{venue}/g, eventDetails.eventHallName || "")
         .replace(/{time}/g, timeVal)
         .replace(/{card_number}/g, guestObj?.code || "[Code]")
