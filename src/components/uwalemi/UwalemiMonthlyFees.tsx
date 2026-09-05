@@ -999,13 +999,21 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
 
   // Toggle single cell in Matrix Mode
   const handleToggleMonthCell = async (member: UwalemiMember, year: number, month: number) => {
-    const existing = monthlyPayments.find(p => p.memberId === member.id && p.year === year && p.month === month);
+    const existing = monthlyPayments.find(p => 
+      (p.memberId === member.id || (member.memberNo && p.memberNo === member.memberNo)) && 
+      Number(p.year) === Number(year) && 
+      Number(p.month) === Number(month)
+    );
     const expected = getDefaultFeeForMonth(year, month, member.monthlyFeeAmount);
 
     let updatedPayments = [...monthlyPayments];
-    if (existing && existing.paidAmount >= expected) {
+    if (existing && Number(existing.paidAmount) >= expected) {
       // Toggle to unpaid
-      updatedPayments = updatedPayments.filter(p => !(p.memberId === member.id && p.year === year && p.month === month));
+      updatedPayments = updatedPayments.filter(p => 
+        !((p.memberId === member.id || (member.memberNo && p.memberNo === member.memberNo)) && 
+          Number(p.year) === Number(year) && 
+          Number(p.month) === Number(month))
+      );
     } else {
       // Mark as paid
       const receiptNo = `UWL-REC-${year}${String(month).padStart(2, '0')}-${member.memberNo.replace('UWL-', '')}`;
@@ -1014,8 +1022,8 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         memberId: member.id,
         memberNo: member.memberNo,
         memberName: member.fullName,
-        year,
-        month,
+        year: Number(year),
+        month: Number(month),
         expectedAmount: expected,
         paidAmount: expected,
         paymentDate: new Date().toISOString().split('T')[0],
@@ -1025,7 +1033,11 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         receiptNo,
         note: `Ada ya mwezi wa ${monthNamesSw[month - 1]} ${year}`
       };
-      updatedPayments = updatedPayments.filter(p => !(p.memberId === member.id && p.year === year && p.month === month));
+      updatedPayments = updatedPayments.filter(p => 
+        !((p.memberId === member.id || (member.memberNo && p.memberNo === member.memberNo)) && 
+          Number(p.year) === Number(year) && 
+          Number(p.month) === Number(month))
+      );
       updatedPayments.push(newPayment);
     }
     await onSaveState({ ...state, monthlyPayments: updatedPayments });
@@ -1038,7 +1050,10 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
   };
 
   const executeMarkWholeYearPaid = async (member: UwalemiMember, year: number) => {
-    let updatedPayments = monthlyPayments.filter(p => !(p.memberId === member.id && p.year === year));
+    let updatedPayments = monthlyPayments.filter(p => 
+      !((p.memberId === member.id || (member.memberNo && p.memberNo === member.memberNo)) && 
+        Number(p.year) === Number(year))
+    );
 
     const startMonthForYear = year < 2023 ? 13 : year === 2023 ? 11 : 1;
     for (let m = startMonthForYear; m <= 12; m++) {
@@ -1050,8 +1065,8 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         memberId: member.id,
         memberNo: member.memberNo,
         memberName: member.fullName,
-        year,
-        month: m,
+        year: Number(year),
+        month: Number(m),
         expectedAmount: expected,
         paidAmount: expected,
         paymentDate: `${year}-${monthStr}-15`,
@@ -1131,7 +1146,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         
         // Remove any existing payment for this member, year and month
         updatedPayments = updatedPayments.filter(
-          p => !(p.memberId === mem.id && Number(p.year) === Number(annualForm.year) && Number(p.month) === Number(m))
+          p => !((p.memberId === mem.id || (mem.memberNo && p.memberNo === mem.memberNo)) && Number(p.year) === Number(annualForm.year) && Number(p.month) === Number(m))
         );
 
         if (paidVal > 0) {
@@ -1198,7 +1213,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         const monthStr = String(m).padStart(2, '0');
         const calculatedDate = `${bulkForm.year}-${monthStr}-15`;
         // Remove existing
-        updatedPayments = updatedPayments.filter(p => !(p.memberId === mem.id && p.year === bulkForm.year && p.month === m));
+        updatedPayments = updatedPayments.filter(p => !((p.memberId === mem.id || (mem.memberNo && p.memberNo === mem.memberNo)) && Number(p.year) === Number(bulkForm.year) && Number(p.month) === Number(m)));
         updatedPayments.push({
           id: `uwl-fee-${mem.id}-${bulkForm.year}-${m}`,
           memberId: mem.id,
@@ -1794,9 +1809,10 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                 <tbody className="divide-y divide-slate-800/60">
                   {members.map((m) => {
                     const totalMonthsInYear = selectedYear < 2023 ? 0 : selectedYear === 2023 ? 2 : 12;
-                    const yearPayments = monthlyPayments.filter(p => p.memberId === m.id && Number(p.year) === Number(selectedYear));
+                    const yearPayments = monthlyPayments.filter(p => (p.memberId === m.id || (m.memberNo && p.memberNo === m.memberNo)) && Number(p.year) === Number(selectedYear));
                     const totalPaidInYear = yearPayments.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
                     const paidCount = yearPayments.filter(p => Number(p.paidAmount) >= getDefaultFeeForMonth(selectedYear, Number(p.month), m.monthlyFeeAmount)).length;
+                    const mDebt = calculateMemberFeeDebt(m, state);
 
                     return (
                       <tr key={m.id} className="hover:bg-slate-800/40">
@@ -1805,15 +1821,20 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                         </td>
                         <td className="py-2.5 px-3 font-semibold text-white">
                           <div className="whitespace-nowrap text-xs">{m.fullName}</div>
-                          <div className="text-[10px] text-slate-500 font-normal">
-                            Iliyolipiwa: {paidCount}/{totalMonthsInYear} miezi
+                          <div className="text-[10px] text-slate-400 font-normal flex items-center flex-wrap gap-1.5 mt-0.5">
+                            <span>Iliyolipiwa: {paidCount}/{totalMonthsInYear} miezi</span>
+                            {mDebt.lateFeePenalty > 0 && (
+                              <span className="text-rose-400 font-semibold font-mono bg-rose-950/60 px-1.5 py-0.2 rounded border border-rose-800/40 text-[9.5px]" title={`Deni la Faini ya Kuchelewa Ada (>Miezi 3): TZS ${mDebt.lateFeePenalty.toLocaleString()}`}>
+                                Faini: {mDebt.lateFeePenalty.toLocaleString()}
+                              </span>
+                            )}
                           </div>
                         </td>
 
                         {/* 12 Months Cells */}
                         {Array.from({ length: 12 }, (_, idx) => idx + 1).map((mNum) => {
                           const isBeforeStart = selectedYear < 2023 || (selectedYear === 2023 && mNum < 11);
-                          const payment = monthlyPayments.find(p => p.memberId === m.id && Number(p.year) === Number(selectedYear) && Number(p.month) === Number(mNum));
+                          const payment = monthlyPayments.find(p => (p.memberId === m.id || (m.memberNo && p.memberNo === m.memberNo)) && Number(p.year) === Number(selectedYear) && Number(p.month) === Number(mNum));
                           const paidAmountValue = payment ? Number(payment.paidAmount) : 0;
                           const expectedForCell = getDefaultFeeForMonth(selectedYear, mNum, m.monthlyFeeAmount);
                           const isPaid = paidAmountValue >= expectedForCell;

@@ -268,9 +268,9 @@ export function getDefaultFeeForMonth(year: number, month: number, memberFeeAmou
 
 /**
  * Calculates late fee penalty for monthly fee debt.
- * Rule: Faini ya kuchelewa ada inaanza kuhesabika kuanzia mwezi wa 6 (Juni 2026).
- * Kama mwanachama anadaiwa zaidi ya miezi 3 kuanzia mwezi wa 6 (Juni 2026):
- * Faini ni TZS 5,000 kwa kila mwezi unaozidi miezi 3 kuanzia mwezi huo wa 6.
+ * Kanuni ya Kikundi: Faini ya ada inaanza rasmi kuhesabiwa kuanzia Mwezi wa 6 (Juni 2026).
+ * Mwanachama anayedaiwa zaidi ya miezi 3 kuanzia mwezi huo wa 6 (Juni 2026) na kuendelea
+ * hutozwa faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya kwanza.
  * (Ikiwa inadaiwa miezi <= 3 kuanzia mwezi wa 6, faini ni TZS 0).
  */
 export function calculateLateFeePenalty(unpaidMonthsFromJuneCount: number): { penalty: number; penaltyMonths: number } {
@@ -365,7 +365,11 @@ export function calculateMemberFeeDebt(
     const endM = y === endYear ? endMonth : 12;
 
     for (let m = startM; m <= endM; m++) {
-      const p = payments.find(pay => pay.memberId === member.id && pay.year === y && pay.month === m);
+      const p = payments.find(pay => 
+        (pay.memberId === member.id || (member.memberNo && pay.memberNo === member.memberNo)) && 
+        Number(pay.year) === y && 
+        Number(pay.month) === m
+      );
       const paidAmount = p ? (Number(p.paidAmount) || 0) : 0;
       const expectedAmount = getDefaultFeeForMonth(y, m, member.monthlyFeeAmount);
       const debt = Math.max(0, expectedAmount - paidAmount);
@@ -386,29 +390,25 @@ export function calculateMemberFeeDebt(
 
   const unpaidCount = unpaidItems.length;
 
-  // Faini ya kuchelewesha ada: Huhesabiwa kuanzia mwezi wa 6 (Juni 2026) pekee
-  // Kama mwanachama anadaiwa zaidi ya miezi 3 kuanzia mwezi wa 6 (yaani miezi 4 au zaidi ya ada iliyopita ambayo haijalipwa),
-  // faini ni TZS 5,000 kwa kila mwezi unaozidi miezi 3.
-  // Kama anadaiwa miezi 3 au chini ya hapo (mfano miezi 0, 1, 2, au 3), au amelipa miezi ya mbele/ziada, FAINI NI TZS 0.
+  // Faini ya kuchelewesha ada: Huhesabiwa kuanzia Mwezi wa 6 (Juni 2026) pekee
+  // Kanuni ya Kikundi: Faini ya ada inaanza rasmi kuhesabiwa kuanzia Mwezi wa 6 (Juni 2026).
+  // Mwanachama anayedaiwa zaidi ya miezi 3 kuanzia Mwezi wa 6 (Juni 2026)
+  // hutozwa faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya kwanza kuanzia mwezi huo wa 6.
+  // Hadi sasa (Septemba 2026), miezi iliyopita kuanzia Juni 2026 ni 4 pekee (Juni, Julai, Agosti, Septemba).
+  // Hivyo hakuna mwanachama anayeweza kudaiwa faini ya ada inayozidi TZS 5,000 (4 - 3 = mwezi 1 wa faini = TZS 5,000).
+  // Mwanachama akilipa mwezi wowote kati ya hiyo kwenye Matrix, miezi kuanzia Juni inakuwa <= 3, na faini inashuka papo hapo kuwa TZS 0.
   const unpaidFromJuneItems = unpaidItems.filter(item => item.year > 2026 || (item.year === 2026 && item.month >= 6));
   const unpaidFromJuneCount = unpaidFromJuneItems.length;
-  const { penalty: currentUnpaidPenalty } = calculateLateFeePenalty(unpaidFromJuneCount);
-
-  // Faini zilizorekodiwa rasmi kwenye accruedFines (faini zilizoidhinishwa hapo awali)
-  const accruedLateFines = (state.accruedFines || [])
-    .filter(f => (f.memberId === member.id || f.memberNo === member.memberNo) && f.fineType === 'ada_late_fee');
-  const accruedFinesSum = accruedLateFines.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
-
-  // Jumla ya faini ya ada iliyopimwa
-  const totalLateFeeAssessed = Math.max(accruedFinesSum, currentUnpaidPenalty);
+  const { penalty: currentUnpaidPenalty, penaltyMonths } = calculateLateFeePenalty(unpaidFromJuneCount);
 
   // Faini za ada zilizokwisha lipwa na mwanachama huyu
   const lateFinesPaid = (state.finePayments || [])
-    .filter(p => (p.memberId === member.id || p.memberNo === member.memberNo) && p.fineType === 'ada_late_fee')
+    .filter(p => (p.memberId === member.id || (member.memberNo && p.memberNo === member.memberNo)) && p.fineType === 'ada_late_fee')
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
   // Salio la Faini ya Kuchelewa Ada (Haliwezi kuwa chini ya 0)
-  const lateFeePenalty = Math.max(0, totalLateFeeAssessed - lateFinesPaid);
+  // Badiliko lolote katika Matrix ya Miezi 12 huathiri mara moja idadi ya miezi inayodaiwa na faini inavyohesabiwa
+  const lateFeePenalty = Math.max(0, currentUnpaidPenalty - lateFinesPaid);
   const penaltyMonthsCount = lateFeePenalty > 0 ? Math.ceil(lateFeePenalty / 5000) : 0;
 
   const { finesPaid: otherFinesPaid, finesDebt: otherFinesDebt } = calculateMemberOtherFines(member.id, state);

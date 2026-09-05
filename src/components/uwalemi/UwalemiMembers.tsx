@@ -129,6 +129,40 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
     await onSaveState({ ...state, members: updatedMembers });
   };
 
+  const handleDeleteFinePayment = async (fp: any) => {
+    const amt = (Number(fp.amount) || Number(fp.paidAmount) || 0).toLocaleString();
+    if (!window.confirm(`Je, una uhakika unataka kufuta rekodi hii ya malipo ya faini ya TZS ${amt} (Risiti: ${fp.receiptNo || fp.id})? Malipo haya yataondolewa kabisa kwenye rekodi za kikundi.`)) {
+      return;
+    }
+    const updatedFinePayments = (state.finePayments || []).filter(p => p.id !== fp.id);
+    const updatedAccruedFines = (state.accruedFines || []).filter(af => af.id !== fp.id && !(af.memberId === fp.memberId && af.fineType === fp.fineType));
+    
+    let updatedMeetings = state.meetings;
+    if (fp.fineType === 'kikao' && fp.meetingId) {
+      updatedMeetings = (state.meetings || []).map(m => {
+        if (m.id === fp.meetingId) {
+          return {
+            ...m,
+            attendees: (m.attendees || []).map(a => {
+              if (a.memberId === fp.memberId || a.memberNo === fp.memberNo) {
+                return { ...a, finePaid: false };
+              }
+              return a;
+            })
+          };
+        }
+        return m;
+      });
+    }
+
+    await onSaveState({
+      ...state,
+      finePayments: updatedFinePayments,
+      accruedFines: updatedAccruedFines,
+      meetings: updatedMeetings
+    });
+  };
+
   // Phone Normalizer helper
   const normalizePhone = (phoneInput: string | number | undefined): string => {
     if (!phoneInput) return '';
@@ -1685,6 +1719,7 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                                   <th className="p-2">Aina</th>
                                   <th className="p-2 text-right">Kiasi</th>
                                   <th className="p-2">Njia</th>
+                                  <th className="p-2 text-center">Kitendo</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-800/60 text-slate-300">
@@ -1695,6 +1730,15 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                                     <td className="p-2">{fp.fineType === 'kikao' ? 'Faini ya Kikao' : fp.fineType === 'ada_late_fee' ? 'Faini ya Ada' : 'Faini Nyingine'}</td>
                                     <td className="p-2 text-right font-bold text-emerald-400">TZS {(Number(fp.amount) || Number((fp as any).paidAmount) || 0).toLocaleString()}</td>
                                     <td className="p-2 text-slate-400">{fp.paymentMethod}</td>
+                                    <td className="p-2 text-center">
+                                      <button
+                                        onClick={() => handleDeleteFinePayment(fp)}
+                                        className="p-1 rounded text-rose-400 hover:text-white hover:bg-rose-500/30 transition-colors cursor-pointer"
+                                        title="Futa / Ondoa rekodi hii ya malipo ya faini"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>

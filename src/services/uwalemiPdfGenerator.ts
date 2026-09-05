@@ -473,10 +473,11 @@ export function getMonthlyBreakdownString(
   monthlyPayments: UwalemiMonthlyPayment[],
   periodFilter: ReportPeriodFilter,
   groupStartYear = GROUP_START_YEAR,
-  groupStartMonth = GROUP_START_MONTH
+  groupStartMonth = GROUP_START_MONTH,
+  memberNo?: string
 ): string {
   const recs = monthlyPayments.filter(
-    p => p.memberId === memberId && isPeriodMatch(periodFilter, p.year, p.month, p.paymentDate)
+    p => (p.memberId === memberId || (memberNo && p.memberNo === memberNo)) && isPeriodMatch(periodFilter, p.year, p.month, p.paymentDate)
   );
 
   if (recs.length === 0) {
@@ -500,7 +501,8 @@ export function getYearlyMonthMatrixRow(
   year: number,
   monthlyPayments: UwalemiMonthlyPayment[],
   groupStartYear = GROUP_START_YEAR,
-  groupStartMonth = GROUP_START_MONTH
+  groupStartMonth = GROUP_START_MONTH,
+  memberNo?: string
 ) {
   const cells: string[] = [];
   let totalPaidInYear = 0;
@@ -512,7 +514,7 @@ export function getYearlyMonthMatrixRow(
       continue;
     }
 
-    const rec = monthlyPayments.find(p => p.memberId === memberId && Number(p.year) === Number(year) && Number(p.month) === Number(m));
+    const rec = monthlyPayments.find(p => (p.memberId === memberId || (memberNo && p.memberNo === memberNo)) && Number(p.year) === Number(year) && Number(p.month) === Number(m));
     if (rec && Number(rec.paidAmount) > 0) {
       const paid = Number(rec.paidAmount);
       totalPaidInYear += paid;
@@ -683,9 +685,11 @@ export const generateFinancialReportPDF = (
     return sum + Math.max(0, expected - paid);
   }, 0) : 0;
 
-  // Meeting Fines Calculation
-  let totalMeetingFinesCollected = 0;
-  let totalMeetingFinesUnpaid = 0;
+  // Meeting Fines Calculation (separated into late arrival and absence/utoro)
+  let totalMeetingLateCollected = 0;
+  let totalMeetingLateUnpaid = 0;
+  let totalMeetingAbsentCollected = 0;
+  let totalMeetingAbsentUnpaid = 0;
   let fineTransactionsCount = 0;
 
   const defaultAbsentFine = state.groupSettings?.meetingFineDefault || 10000;
@@ -705,10 +709,15 @@ export const generateFinancialReportPDF = (
         }
         if (fine > 0) {
           fineTransactionsCount++;
-          if (att.finePaid) {
-            totalMeetingFinesCollected += fine;
+          if (att.status === 'late') {
+            if (att.finePaid) totalMeetingLateCollected += fine;
+            else totalMeetingLateUnpaid += fine;
+          } else if (att.status === 'absent') {
+            if (att.finePaid) totalMeetingAbsentCollected += fine;
+            else totalMeetingAbsentUnpaid += fine;
           } else {
-            totalMeetingFinesUnpaid += fine;
+            if (att.finePaid) totalMeetingLateCollected += fine;
+            else totalMeetingLateUnpaid += fine;
           }
         }
       });
@@ -741,16 +750,31 @@ export const generateFinancialReportPDF = (
     const m = iso ? Number(iso.substring(5, 7)) : 0;
     return isPeriodMatch(periodFilter, y, m, fp.paymentDate);
   });
-  const totalFinePaymentsAmt = finePaymentsInPeriod.reduce((sum, fp) => sum + (Number(fp.amount) || 0), 0);
-  const totalFinesCollected = Math.max(totalMeetingFinesCollected, totalFinePaymentsAmt);
+
+  let totalLateFeePaidInPeriod = 0;
+  let totalKikaoReceiptsInPeriod = 0;
+  finePaymentsInPeriod.forEach(fp => {
+    const amt = Number(fp.amount) || 0;
+    if (fp.fineType === 'ada_late_fee') {
+      totalLateFeePaidInPeriod += amt;
+    } else {
+      totalKikaoReceiptsInPeriod += amt;
+    }
+  });
+
+  const totalMeetingLatePaid = Math.max(totalMeetingLateCollected, totalKikaoReceiptsInPeriod > totalMeetingAbsentCollected ? (totalKikaoReceiptsInPeriod - totalMeetingAbsentCollected) : totalMeetingLateCollected);
+  const totalMeetingAbsentPaid = totalMeetingAbsentCollected;
+  const totalMeetingFinesPaid = Math.max(totalMeetingLateCollected + totalMeetingAbsentCollected, totalKikaoReceiptsInPeriod);
+  const totalMeetingFinesUnpaid = totalMeetingLateUnpaid + totalMeetingAbsentUnpaid;
+  const totalFinesCollected = totalLateFeePaidInPeriod + totalMeetingFinesPaid;
 
   const totalInflows = totalMonthlyCollected + totalRegFees + totalFinesCollected + emergencyCollectedInPeriod;
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const netSurplus = totalInflows - totalExpenses;
 
-  // 1. Summary Cards in Table format
+  // 1. Summary Cards in Table format with itemized fines above Total Inflows
   const summaryBody: any[] = [
-    ['Ada za Kila Mwezi Zilizokusanywa', formatTZS(totalMonthlyCollected), `${monthlyPayments.length} miamala ya ada`],
+    ['Ada za Kila Mwezi Zilizokusanywa', formatTZS(totalMonthlyCollected), `${monthlyPayments.length} miamala ya ada iliyokusanywa`],
   ];
 
   if (includeRegFee) {
@@ -762,10 +786,12 @@ export const generateFinancialReportPDF = (
   }
 
   summaryBody.push(
-    ['Makusanyo ya Faini za Wanachama', formatTZS(totalFinesCollected), `${Math.max(fineTransactionsCount, finePaymentsInPeriod.length)} miamala ya faini zilizolipiwa hazina`],
-    ['Michango ya Dharura & Misiba', formatTZS(emergencyCollectedInPeriod), 'Michango iliyokusanywa kipindi hiki'],
-    ['JUMLA KUU YA MAPATO (INFLOWS)', formatTZS(totalInflows), 'Jumla ya fedha zote zilizopokelewa hazina'],
-    ['JUMLA KUU YA MATUMIZI (OUTFLOWS)', formatTZS(totalExpenses), `${expenses.length} miamala ya matumizi`],
+    ['Faini ya Kuchelewesha Ada (Zilizolipwa)', formatTZS(totalLateFeePaidInPeriod), 'Faini ya ucheleweshaji wa ada (>miezi 3) iliyolipwa na kuingia hazina'],
+    ['Faini ya Kuchelewa Kwenye Kikao (Zilizolipwa)', formatTZS(totalMeetingLatePaid), 'Faini za kuchelewa kufika mkutanoni zilizolipwa na kuingia hazina'],
+    ['Faini ya Kutokuhudhuria Kikao / Utoro (Zilizolipwa)', formatTZS(totalMeetingAbsentPaid), 'Faini za utoro/kutofika vikao bila ruhusa zilizolipwa hazina'],
+    ['Michango ya Dharura & Misiba', formatTZS(emergencyCollectedInPeriod), 'Michango iliyokusanywa kipindi hiki kwa ajili ya dharura'],
+    ['JUMLA KUU YA MAPATO (INFLOWS)', formatTZS(totalInflows), 'Jumla ya fedha zote zilizopokelewa hazina (Ada + Faini zote + Dharura)'],
+    ['JUMLA KUU YA MATUMIZI (OUTFLOWS)', formatTZS(totalExpenses), `${expenses.length} miamala ya matumizi yaliyoidhinishwa`],
     ['SALIO HALISI LA HAZINA (NET BALANCE)', formatTZS(netSurplus), netSurplus >= 0 ? 'FAIDA / SALIO CHANYA' : 'UPUNGUFU']
   );
 
@@ -812,9 +838,14 @@ export const generateFinancialReportPDF = (
       'Faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni (Jumla ya wanachama wote wenye malimbikizo)'
     ],
     [
-      'Madeni ya Faini za Vikao (Unpaid Meeting Fines)',
-      formatTZS(totalMeetingFinesUnpaid),
-      'Faini za utoro/kuchelewa vikao zilizotozwa lakini hazijalipwa'
+      'Madeni ya Faini ya Kuchelewa Kwenye Vikao',
+      formatTZS(totalMeetingLateUnpaid),
+      'Faini za TZS 2,000 kwa kila kikao kilichochelewa na bado haijalipwa'
+    ],
+    [
+      'Madeni ya Faini ya Kutokuhudhuria Vikao (Utoro)',
+      formatTZS(totalMeetingAbsentUnpaid),
+      'Faini za TZS 10,000 kwa kila kikao cha utoro kisicholipwa'
     ],
     [
       'JUMLA YA MADENI YA FAINI ZOTE BADO KULIPWA (KIKUNDI KIZIMA)',
@@ -1711,11 +1742,21 @@ export const generateFinesReportPDF = (
     `Kipindi: ${periodLabel} • Kanuni ya Faini ya Ada: TZS 5,000 kila mwezi unaozidi miezi 3 ya deni`
   );
 
-  // 1. Gather all fines metrics
-  let totalMembersWithFines = 0;
-  let totalLateFeePenalty = 0;
-  let totalMeetingFinesPaid = 0;
-  let totalMeetingFinesDebt = 0;
+  // 1. Gather all fines metrics categorized:
+  // (a) Faini ya Kuchelewesha Ada (>miezi 3)
+  // (b) Faini ya Kuchelewa Kwenye Kikao
+  // (c) Faini ya Kutokuhudhuria Kikao / Utoro
+  let totalMembersWithFineDebt = 0;
+  let totalMembersWithFinePaid = 0;
+
+  let totalLateFeeDebt = 0;
+  let totalLateFeePaid = 0;
+
+  let totalMeetingLateDebt = 0;
+  let totalMeetingLatePaid = 0;
+
+  let totalMeetingAbsentDebt = 0;
+  let totalMeetingAbsentPaid = 0;
 
   const memberRowsData: any[] = [];
   const detailedMeetingFines: any[] = [];
@@ -1726,11 +1767,13 @@ export const generateFinesReportPDF = (
     const lateFee = debtInfo.lateFeePenalty || 0;
     const unpaidMonthsCount = debtInfo.unpaidCount || 0;
     const penaltyMonths = debtInfo.penaltyMonthsCount || 0;
-    const unpaidFromJuneCount = debtInfo.unpaidFromJuneCount || 0;
 
     // Meeting fines in period
-    let meetingPaid = 0;
-    let meetingUnpaid = 0;
+    let meetingLateDebt = 0;
+    let meetingLatePaid = 0;
+    let meetingAbsentDebt = 0;
+    let meetingAbsentPaid = 0;
+
     const defaultAbsentFine = state.groupSettings?.meetingFineDefault || 10000;
     const defaultLateFine = state.groupSettings?.meetingFineLateDefault || 2000;
 
@@ -1747,11 +1790,14 @@ export const generateFinesReportPDF = (
             else if (att.status === 'late') fAmt = defaultLateFine;
           }
           if (fAmt > 0) {
-            if (att.finePaid) {
-              meetingPaid += fAmt;
+            if (att.status === 'absent') {
+              if (att.finePaid) meetingAbsentPaid += fAmt;
+              else meetingAbsentDebt += fAmt;
             } else {
-              meetingUnpaid += fAmt;
+              if (att.finePaid) meetingLatePaid += fAmt;
+              else meetingLateDebt += fAmt;
             }
+
             detailedMeetingFines.push({
               date: mtg.date,
               title: mtg.title || 'Mkutano wa UWALEMI',
@@ -1759,7 +1805,7 @@ export const generateFinesReportPDF = (
               memberName: getMemberDisplayName(m),
               amount: fAmt,
               paid: !!att.finePaid,
-              reason: att.fineReason || (att.status === 'absent' ? 'Kutohudhuria Kikao' : 'Kuchelewa Kikao')
+              reason: att.fineReason || (att.status === 'absent' ? 'Kutohudhuria Kikao / Utoro' : 'Kuchelewa Kwenye Kikao')
             });
           }
         }
@@ -1774,23 +1820,45 @@ export const generateFinesReportPDF = (
       const pMonth = iso ? Number(iso.substring(5, 7)) : 0;
       return isPeriodMatch(periodFilter, pYear, pMonth, fp.paymentDate);
     });
-    const memberFinesPaidAmt = Math.max(
-      meetingPaid,
-      memberFinePayments.reduce((s, fp) => s + (Number(fp.amount) || 0), 0)
-    );
 
-    const totalMemberFineDebt = lateFee + meetingUnpaid;
-    const totalMemberFines = totalMemberFineDebt + memberFinesPaidAmt;
+    let lateFeePaid = 0;
+    let receiptsKikaoPaid = 0;
+    memberFinePayments.forEach(fp => {
+      const amt = Number(fp.amount) || 0;
+      if (fp.fineType === 'ada_late_fee') {
+        lateFeePaid += amt;
+      } else {
+        receiptsKikaoPaid += amt;
+      }
+    });
 
-    if (totalMemberFines > 0) {
-      totalMembersWithFines++;
+    // Reconcile meeting payments from receipts if attendee finePaid flag was not toggled
+    if (receiptsKikaoPaid > (meetingLatePaid + meetingAbsentPaid)) {
+      meetingLatePaid = receiptsKikaoPaid;
+      if (meetingLateDebt > 0) {
+        meetingLateDebt = Math.max(0, meetingLateDebt - receiptsKikaoPaid);
+      }
     }
 
-    totalLateFeePenalty += lateFee;
-    totalMeetingFinesPaid += memberFinesPaidAmt;
-    totalMeetingFinesDebt += meetingUnpaid;
+    const totalMemberFineDebt = lateFee + meetingLateDebt + meetingAbsentDebt;
+    const totalMemberFinePaid = lateFeePaid + meetingLatePaid + meetingAbsentPaid;
+    const totalMemberFines = totalMemberFineDebt + totalMemberFinePaid;
 
-    let feeDebtNote = 'Hakuna';
+    if (totalMemberFineDebt > 0) {
+      totalMembersWithFineDebt++;
+    }
+    if (totalMemberFinePaid > 0) {
+      totalMembersWithFinePaid++;
+    }
+
+    totalLateFeeDebt += lateFee;
+    totalLateFeePaid += lateFeePaid;
+    totalMeetingLateDebt += meetingLateDebt;
+    totalMeetingLatePaid += meetingLatePaid;
+    totalMeetingAbsentDebt += meetingAbsentDebt;
+    totalMeetingAbsentPaid += meetingAbsentPaid;
+
+    let feeDebtNote = 'Hakuna deni';
     if (unpaidMonthsCount > 0) {
       if (penaltyMonths > 0) {
         feeDebtNote = `${unpaidMonthsCount}M (${penaltyMonths} ya faini Mz 6+)`;
@@ -1802,7 +1870,7 @@ export const generateFinesReportPDF = (
     let statusText = 'Hakuna Faini';
     if (totalMemberFineDebt > 0) {
       statusText = 'Inadaiwa';
-    } else if (memberFinesPaidAmt > 0) {
+    } else if (totalMemberFinePaid > 0) {
       statusText = 'Imelipwa';
     }
 
@@ -1812,36 +1880,67 @@ export const generateFinesReportPDF = (
       penaltyMonths,
       feeDebtNote,
       lateFee,
-      meetingUnpaid,
-      meetingPaid: memberFinesPaidAmt,
+      meetingLateDebt,
+      meetingAbsentDebt,
+      totalMemberFinePaid,
       totalMemberFineDebt,
       totalMemberFines,
       statusText
     });
   });
 
-  const grandTotalFines = totalLateFeePenalty + totalMeetingFinesDebt + totalMeetingFinesPaid;
-  const grandTotalFinesPending = totalLateFeePenalty + totalMeetingFinesDebt;
+  const grandTotalFinesDebt = totalLateFeeDebt + totalMeetingLateDebt + totalMeetingAbsentDebt;
+  const grandTotalFinesPaid = totalLateFeePaid + totalMeetingLatePaid + totalMeetingAbsentPaid;
+  const grandTotalFines = grandTotalFinesDebt + grandTotalFinesPaid;
 
   // Render Summary KPI autoTable
   autoTable(doc, {
     startY: currentY,
-    head: [['MUHTASARI WA FAINI & ADHABU', 'IDADI / KIASI (TZS)', 'MAELEZO YA KANUNI']],
+    head: [['MUHTASARI WA FAINI & ADHABU', 'IDADI / KIASI (TZS)', 'MAELEZO YA KANUNI & HALI']],
     body: [
-      ['Wanachama Wenye Faini', `${totalMembersWithFines} kati ya ${members.length}`, 'Wenye faini ya kuchelewa ada au faini za vikao'],
-      ['Jumla ya Faini za Ada (>Miezi 3, Mz 6+)', formatTZS(totalLateFeePenalty), 'TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni kuanzia Mwezi wa 6 (Juni 2026)'],
-      ['Faini za Vikao Zisizolipwa (Deni)', formatTZS(totalMeetingFinesDebt), 'Faini za kutofika/kuchelewa vikao ambazo hazijalipwa'],
-      ['Faini Zilizokusanywa (Hazina)', formatTZS(totalMeetingFinesPaid), 'Makusanyo ya faini (ada + vikao) yaliyokamilika'],
-      ['JUMLA YA FAINI ZINAZODAIWA', formatTZS(grandTotalFinesPending), 'Faini za ada zisizolipwa + faini za vikao zisizolipwa'],
-      ['JUMLA KUU YA FAINI ZOTE', formatTZS(grandTotalFines), 'Jumla ya faini zote zilizotozwa katika kipindi']
+      [
+        'Wanachama Wenye Deni la Faini',
+        `${totalMembersWithFineDebt} kati ya ${members.length}`,
+        `Wenye madeni ya faini bado hawajalipa (${totalMembersWithFinePaid} wameshalipa faini zao). Wakilipa ada au faini idadi inapungua`
+      ],
+      [
+        '1. Faini ya Kuchelewesha Ada (>Miezi 3, Mz 6+)',
+        `Deni: ${formatTZS(totalLateFeeDebt)} | Imelipwa: ${formatTZS(totalLateFeePaid)}`,
+        'TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni la ada kuanzia Mwezi wa 6 (Juni 2026)'
+      ],
+      [
+        '2. Faini ya Kuchelewa Kwenye Kikao',
+        `Deni: ${formatTZS(totalMeetingLateDebt)} | Imelipwa: ${formatTZS(totalMeetingLatePaid)}`,
+        'TZS 2,000 kwa kuchelewa kufika kwenye kikao au mkutano wa kikundi'
+      ],
+      [
+        '3. Faini ya Kutokuhudhuria Kikao / Utoro',
+        `Deni: ${formatTZS(totalMeetingAbsentDebt)} | Imelipwa: ${formatTZS(totalMeetingAbsentPaid)}`,
+        'TZS 10,000 kwa kutofika kwenye kikao bila ruhusa au taarifa ya udhuru'
+      ],
+      [
+        'JUMLA YA FAINI ZINAZODAIWA (MADENI)',
+        formatTZS(grandTotalFinesDebt),
+        'Jumla ya madeni yote ya faini za wanachama ambazo bado hazijalipwa'
+      ],
+      [
+        'JUMLA YA FAINI ZILIZOLIPWA (HAZINA)',
+        formatTZS(grandTotalFinesPaid),
+        'Jumla ya faini zote zilizokusanywa na kuingia hazina ya UWALEMI'
+      ],
+      [
+        'JUMLA KUU YA FAINI ZOTE',
+        formatTZS(grandTotalFines),
+        'Jumla kuu ya faini zote zilizotozwa (Madeni Yanayodaiwa + Faini Zilizolipwa)'
+      ]
     ],
     theme: 'grid',
     headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
     bodyStyles: { fontSize: 7.5 },
     columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 70 },
-      1: { fontStyle: 'bold', halign: 'right', cellWidth: 55, textColor: [225, 29, 72] },
-      2: { cellWidth: 145, textColor: [71, 85, 105] }
+      0: { fontStyle: 'bold', cellWidth: 72 },
+      1: { fontStyle: 'bold', halign: 'right', cellWidth: 65, textColor: [225, 29, 72] },
+      2: { cellWidth: 133, textColor: [71, 85, 105] }
     },
     didParseCell: (data) => {
       if (data.row.index === 4) {
@@ -1850,6 +1949,11 @@ export const generateFinesReportPDF = (
         data.cell.styles.fontStyle = 'bold';
       }
       if (data.row.index === 5) {
+        data.cell.styles.fillColor = [236, 253, 245];
+        data.cell.styles.textColor = [4, 120, 87];
+        data.cell.styles.fontStyle = 'bold';
+      }
+      if (data.row.index === 6) {
         data.cell.styles.fillColor = [241, 245, 249];
         data.cell.styles.textColor = [15, 23, 42];
         data.cell.styles.fontStyle = 'bold';
@@ -1871,11 +1975,11 @@ export const generateFinesReportPDF = (
     idx + 1,
     d.member.memberNo,
     getMemberDisplayName(d.member),
-    d.member.phone || '-',
     d.feeDebtNote,
     d.lateFee > 0 ? formatTZS(d.lateFee) : '0.00',
-    d.meetingUnpaid > 0 ? formatTZS(d.meetingUnpaid) : '0.00',
-    d.meetingPaid > 0 ? formatTZS(d.meetingPaid) : '0.00',
+    d.meetingLateDebt > 0 ? formatTZS(d.meetingLateDebt) : '0.00',
+    d.meetingAbsentDebt > 0 ? formatTZS(d.meetingAbsentDebt) : '0.00',
+    d.totalMemberFinePaid > 0 ? formatTZS(d.totalMemberFinePaid) : '0.00',
     formatTZS(d.totalMemberFineDebt),
     d.statusText
   ]);
@@ -1886,12 +1990,12 @@ export const generateFinesReportPDF = (
       '#',
       'Namba',
       'Jina Kamili la Mjumbe',
-      'Simu',
-      'Deni la Ada (Miezi)',
+      'Deni Ada (Miezi)',
       'Faini Ada (>3M)',
-      'Faini Vikao (Deni)',
-      'Faini Vikao (Paid)',
-      'Jumla ya Faini',
+      'Faini Kuchelewa',
+      'Faini Utoro',
+      'Zilizolipwa',
+      'Jumla Deni',
       'Hali'
     ]],
     body: tableRows,
@@ -1899,16 +2003,16 @@ export const generateFinesReportPDF = (
     headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold', halign: 'center' },
     bodyStyles: { textColor: [0, 0, 0], fontSize: 7, halign: 'right' },
     columnStyles: {
-      0: { cellWidth: 7, halign: 'center' },
-      1: { cellWidth: 16, fontStyle: 'bold', halign: 'left' },
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 18, fontStyle: 'bold', halign: 'left' },
       2: { cellWidth: 50, fontStyle: 'bold', halign: 'left' },
-      3: { cellWidth: 26, halign: 'left' },
-      4: { cellWidth: 42, halign: 'left' },
-      5: { cellWidth: 28, halign: 'right', textColor: [185, 28, 28] },
-      6: { cellWidth: 28, halign: 'right', textColor: [185, 28, 28] },
+      3: { cellWidth: 32, halign: 'left' },
+      4: { cellWidth: 26, halign: 'right', textColor: [185, 28, 28] },
+      5: { cellWidth: 26, halign: 'right', textColor: [185, 28, 28] },
+      6: { cellWidth: 26, halign: 'right', textColor: [185, 28, 28] },
       7: { cellWidth: 26, halign: 'right', textColor: [4, 120, 87] },
       8: { cellWidth: 28, halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28] },
-      9: { cellWidth: 19, halign: 'center', fontStyle: 'bold' }
+      9: { cellWidth: 20, halign: 'center', fontStyle: 'bold' }
     },
     didParseCell: (data) => {
       if (data.column.index === 9 && data.section === 'body') {
