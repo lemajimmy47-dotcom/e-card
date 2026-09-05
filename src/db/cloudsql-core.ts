@@ -764,7 +764,7 @@ export async function fetchFullStateFromDB(): Promise<any> {
         uwalemiState.groupSettings = {};
       }
       const uSms = uwalemiState.groupSettings.smsConfig;
-      if (!uSms || uSms.provider === "meseji" || !uSms.provider || (uSms.apiKey && uSms.apiKey.startsWith("zs_")) || !uSms.apiKey) {
+      if (!uSms || !uSms.provider) {
         uwalemiState.groupSettings.smsConfig = {
           provider: "ehub",
           apiKey: "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD",
@@ -775,19 +775,6 @@ export async function fetchFullStateFromDB(): Promise<any> {
           autoSendMeetingAlerts: uSms?.autoSendMeetingAlerts !== undefined ? uSms.autoSendMeetingAlerts : false,
           autoSendMonthlyReminder: uSms?.autoSendMonthlyReminder !== undefined ? uSms.autoSendMonthlyReminder : false,
         };
-      } else if (uSms.provider === "ehub") {
-        if (!uSms.apiKey || uSms.apiKey.startsWith("zs_")) {
-          uSms.apiKey = "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
-        }
-        if (!uSms.secretKey) {
-          uSms.secretKey = "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
-        }
-        if (uSms.senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !uSms.senderId || uSms.senderId === "UWALEMI" || uSms.senderId === "EVENT CARD") {
-          uSms.senderId = "19f41b59-19d0-4f98-b8c9-9d5b1ac31308";
-        }
-        if (!uSms.baseUrl) {
-          uSms.baseUrl = "https://sms.ehub.co.tz/api/v1/sms/send";
-        }
       }
     }
 
@@ -1280,19 +1267,6 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
     // 3.12. Save UWALEMI Community State to PostgreSQL
     if (data.uwalemiState && typeof data.uwalemiState === "object") {
       const uState = { ...data.uwalemiState };
-      if (uState.groupSettings && typeof uState.groupSettings === "object") {
-        const uSms = uState.groupSettings.smsConfig;
-        if (uSms && (uSms.provider === "ehub" || !uSms.provider || uSms.provider === "meseji" || (uSms.apiKey && uSms.apiKey.startsWith("zs_")))) {
-          uState.groupSettings.smsConfig = {
-            ...uSms,
-            provider: "ehub",
-            apiKey: (!uSms.apiKey || uSms.apiKey.startsWith("zs_")) ? "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD" : uSms.apiKey,
-            secretKey: (!uSms.secretKey) ? "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf" : uSms.secretKey,
-            senderId: (uSms.senderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || !uSms.senderId || uSms.senderId === "UWALEMI" || uSms.senderId === "EVENT CARD") ? "19f41b59-19d0-4f98-b8c9-9d5b1ac31308" : uSms.senderId,
-            baseUrl: uSms.baseUrl || "https://sms.ehub.co.tz/api/v1/sms/send"
-          };
-        }
-      }
       await db.insert(schema.uwalemiStateTable).values({
         id: "state",
         data: uState,

@@ -35,7 +35,8 @@ import {
   sortMembersByLeadership, 
   getDefaultFeeForMonth, 
   triggerAutoReceiptSms,
-  calculateMemberFeeDebt 
+  calculateMemberFeeDebt,
+  formatMemberReceiptDebtLines 
 } from '../../services/uwalemiService';
 
 interface Props {
@@ -1920,7 +1921,14 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               <button
                 onClick={() => {
                   const rem = Math.max(0, viewingReceipt.expectedAmount - viewingReceipt.paidAmount);
-                  const msg = `STAKABADHI YA ADA YA UWALEMI\nNamba: ${viewingReceipt.receiptNo}\nMjumbe: ${viewingReceipt.memberName} (${viewingReceipt.memberNo})\nAda ya: ${monthNamesSw[viewingReceipt.month - 1]} ${viewingReceipt.year}\nKiasi Kilicholipwa: TZS ${viewingReceipt.paidAmount.toLocaleString()}\nHali: ${viewingReceipt.status === 'paid' ? 'IMEKAMILIKA (PAID)' : `MALIPO YA NUSU (Salio: TZS ${rem.toLocaleString()})`}\nTarehe: ${viewingReceipt.paymentDate}\n\nAhsante kwa kuwajibika na kujenga UWALEMI!`;
+                  const memberObj = members.find(m => m.id === viewingReceipt.memberId || m.memberNo === viewingReceipt.memberNo) || {
+                    id: viewingReceipt.memberId,
+                    memberNo: viewingReceipt.memberNo,
+                    fullName: viewingReceipt.memberName
+                  };
+                  const debtSummary = formatMemberReceiptDebtLines(memberObj, state);
+                  const debtBlock = debtSummary.fullSummaryText ? `\n${debtSummary.fullSummaryText}` : '';
+                  const msg = `STAKABADHI YA ADA YA UWALEMI\nNamba: ${viewingReceipt.receiptNo}\nMjumbe: ${viewingReceipt.memberName} (${viewingReceipt.memberNo})\nAda ya: ${monthNamesSw[viewingReceipt.month - 1]} ${viewingReceipt.year}\nKiasi Kilicholipwa: TZS ${viewingReceipt.paidAmount.toLocaleString()}\nHali: ${viewingReceipt.status === 'paid' ? 'IMEKAMILIKA (PAID)' : `MALIPO YA NUSU (Salio: TZS ${rem.toLocaleString()})`}\nTarehe: ${viewingReceipt.paymentDate}${debtBlock}\n\nAhsante kwa kuwajibika na kujenga UWALEMI!`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                 }}
                 className="flex-1 min-w-[110px] inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold cursor-pointer"
@@ -2074,7 +2082,9 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               <button
                 onClick={() => {
                   const monthsList = viewingMultiReceipt.months.map(m => `- ${m.monthName} ${m.year}: TZS ${m.paid.toLocaleString()} (${!m.isPartial ? 'Kamili' : `Nusu, Salio: TZS ${m.balance.toLocaleString()}`})`).join('\n');
-                  const msg = `STAKABADHI YA ADA YA UWALEMI\nNamba: ${viewingMultiReceipt.receiptNo}\nMjumbe: ${viewingMultiReceipt.member.fullName} (${viewingMultiReceipt.member.memberNo})\nJumla Iliyolipwa: TZS ${viewingMultiReceipt.amount.toLocaleString()}\nTarehe: ${viewingMultiReceipt.paymentDate}\n\nMchanganuo:\n${monthsList}\n\nSalio la Deni Linalobaki: TZS ${viewingMultiReceipt.totalDebtAfter.toLocaleString()}\n\nAhsante kwa kuwajibika na kujenga UWALEMI!`;
+                  const debtSummary = formatMemberReceiptDebtLines(viewingMultiReceipt.member, state, { totalDebtAfter: viewingMultiReceipt.totalDebtAfter });
+                  const debtBlock = debtSummary.fullSummaryText ? `\n${debtSummary.fullSummaryText}` : '';
+                  const msg = `STAKABADHI YA ADA YA UWALEMI\nNamba: ${viewingMultiReceipt.receiptNo}\nMjumbe: ${viewingMultiReceipt.member.fullName} (${viewingMultiReceipt.member.memberNo})\nJumla Iliyolipwa: TZS ${viewingMultiReceipt.amount.toLocaleString()}\nTarehe: ${viewingMultiReceipt.paymentDate}\n\nMchanganuo:\n${monthsList}${debtBlock}\n\nAhsante kwa kuwajibika na kujenga UWALEMI!`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                 }}
                 className="flex-1 min-w-[110px] inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold cursor-pointer"

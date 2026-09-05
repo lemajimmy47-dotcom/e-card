@@ -104,57 +104,28 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   // Gateway Config State
   const [gatewayConfig, setGatewayConfig] = useState<UwalemiSmsConfig>(() => {
     const existing = state.groupSettings?.smsConfig;
-    if (existing && existing.provider === 'ehub' && existing.apiKey && !existing.apiKey.startsWith('zs_')) {
-      return {
-        ...existing,
-        senderId: (existing.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1' || !existing.senderId || existing.senderId === 'UWALEMI' || existing.senderId === 'MESEJI')
-          ? '19f41b59-19d0-4f98-b8c9-9d5b1ac31308'
-          : existing.senderId,
-        baseUrl: existing.baseUrl || 'https://sms.ehub.co.tz/api/v1/sms/send'
-      };
+    if (existing && existing.provider) {
+      return existing;
     }
-    // Default directly to active eHub configuration
+    // Default to eHub configuration if no configuration exists
     return {
       provider: 'ehub',
       apiKey: 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD',
       secretKey: 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf',
       senderId: '19f41b59-19d0-4f98-b8c9-9d5b1ac31308',
       baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
-      autoSendReceipts: existing?.autoSendReceipts !== undefined ? existing.autoSendReceipts : true,
-      autoSendMeetingAlerts: existing?.autoSendMeetingAlerts !== undefined ? existing.autoSendMeetingAlerts : true,
-      autoSendMonthlyReminder: existing?.autoSendMonthlyReminder !== undefined ? existing.autoSendMonthlyReminder : true
+      autoSendReceipts: true,
+      autoSendMeetingAlerts: true,
+      autoSendMonthlyReminder: true
     };
   });
 
-  // Auto-sync outdated or invalid Meseji credentials to active eHub on mount
+  // Keep gatewayConfig synced with state.groupSettings.smsConfig if updated
   useEffect(() => {
-    const current = state.groupSettings?.smsConfig;
-    const isOutdated = !current || 
-      current.provider === 'meseji' || 
-      (current.apiKey && current.apiKey.startsWith('zs_')) || 
-      !current.apiKey || 
-      (current.provider === 'ehub' && (current.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1' || current.senderId === 'UWALEMI' || current.senderId === 'MESEJI'));
-
-    if (isOutdated) {
-      const fixedConfig: UwalemiSmsConfig = {
-        provider: 'ehub',
-        apiKey: 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD',
-        secretKey: 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf',
-        senderId: '19f41b59-19d0-4f98-b8c9-9d5b1ac31308',
-        baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
-        autoSendReceipts: current?.autoSendReceipts !== undefined ? current.autoSendReceipts : true,
-        autoSendMeetingAlerts: current?.autoSendMeetingAlerts !== undefined ? current.autoSendMeetingAlerts : true,
-        autoSendMonthlyReminder: current?.autoSendMonthlyReminder !== undefined ? current.autoSendMonthlyReminder : true
-      };
-      setGatewayConfig(fixedConfig);
-      const updatedSettings = {
-        ...state.groupSettings,
-        smsConfig: fixedConfig
-      };
-      onSaveState({ ...state, groupSettings: updatedSettings }).catch(() => {});
-      setTimeout(() => handleCheckBalance(), 500);
+    if (state.groupSettings?.smsConfig) {
+      setGatewayConfig(state.groupSettings.smsConfig);
     }
-  }, []);
+  }, [state.groupSettings?.smsConfig]);
 
   const [isTestingReminders, setIsTestingReminders] = useState(false);
   const [reminderTestResult, setReminderTestResult] = useState<{
@@ -1559,17 +1530,29 @@ Lema, Nguvu Moja!`);
                 value={gatewayConfig.provider}
                 onChange={(e) => {
                   const val = e.target.value as any;
+                  const newConfig = { ...gatewayConfig, provider: val };
                   if (val === 'swalasms') {
-                    setGatewayConfig({
-                      ...gatewayConfig,
-                      provider: 'swalasms',
-                      apiKey: 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3',
-                      senderId: 'EVENT CARD',
-                      baseUrl: 'https://swalasms.com/api/v1/sms/quick-message'
-                    });
-                  } else {
-                    setGatewayConfig({ ...gatewayConfig, provider: val });
+                    newConfig.apiKey = newConfig.apiKey || 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
+                    newConfig.senderId = 'EVENT CARD';
+                    newConfig.baseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
+                  } else if (val === 'meseji') {
+                    newConfig.baseUrl = 'https://meseji.co.tz/api/v1/sms/send';
+                    if (!newConfig.senderId || newConfig.senderId.includes('-')) {
+                      newConfig.senderId = 'MESEJI';
+                    }
+                  } else if (val === 'ehub') {
+                    newConfig.baseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
+                    if (!newConfig.senderId || !newConfig.senderId.includes('-')) {
+                      newConfig.senderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+                    }
+                  } else if (val === 'beem') {
+                    newConfig.baseUrl = 'https://api.beem.africa/v1/send';
+                    if (!newConfig.senderId) newConfig.senderId = 'INFO';
+                  } else if (val === 'nextsms') {
+                    newConfig.baseUrl = 'https://messaging-service.co.tz/api/sms/v1/text/single';
+                    if (!newConfig.senderId) newConfig.senderId = 'NEXTSMS';
                   }
+                  setGatewayConfig(newConfig);
                 }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-emerald-500"
               >

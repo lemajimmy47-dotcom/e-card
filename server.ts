@@ -3284,11 +3284,10 @@ async function startServer() {
         updated.auditLogs = currentLogs;
       }
 
-      // Ensure uwalemiState groupSettings smsConfig is valid eHub if not simulation
+      // Ensure uwalemiState groupSettings smsConfig is valid
       if (updated.uwalemiState?.groupSettings?.smsConfig) {
         const uSms = updated.uwalemiState.groupSettings.smsConfig;
-        if (uSms.provider !== "simulation") {
-          uSms.provider = "ehub";
+        if (uSms.provider === "ehub") {
           if (!uSms.apiKey || uSms.apiKey.startsWith("zs_")) {
             uSms.apiKey = "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
           }
@@ -3300,7 +3299,7 @@ async function startServer() {
           } else if (uSms.senderId === "EVENT CARD") {
             uSms.senderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
           }
-          uSms.baseUrl = "https://sms.ehub.co.tz/api/v1/sms/send";
+          uSms.baseUrl = uSms.baseUrl || "https://sms.ehub.co.tz/api/v1/sms/send";
         }
       }
 
@@ -3536,28 +3535,40 @@ async function startServer() {
       const uwalemiState = db.uwalemiState || {};
       const globalSmsSettings = db.smsGatewaySettings || {};
       const configuredSms = uwalemiState.groupSettings?.smsConfig;
-      const isExplicitSimulation = configuredSms?.provider === 'simulation';
-      
-      // Determine sender ID: resolve to UWALEMI approved UUID or EVENT CARD UUID
-      let resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
-      const rawSid = (configuredSms?.senderId || globalSmsSettings?.senderId || '').trim();
-      if (rawSid === '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' || rawSid === 'EVENT CARD') {
-        resolvedSenderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
-      } else {
-        resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+      const effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'ehub';
+
+      let resolvedSenderId = (configuredSms?.senderId || globalSmsSettings?.senderId || '').trim();
+      let activeApiKey = configuredSms?.apiKey || globalSmsSettings?.apiKey || '';
+      let activeSecretKey = configuredSms?.secretKey || globalSmsSettings?.apiSecret || '';
+      let activeBaseUrl = configuredSms?.baseUrl || globalSmsSettings?.url || '';
+
+      if (effectiveProvider === 'ehub') {
+        if (!activeApiKey || activeApiKey.startsWith('zs_')) {
+          activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+        }
+        if (!activeSecretKey) {
+          activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+        }
+        if (resolvedSenderId === '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' || resolvedSenderId === 'EVENT CARD') {
+          resolvedSenderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
+        } else {
+          resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+        }
+        activeBaseUrl = activeBaseUrl || 'https://sms.ehub.co.tz/api/v1/sms/send';
+      } else if (effectiveProvider === 'swalasms') {
+        activeApiKey = activeApiKey || 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
+        resolvedSenderId = resolvedSenderId || 'EVENT CARD';
+        activeBaseUrl = activeBaseUrl || 'https://swalasms.com/api/v1/sms/quick-message';
+      } else if (effectiveProvider === 'meseji') {
+        resolvedSenderId = resolvedSenderId || 'MESEJI';
+        activeBaseUrl = activeBaseUrl || 'https://meseji.co.tz/api/v1/sms/send';
       }
 
-      const activeApiKey = (configuredSms?.apiKey && !configuredSms.apiKey.startsWith('zs_')) 
-        ? configuredSms.apiKey 
-        : ((globalSmsSettings?.apiKey && !globalSmsSettings.apiKey.startsWith('zs_')) ? globalSmsSettings.apiKey : 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD');
-
-      const activeSecretKey = configuredSms?.secretKey || globalSmsSettings?.apiSecret || 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
-
       const smsConfig = {
-        provider: isExplicitSimulation ? 'simulation' : 'ehub',
+        provider: effectiveProvider,
         apiKey: activeApiKey,
         senderId: resolvedSenderId,
-        baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
+        baseUrl: activeBaseUrl,
         secretKey: activeSecretKey
       };
 
@@ -3800,27 +3811,40 @@ async function startServer() {
 
       const globalSmsSettings = db.smsGatewaySettings || {};
       const configuredSms = uwalemiState.groupSettings?.smsConfig;
-      const isExplicitSimulation = configuredSms?.provider === 'simulation';
-      
-      let resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
-      const rawSid = (configuredSms?.senderId || globalSmsSettings?.senderId || '').trim();
-      if (rawSid === '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' || rawSid === 'EVENT CARD') {
-        resolvedSenderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
-      } else {
-        resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+      const effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'ehub';
+
+      let resolvedSenderId = (configuredSms?.senderId || globalSmsSettings?.senderId || '').trim();
+      let activeApiKey = configuredSms?.apiKey || globalSmsSettings?.apiKey || '';
+      let activeSecretKey = configuredSms?.secretKey || globalSmsSettings?.apiSecret || '';
+      let activeBaseUrl = configuredSms?.baseUrl || globalSmsSettings?.url || '';
+
+      if (effectiveProvider === 'ehub') {
+        if (!activeApiKey || activeApiKey.startsWith('zs_')) {
+          activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+        }
+        if (!activeSecretKey) {
+          activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+        }
+        if (resolvedSenderId === '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' || resolvedSenderId === 'EVENT CARD') {
+          resolvedSenderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
+        } else {
+          resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+        }
+        activeBaseUrl = activeBaseUrl || 'https://sms.ehub.co.tz/api/v1/sms/send';
+      } else if (effectiveProvider === 'swalasms') {
+        activeApiKey = activeApiKey || 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
+        resolvedSenderId = resolvedSenderId || 'EVENT CARD';
+        activeBaseUrl = activeBaseUrl || 'https://swalasms.com/api/v1/sms/quick-message';
+      } else if (effectiveProvider === 'meseji') {
+        resolvedSenderId = resolvedSenderId || 'MESEJI';
+        activeBaseUrl = activeBaseUrl || 'https://meseji.co.tz/api/v1/sms/send';
       }
 
-      const activeApiKey = (configuredSms?.apiKey && !configuredSms.apiKey.startsWith('zs_')) 
-        ? configuredSms.apiKey 
-        : ((globalSmsSettings?.apiKey && !globalSmsSettings.apiKey.startsWith('zs_')) ? globalSmsSettings.apiKey : 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD');
-
-      const activeSecretKey = configuredSms?.secretKey || globalSmsSettings?.apiSecret || 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
-
       const smsConfig = {
-        provider: isExplicitSimulation ? 'simulation' : 'ehub',
+        provider: effectiveProvider,
         apiKey: activeApiKey,
         senderId: resolvedSenderId,
-        baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
+        baseUrl: activeBaseUrl,
         secretKey: activeSecretKey,
         autoSendMonthlyReminder: configuredSms?.autoSendMonthlyReminder ?? true
       };
@@ -4592,6 +4616,7 @@ Lema, Nguvu Moja!`;
   });
 
   // API: Check if phone numbers exist on WhatsApp (Meta Contacts API / Discovery)
+  // API 6A: Check if phone numbers are valid mobile / WhatsApp format
   app.post("/api/whatsapp/check-numbers", async (req, res) => {
     try {
       const { phones } = req.body;
@@ -4600,42 +4625,14 @@ Lema, Nguvu Moja!`;
       }
 
       const db = await readDBLatest();
-      // Extract Meta credentials
-      let metaToken = process.env.META_WHATSAPP_TOKEN 
-        || db.smsGatewaySettings?.whatsappMetaToken 
-        || db.smsGatewaySettings?.metaToken 
-        || db.smsGatewaySettings?.meta_token 
-        || db.smsGatewaySettings?.metaAccessToken
-        || db.settings?.whatsappMetaToken 
-        || db.settings?.metaToken;
+      const results: Record<string, { hasWhatsApp: boolean; status: string; formatted: string }> = {};
 
-      let phoneId = process.env.META_PHONE_NUMBER_ID 
-        || db.smsGatewaySettings?.whatsappMetaPhoneId 
-        || db.smsGatewaySettings?.metaPhoneNumberId 
-        || db.smsGatewaySettings?.phone_number_id 
-        || db.settings?.whatsappMetaPhoneId
-        || db.settings?.metaPhoneNumberId;
-
-      const rawWhatsappUrl = db.smsGatewaySettings?.whatsappUrl || db.settings?.whatsappUrl;
-      if ((!metaToken || !phoneId) && rawWhatsappUrl) {
-        try {
-          const wUrlData = typeof rawWhatsappUrl === 'string' && rawWhatsappUrl.trim().startsWith('{') 
-            ? JSON.parse(rawWhatsappUrl) 
-            : (typeof rawWhatsappUrl === 'object' ? rawWhatsappUrl : null);
-          if (wUrlData) {
-            if (!metaToken) metaToken = wUrlData.meta_token || wUrlData.metaToken || wUrlData.token || wUrlData.access_token;
-            if (!phoneId) phoneId = wUrlData.phone_number_id || wUrlData.metaPhoneNumberId || wUrlData.phoneId || wUrlData.phone_id;
-          }
-        } catch (e) {}
-      }
-
-      const results: Record<string, { hasWhatsApp: boolean; status: string; wa_id?: string; raw?: any }> = {};
-
-      // Standardize input phones
-      const cleanedList: { original: string; clean: string; formatted: string }[] = phones.map((p: string) => {
+      // Standardize and validate input phones
+      const cleanedList: { original: string; clean: string; formatted: string; isValid: boolean }[] = phones.map((p: string) => {
         const orig = String(p || '').trim();
         let digits = orig.replace(/\D/g, '');
         let formatted = digits;
+        
         if (orig.startsWith('+')) {
           formatted = digits;
         } else if (digits.startsWith('0') && digits.length === 10) {
@@ -4643,79 +4640,21 @@ Lema, Nguvu Moja!`;
         } else if (digits.length === 9) {
           formatted = '255' + digits;
         }
-        return { original: orig, clean: digits, formatted };
+
+        // Check if valid mobile format (Tanzania 2557..., 2556... or international 9-15 digits)
+        const isTzMobile = (formatted.startsWith('2557') || formatted.startsWith('2556')) && formatted.length === 12;
+        const isIntlMobile = formatted.length >= 10 && formatted.length <= 15;
+        const isValid = isTzMobile || isIntlMobile;
+
+        return { original: orig, clean: digits, formatted, isValid };
       });
 
-      // If Meta credentials are provided, use Meta Contacts API (/v20.0/{phone_number_id}/contacts)
-      if (metaToken && phoneId) {
-        try {
-          const payloadPhones = cleanedList.map(item => `+${item.formatted}`);
-          // Send in chunks of 50 to respect Meta contact batch limits
-          const CHUNK_SIZE = 50;
-          for (let i = 0; i < payloadPhones.length; i += CHUNK_SIZE) {
-            const chunk = payloadPhones.slice(i, i + CHUNK_SIZE);
-            const metaUrl = `https://graph.facebook.com/v20.0/${phoneId}/contacts`;
-            const contactRes = await fetch(metaUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${metaToken}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                blocking: 'wait',
-                contacts: chunk,
-                force_check: true
-              })
-            });
-
-            const contactData: any = await contactRes.json();
-            if (contactRes.ok && Array.isArray(contactData.contacts)) {
-              contactData.contacts.forEach((c: any) => {
-                const inputNum = c.input; // e.g. "+255714786751"
-                const cleanInput = inputNum ? inputNum.replace(/\D/g, '') : '';
-                const isWa = c.status === 'valid';
-                // Find matching original phone
-                const match = cleanedList.find(x => x.formatted === cleanInput || x.clean === cleanInput || (cleanInput.endsWith(x.clean.slice(-9)) && x.clean.length >= 9));
-                const key = match ? match.original : inputNum;
-                results[key] = {
-                  hasWhatsApp: isWa,
-                  status: c.status || (isWa ? 'valid' : 'invalid'),
-                  wa_id: c.wa_id
-                };
-              });
-            } else {
-              console.warn("[Meta Check Contacts API Warning]:", contactData);
-              // Fallback based on valid syntax and phone format
-              chunk.forEach((pStr) => {
-                const cleanInput = pStr.replace(/\D/g, '');
-                const match = cleanedList.find(x => x.formatted === cleanInput || x.clean === cleanInput);
-                const key = match ? match.original : pStr;
-                // If Meta returned error (e.g. permission or rate limit), mark as unknown or fallback
-                if (!results[key]) {
-                  results[key] = {
-                    hasWhatsApp: cleanInput.length >= 9,
-                    status: contactData.error ? 'api_error' : 'unverified',
-                    raw: contactData.error?.message
-                  };
-                }
-              });
-            }
-          }
-        } catch (metaErr: any) {
-          console.error("[Meta Check Contacts Exception]:", metaErr);
-        }
-      }
-
-      // Ensure every phone has a result
       cleanedList.forEach(item => {
-        if (!results[item.original]) {
-          // Standard validation: African/Global mobile format rule (Tanzania 07... / 06... / 255...)
-          const isTzMobile = item.clean.length >= 9 && (item.formatted.startsWith('2557') || item.formatted.startsWith('2556') || item.clean.startsWith('07') || item.clean.startsWith('06'));
-          results[item.original] = {
-            hasWhatsApp: isTzMobile,
-            status: metaToken ? 'not_on_whatsapp' : 'format_valid'
-          };
-        }
+        results[item.original] = {
+          hasWhatsApp: item.isValid,
+          status: item.isValid ? 'valid' : 'invalid_format',
+          formatted: item.formatted
+        };
       });
 
       // Also persist to current active guests in the database if matched
@@ -4746,12 +4685,18 @@ Lema, Nguvu Moja!`;
         }
       }
 
+      const totalWa = Object.values(results).filter(r => r.hasWhatsApp).length;
+      const totalSms = Object.values(results).filter(r => !r.hasWhatsApp).length;
+
       res.json({
         success: true,
         checkedCount: cleanedList.length,
+        validCount: totalWa,
+        totalWhatsApp: totalWa,
+        totalSms: totalSms,
         guestsUpdated,
-        metaApiUsed: !!(metaToken && phoneId),
-        results
+        results,
+        message: `Uhakiki umekamilika: ${totalWa} wapo WhatsApp, ${totalSms} SMS.`
       });
     } catch (err: any) {
       console.error("[Check WhatsApp Numbers API Error]:", err);
@@ -5184,7 +5129,7 @@ Lema, Nguvu Moja!`;
 
       if (metaToken && phoneId) {
         try {
-          const metaUrl = `https://graph.facebook.com/v17.0/${phoneId}/messages`;
+          const metaUrl = `https://graph.facebook.com/v20.0/${phoneId}/messages`;
           const payload = {
             messaging_product: "whatsapp",
             recipient_type: "individual",
@@ -6518,7 +6463,7 @@ Lema, Nguvu Moja!`;
           const token = (metaConfig.meta_token || metaConfig.token || "").trim();
           const phoneId = (metaConfig.phone_number_id || metaConfig.phone_id || "").trim();
           
-          const testUrl = `https://graph.facebook.com/v17.0/${phoneId}`;
+          const testUrl = `https://graph.facebook.com/v20.0/${phoneId}`;
           const response = await fetch(testUrl, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -6637,151 +6582,6 @@ Lema, Nguvu Moja!`;
     }
 
     res.json(results);
-  });
-
-  // API: Check if phone numbers exist on WhatsApp via Meta Contacts API
-  app.post("/api/whatsapp/check-numbers", async (req, res) => {
-    try {
-      const { phones } = req.body;
-      if (!phones || !Array.isArray(phones) || phones.length === 0) {
-        return res.status(400).json({ error: "Orodha ya namba za simu (phones) inahitajika kama array." });
-      }
-
-      const db = await readDBLatest();
-      const metaToken = process.env.META_WHATSAPP_TOKEN 
-        || db.smsGatewaySettings?.metaToken 
-        || db.smsGatewaySettings?.whatsappMetaToken 
-        || db.smsGatewaySettings?.meta_token 
-        || db.smsGatewaySettings?.metaAccessToken
-        || db.settings?.metaToken;
-
-      const phoneId = process.env.META_PHONE_NUMBER_ID 
-        || db.smsGatewaySettings?.metaPhoneNumberId 
-        || db.smsGatewaySettings?.whatsappMetaPhoneId 
-        || db.smsGatewaySettings?.phone_number_id 
-        || db.smsGatewaySettings?.phoneNumberId
-        || db.smsGatewaySettings?.phoneId
-        || db.settings?.metaPhoneNumberId;
-
-      // Normalization helper
-      const normalizePhone = (raw: string) => {
-        let clean = String(raw).replace(/\D/g, '');
-        if (clean.startsWith('0')) {
-          clean = '255' + clean.slice(1);
-        } else if (clean.startsWith('7') || clean.startsWith('6')) {
-          clean = '255' + clean;
-        }
-        return clean;
-      };
-
-      const resultsMap: Record<string, { hasWhatsApp: boolean; status: string }> = {};
-
-      if (!metaToken || !phoneId) {
-        // Fallback simulation when Meta credentials are not yet configured:
-        // Assume valid format numbers (e.g. 9-12 digits) have WhatsApp
-        phones.forEach((p: string) => {
-          const norm = normalizePhone(p);
-          const isValidLen = norm.length >= 9 && norm.length <= 13;
-          resultsMap[p] = {
-            hasWhatsApp: isValidLen,
-            status: isValidLen ? 'valid (simulation)' : 'invalid'
-          };
-        });
-      } else {
-        // Batch check with Meta Contacts API in chunks of 50
-        const CHUNK_SIZE = 50;
-        const normalizedList = phones.map((p: string) => ({ raw: p, norm: normalizePhone(p) }));
-        
-        for (let i = 0; i < normalizedList.length; i += CHUNK_SIZE) {
-          const chunk = normalizedList.slice(i, i + CHUNK_SIZE);
-          const chunkNorms = chunk.map(c => `+${c.norm}`);
-
-          try {
-            const metaResp = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/contacts`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${metaToken.trim()}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                blocking: 'wait',
-                contacts: chunkNorms,
-                force_check: true
-              })
-            });
-
-            const metaData: any = await metaResp.json();
-            if (metaResp.ok && metaData.contacts && Array.isArray(metaData.contacts)) {
-              metaData.contacts.forEach((contact: any) => {
-                const waId = (contact.wa_id || '').replace(/\D/g, '');
-                const matchedRaw = chunk.find(c => c.norm === waId || c.norm.slice(-9) === waId.slice(-9));
-                const key = matchedRaw ? matchedRaw.raw : contact.input;
-                resultsMap[key] = {
-                  hasWhatsApp: contact.status === 'valid',
-                  status: contact.status || 'unknown'
-                };
-              });
-
-              // Mark any in chunk that were missing from response as invalid
-              chunk.forEach(c => {
-                if (!resultsMap[c.raw]) {
-                  resultsMap[c.raw] = { hasWhatsApp: false, status: 'not_found' };
-                }
-              });
-            } else {
-              console.warn("[Meta Contacts API Warning]:", metaData);
-              // Fallback for this chunk based on basic syntax
-              chunk.forEach(c => {
-                const ok = c.norm.length >= 9 && c.norm.length <= 13;
-                resultsMap[c.raw] = { hasWhatsApp: ok, status: ok ? 'valid (fallback)' : 'invalid' };
-              });
-            }
-          } catch (chunkErr: any) {
-            console.error("[Meta Contacts Check Error]:", chunkErr);
-            chunk.forEach(c => {
-              const ok = c.norm.length >= 9 && c.norm.length <= 13;
-              resultsMap[c.raw] = { hasWhatsApp: ok, status: 'error_fallback' };
-            });
-          }
-        }
-      }
-
-      // Update database guests directly so state persists
-      let updatedGuestsCount = 0;
-      if (db.guests && Array.isArray(db.guests)) {
-        db.guests = db.guests.map((g: any) => {
-          if (!g.phone) return g;
-          const match = resultsMap[g.phone] || Object.entries(resultsMap).find(([k]) => {
-            const kClean = k.replace(/\D/g, '').slice(-9);
-            const gClean = g.phone.replace(/\D/g, '').slice(-9);
-            return kClean && gClean && kClean === gClean;
-          })?.[1];
-
-          if (match) {
-            updatedGuestsCount++;
-            return {
-              ...g,
-              hasWhatsApp: match.hasWhatsApp,
-              waStatusDetail: match.status,
-              waCheckedAt: new Date().toISOString()
-            };
-          }
-          return g;
-        });
-
-        await writeDB(db);
-      }
-
-      res.json({
-        success: true,
-        checkedCount: phones.length,
-        updatedGuestsCount,
-        results: resultsMap
-      });
-    } catch (err: any) {
-      console.error("[WhatsApp Check Numbers Error]:", err);
-      res.status(500).json({ error: err.message || "Hitilafu katika uhakiki wa namba za WhatsApp" });
-    }
   });
 
   // Route to fetch eHub sender IDs to help users find UUIDs
