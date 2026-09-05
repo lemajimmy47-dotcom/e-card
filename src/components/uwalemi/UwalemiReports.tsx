@@ -224,8 +224,16 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
     totalLateFeePenaltyPeriod += (debtInfo.lateFeePenalty || 0);
   });
 
+  const periodFinePayments = (state.finePayments || []).filter(fp => {
+    const iso = normalizeDateToISO(fp.paymentDate);
+    const y = iso ? Number(iso.substring(0, 4)) : 0;
+    const m = iso ? Number(iso.substring(5, 7)) : 0;
+    return isPeriodMatch(currentPeriodFilter, y, m, fp.paymentDate);
+  });
+  const totalFinePaymentsCollected = periodFinePayments.reduce((s, fp) => s + (Number(fp.amount) || 0), 0);
+  const totalAllFinesPeriodCollected = Math.max(totalMeetingFinesPeriodCollected, totalFinePaymentsCollected);
+
   const totalAllFinesPeriodGrand = totalLateFeePenaltyPeriod + totalMeetingFinesPeriodCollected + totalMeetingFinesPeriodUnpaid;
-  const totalAllFinesPeriodCollected = totalMeetingFinesPeriodCollected;
   const totalAllFinesPeriodPending = totalLateFeePenaltyPeriod + totalMeetingFinesPeriodUnpaid;
 
   let emergencyCollectedInPeriod = 0;
@@ -240,7 +248,7 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
     });
   });
 
-  const totalInflowsPeriod = totalMonthlyCollected + totalRegFees + totalMeetingFinesPeriodCollected + emergencyCollectedInPeriod;
+  const totalInflowsPeriod = totalMonthlyCollected + totalRegFees + totalAllFinesPeriodCollected + emergencyCollectedInPeriod;
   const netBalancePeriod = totalInflowsPeriod - totalExpensesPeriod;
 
   // Selected Emergency Fund
@@ -1068,8 +1076,8 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
                       const lateFeePenalty = debtInfo.lateFeePenalty || 0;
 
                       // 3. Fines
-                      let finesPaid = 0;
-                      let finesDebt = 0;
+                      let meetingFinesPaid = 0;
+                      let meetingFinesDebt = 0;
                       const defaultAbsentFine = state.groupSettings?.meetingFineDefault || 10000;
                       const defaultLateFine = state.groupSettings?.meetingFineLateDefault || 2000;
                       (state.meetings || []).forEach(mtg => {
@@ -1085,12 +1093,25 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
                               else if (att.status === 'late') fAmt = defaultLateFine;
                             }
                             if (fAmt > 0) {
-                              if (att.finePaid) finesPaid += fAmt;
-                              else finesDebt += fAmt;
+                              if (att.finePaid) meetingFinesPaid += fAmt;
+                              else meetingFinesDebt += fAmt;
                             }
                           }
                         }
                       });
+
+                      const memberFinePaymentsInPeriod = (state.finePayments || []).filter(fp => {
+                        const isMem = fp.memberId === m.id || fp.memberNo === m.memberNo;
+                        if (!isMem) return false;
+                        const iso = normalizeDateToISO(fp.paymentDate);
+                        const pYear = iso ? Number(iso.substring(0, 4)) : 0;
+                        const pMonth = iso ? Number(iso.substring(5, 7)) : 0;
+                        return isPeriodMatch(currentPeriodFilter, pYear, pMonth, fp.paymentDate);
+                      });
+                      const totalMemberFinesPaid = Math.max(
+                        meetingFinesPaid,
+                        memberFinePaymentsInPeriod.reduce((s, fp) => s + (Number(fp.amount) || 0), 0)
+                      );
 
                       // 4. Emergency
                       let emergencyPaid = 0;
@@ -1107,8 +1128,8 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
                         });
                       });
 
-                      const totPaid = regPaid + paidFee + finesPaid + emergencyPaid;
-                      const totDebt = regDebt + feeDebt + lateFeePenalty + finesDebt;
+                      const totPaid = regPaid + paidFee + totalMemberFinesPaid + emergencyPaid;
+                      const totDebt = regDebt + feeDebt + lateFeePenalty + meetingFinesDebt;
 
                       return (
                         <tr key={m.id} className="hover:bg-slate-900/50 transition-colors">
@@ -1145,10 +1166,10 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
                             )}
                           </td>
                           <td className="p-3 text-right font-mono text-slate-300">
-                            <div className="font-bold text-purple-300">{formatTZS(finesPaid)}</div>
-                            {finesDebt > 0 && (
+                            <div className="font-bold text-purple-300">{formatTZS(totalMemberFinesPaid)}</div>
+                            {meetingFinesDebt > 0 && (
                               <div className="text-[9px] text-amber-400 font-bold">
-                                Deni: {formatTZS(finesDebt)}
+                                Deni: {formatTZS(meetingFinesDebt)}
                               </div>
                             )}
                           </td>
@@ -1376,8 +1397,21 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
               }
             });
 
+            const memberFinePayments = (state.finePayments || []).filter(fp => {
+              const isMem = fp.memberId === m.id || fp.memberNo === m.memberNo;
+              if (!isMem) return false;
+              const iso = normalizeDateToISO(fp.paymentDate);
+              const pYear = iso ? Number(iso.substring(0, 4)) : 0;
+              const pMonth = iso ? Number(iso.substring(5, 7)) : 0;
+              return isPeriodMatch(currentPeriodFilter, pYear, pMonth, fp.paymentDate);
+            });
+            const memberFinesPaidAmt = Math.max(
+              meetingPaid,
+              memberFinePayments.reduce((s, fp) => s + (Number(fp.amount) || 0), 0)
+            );
+
             const totalMemberFineDebt = lateFee + meetingUnpaid;
-            const totalMemberFines = lateFee + meetingUnpaid + meetingPaid;
+            const totalMemberFines = totalMemberFineDebt + memberFinesPaidAmt;
 
             if (totalMemberFines > 0) {
               membersWithFinesCount++;
@@ -1400,7 +1434,7 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
             }
 
             totalLateFeePenalty += lateFee;
-            totalMeetingFinesPaid += meetingPaid;
+            totalMeetingFinesPaid += memberFinesPaidAmt;
             totalMeetingFinesDebt += meetingUnpaid;
 
             let feeDebtNote = 'Hakuna deni';
@@ -1419,10 +1453,10 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
               feeDebtNote,
               lateFee,
               meetingUnpaid,
-              meetingPaid,
+              meetingPaid: memberFinesPaidAmt,
               totalMemberFineDebt,
               totalMemberFines,
-              status: totalMemberFineDebt > 0 ? 'Inadaiwa' : meetingPaid > 0 ? 'Imelipwa' : 'Hakuna Faini'
+              status: totalMemberFineDebt > 0 ? 'Inadaiwa' : memberFinesPaidAmt > 0 ? 'Imelipwa' : 'Hakuna Faini'
             };
           });
 

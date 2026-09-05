@@ -1693,7 +1693,7 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                                     <td className="p-2 font-mono text-emerald-400">{fp.receiptNo}</td>
                                     <td className="p-2 text-slate-400">{fp.paymentDate}</td>
                                     <td className="p-2">{fp.fineType === 'kikao' ? 'Faini ya Kikao' : fp.fineType === 'ada_late_fee' ? 'Faini ya Ada' : 'Faini Nyingine'}</td>
-                                    <td className="p-2 text-right font-bold text-emerald-400">TZS {fp.paidAmount.toLocaleString()}</td>
+                                    <td className="p-2 text-right font-bold text-emerald-400">TZS {(Number(fp.amount) || Number((fp as any).paidAmount) || 0).toLocaleString()}</td>
                                     <td className="p-2 text-slate-400">{fp.paymentMethod}</td>
                                   </tr>
                                 ))}

@@ -2682,6 +2682,56 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
       responseContent.toLowerCase().includes("invalid token") || 
       responseContent.toLowerCase().includes("token hash");
 
+    // Catch insufficient balance / 402 Payment Required
+    const isBalanceError = response.status === 402 ||
+      responseContent.toLowerCase().includes("insufficient") ||
+      responseContent.toLowerCase().includes("insufficient sms balance") ||
+      responseContent.toLowerCase().includes("out of balance") ||
+      responseContent.toLowerCase().includes("low balance") ||
+      responseContent.toLowerCase().includes("need") && responseContent.toLowerCase().includes("credit") ||
+      responseContent.toLowerCase().includes("payment required") ||
+      responseContent.toLowerCase().includes("not enough balance") ||
+      responseContent.toLowerCase().includes("insufficient credit");
+
+    if (isBalanceError) {
+      console.log(`[SMS-Balance-Check] Insufficient SMS balance detected on ${effectiveProvider}. Checking for backup gateway...`);
+      try {
+        const db = await readDBLatest();
+        const ehubKey = (db.smsGatewaySettings?.apiKey && !db.smsGatewaySettings.apiKey.startsWith("zs_"))
+          ? db.smsGatewaySettings.apiKey
+          : "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
+        const ehubSecret = db.smsGatewaySettings?.apiSecret || "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
+
+        // If the failing provider was NOT ehub, try failover to eHub
+        if (effectiveProvider !== "ehub" && ehubKey && ehubSecret) {
+          console.log(`[SMS-Fallback] Attempting automatic failover to eHub due to balance exhaustion on ${effectiveProvider}...`);
+          let fallbackSenderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
+          if (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("Ada") || text.includes("kikao") || text.includes("kikundi"))) {
+            fallbackSenderId = "19f41b59-19d0-4f98-b8c9-9d5b1ac31308";
+          }
+          const fallbackSettings = {
+            provider: "ehub",
+            apiKey: ehubKey,
+            apiSecret: ehubSecret,
+            senderId: fallbackSenderId,
+            url: "https://sms.ehub.co.tz/api/v1/sms/send"
+          };
+          return await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime, templateParams, guestId, appOrigin, reqEventId, reqTemplateName, reqImageUrl, lang);
+        }
+      } catch (fbErr: any) {
+        console.warn("[SMS-Fallback] Alternate provider failover also unsuccessful:", fbErr?.message || fbErr);
+      }
+
+      let detailMsg = "Salio la SMS halitoshi";
+      try {
+        const p = JSON.parse(responseContent);
+        if (p.message) detailMsg = p.message;
+        else if (p.error) detailMsg = p.error;
+      } catch {}
+
+      throw new Error(`Salio la SMS Halitoshi (Insufficient Balance): Akaunti yako ya ${effectiveProvider.toUpperCase()} haina salio la kutosha (${detailMsg}). Tafadhali ongeza salio kwenye akaunti yako ya SMS, au washa Hali ya Majaribio (Simulation) kwenye Mipangilio ya SMS, au tuma stakabadhi/ujumbe kupitia WhatsApp.`);
+    }
+
     if (isAuthError) {
       if (settings.provider === "meseji" || isMeseji || effectiveProvider === "meseji") {
         try {
@@ -2864,6 +2914,10 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
           console.log(`[eHub 200 OK Response] Auto-recovery succeeded!`);
           return recoveryRes;
         }
+      }
+
+      if (cleanErrMsg.toLowerCase().includes("insufficient") || cleanErrMsg.toLowerCase().includes("credit") || cleanErrMsg.toLowerCase().includes("balance")) {
+        throw new Error(`Salio la SMS Halitoshi (Insufficient Balance): ${cleanErrMsg}. Tafadhali ongeza salio kwenye akaunti ya SMS, au washa Hali ya Majaribio (Simulation), au tuma stakabadhi/ujumbe kwa WhatsApp.`);
       }
 
       cleanErrMsg = cleanErrMsg.replace(/["{}]/g, "").replace(/error/gi, "status_message");
@@ -3775,11 +3829,16 @@ async function startServer() {
       await writeDB(db);
 
       if (smsConfig.provider !== 'simulation' && deliveredCount === 0 && failedCount > 0) {
+        const isBalanceError = lastErrorMsg.toLowerCase().includes("salio") || 
+          lastErrorMsg.toLowerCase().includes("balance") || 
+          lastErrorMsg.toLowerCase().includes("credit");
+
         return res.json({
           success: false,
           deliveredCount: 0,
           failedCount,
           error: lastErrorMsg,
+          isBalanceError,
           message: lastErrorMsg || `Imeshindwa kutuma SMS kwa wajumbe kupitia ${smsConfig.provider.toUpperCase()}.`
         });
       }

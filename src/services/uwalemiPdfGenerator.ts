@@ -734,7 +734,17 @@ export const generateFinancialReportPDF = (
     totalLateFeePenalty += (debtInfo.lateFeePenalty || 0);
   });
 
-  const totalInflows = totalMonthlyCollected + totalRegFees + totalMeetingFinesCollected + emergencyCollectedInPeriod;
+  // Fines Collected in Period (from finePayments and meeting attendance)
+  const finePaymentsInPeriod = (state.finePayments || []).filter(fp => {
+    const iso = normalizeDateToISO(fp.paymentDate);
+    const y = iso ? Number(iso.substring(0, 4)) : 0;
+    const m = iso ? Number(iso.substring(5, 7)) : 0;
+    return isPeriodMatch(periodFilter, y, m, fp.paymentDate);
+  });
+  const totalFinePaymentsAmt = finePaymentsInPeriod.reduce((sum, fp) => sum + (Number(fp.amount) || 0), 0);
+  const totalFinesCollected = Math.max(totalMeetingFinesCollected, totalFinePaymentsAmt);
+
+  const totalInflows = totalMonthlyCollected + totalRegFees + totalFinesCollected + emergencyCollectedInPeriod;
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const netSurplus = totalInflows - totalExpenses;
 
@@ -752,7 +762,7 @@ export const generateFinancialReportPDF = (
   }
 
   summaryBody.push(
-    ['Faini za Vikao Zilizokusanywa', formatTZS(totalMeetingFinesCollected), `${fineTransactionsCount} faini zilizolipiwa hazina kwajili ya vikao`],
+    ['Makusanyo ya Faini za Wanachama', formatTZS(totalFinesCollected), `${Math.max(fineTransactionsCount, finePaymentsInPeriod.length)} miamala ya faini zilizolipiwa hazina`],
     ['Michango ya Dharura & Misiba', formatTZS(emergencyCollectedInPeriod), 'Michango iliyokusanywa kipindi hiki'],
     ['JUMLA KUU YA MAPATO (INFLOWS)', formatTZS(totalInflows), 'Jumla ya fedha zote zilizopokelewa hazina'],
     ['JUMLA KUU YA MATUMIZI (OUTFLOWS)', formatTZS(totalExpenses), `${expenses.length} miamala ya matumizi`],
@@ -790,16 +800,16 @@ export const generateFinancialReportPDF = (
   const debtRows: any[] = [];
   if (includeRegFee && totalRegFeesUnpaid > 0) {
     debtRows.push([
-      'Madeni ya Kiingilio (Unpaid Registration Fees 2023)',
+      'Madeni ya Kiingilio (Wanachama Wote 2023)',
       formatTZS(totalRegFeesUnpaid),
       `${members.filter(m => !m.registrationFeePaid).length} wanachama hawajalipa kiingilio cha 2023`
     ]);
   }
   debtRows.push(
     [
-      'Madeni ya Faini za Ada (>Miezi 3 ya Kuchelewa)',
+      'Madeni ya Faini za Ada (>Miezi 3 ya Kuchelewa - Kikundi)',
       formatTZS(totalLateFeePenalty),
-      'Faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni'
+      'Faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni (Jumla ya wanachama wote wenye malimbikizo)'
     ],
     [
       'Madeni ya Faini za Vikao (Unpaid Meeting Fines)',
@@ -807,22 +817,22 @@ export const generateFinancialReportPDF = (
       'Faini za utoro/kuchelewa vikao zilizotozwa lakini hazijalipwa'
     ],
     [
-      'JUMLA YA MADENI YA FAINI ZOTE BADO KULIPWA',
+      'JUMLA YA MADENI YA FAINI ZOTE BADO KULIPWA (KIKUNDI KIZIMA)',
       formatTZS(totalLateFeePenalty + totalMeetingFinesUnpaid),
-      'Jumla ya faini za ada na faini za vikao zote zinazodaiwa'
+      'Jumla ya madeni ya faini za wanachama wote wa kikundi'
     ]
   );
 
   autoTable(doc, {
     startY: currentY,
-    head: [['MUHTASARI WA MADENI YA KIKUNDI (OUTSTANDING DEBTS)', 'KIASI (TZS)', 'HALI YA MADENI']],
+    head: [['MUHTASARI WA MADENI YA KIKUNDI KWA UJUMLA (OVERALL GROUP DEBTS)', 'KIASI (TZS)', 'HALI YA MADENI']],
     body: debtRows,
     theme: 'grid',
     headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
     bodyStyles: { textColor: [0, 0, 0], fontSize: 8 },
     columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 80, textColor: [0, 0, 0] },
-      1: { fontStyle: 'bold', halign: 'right', cellWidth: 45, textColor: [180, 83, 9] },
+      0: { fontStyle: 'bold', cellWidth: 85, textColor: [0, 0, 0] },
+      1: { fontStyle: 'bold', halign: 'right', cellWidth: 40, textColor: [180, 83, 9] },
       2: { textColor: [0, 0, 0] }
     }
   });
@@ -1756,15 +1766,28 @@ export const generateFinesReportPDF = (
       }
     });
 
+    const memberFinePayments = (state.finePayments || []).filter(fp => {
+      const isMem = fp.memberId === m.id || fp.memberNo === m.memberNo;
+      if (!isMem) return false;
+      const iso = normalizeDateToISO(fp.paymentDate);
+      const pYear = iso ? Number(iso.substring(0, 4)) : 0;
+      const pMonth = iso ? Number(iso.substring(5, 7)) : 0;
+      return isPeriodMatch(periodFilter, pYear, pMonth, fp.paymentDate);
+    });
+    const memberFinesPaidAmt = Math.max(
+      meetingPaid,
+      memberFinePayments.reduce((s, fp) => s + (Number(fp.amount) || 0), 0)
+    );
+
     const totalMemberFineDebt = lateFee + meetingUnpaid;
-    const totalMemberFines = lateFee + meetingUnpaid + meetingPaid;
+    const totalMemberFines = totalMemberFineDebt + memberFinesPaidAmt;
 
     if (totalMemberFines > 0) {
       totalMembersWithFines++;
     }
 
     totalLateFeePenalty += lateFee;
-    totalMeetingFinesPaid += meetingPaid;
+    totalMeetingFinesPaid += memberFinesPaidAmt;
     totalMeetingFinesDebt += meetingUnpaid;
 
     let feeDebtNote = 'Hakuna';
@@ -1779,7 +1802,7 @@ export const generateFinesReportPDF = (
     let statusText = 'Hakuna Faini';
     if (totalMemberFineDebt > 0) {
       statusText = 'Inadaiwa';
-    } else if (meetingPaid > 0) {
+    } else if (memberFinesPaidAmt > 0) {
       statusText = 'Imelipwa';
     }
 
@@ -1790,7 +1813,7 @@ export const generateFinesReportPDF = (
       feeDebtNote,
       lateFee,
       meetingUnpaid,
-      meetingPaid,
+      meetingPaid: memberFinesPaidAmt,
       totalMemberFineDebt,
       totalMemberFines,
       statusText
@@ -1808,7 +1831,7 @@ export const generateFinesReportPDF = (
       ['Wanachama Wenye Faini', `${totalMembersWithFines} kati ya ${members.length}`, 'Wenye faini ya kuchelewa ada au faini za vikao'],
       ['Jumla ya Faini za Ada (>Miezi 3, Mz 6+)', formatTZS(totalLateFeePenalty), 'TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni kuanzia Mwezi wa 6 (Juni 2026)'],
       ['Faini za Vikao Zisizolipwa (Deni)', formatTZS(totalMeetingFinesDebt), 'Faini za kutofika/kuchelewa vikao ambazo hazijalipwa'],
-      ['Faini za Vikao Zilizolipwa', formatTZS(totalMeetingFinesPaid), 'Makusanyo ya faini za vikao yaliyokamilika'],
+      ['Faini Zilizokusanywa (Hazina)', formatTZS(totalMeetingFinesPaid), 'Makusanyo ya faini (ada + vikao) yaliyokamilika'],
       ['JUMLA YA FAINI ZINAZODAIWA', formatTZS(grandTotalFinesPending), 'Faini za ada zisizolipwa + faini za vikao zisizolipwa'],
       ['JUMLA KUU YA FAINI ZOTE', formatTZS(grandTotalFines), 'Jumla ya faini zote zilizotozwa katika kipindi']
     ],
