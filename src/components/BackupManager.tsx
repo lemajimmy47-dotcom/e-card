@@ -121,7 +121,19 @@ export default function BackupManager({ eventDetails, eventsList, guests }: Back
         }
 
         // Validate that we found meaningful data
-        if (extractedEvents.length === 0 && extractedGuests.length === 0) {
+        // We allow empty lists if the parsed JSON object contains standard keys indicating a valid backup file
+        const hasExpectedBackupKeys = 
+          'appName' in parsed || 
+          'exportedAt' in parsed || 
+          'allEvents' in parsed || 
+          'eventsList' in parsed || 
+          'events' in parsed || 
+          'guests' in parsed || 
+          'activeEvent' in parsed || 
+          'templateSettings' in parsed || 
+          'uwalemiState' in parsed;
+
+        if (extractedEvents.length === 0 && extractedGuests.length === 0 && !hasExpectedBackupKeys) {
           throw new Error(
             isEn 
               ? 'The selected backup file does not contain any recognizable event or guest records.' 

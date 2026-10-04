@@ -1,4 +1,16 @@
-import { UwalemiState, UwalemiMember, UwalemiGroupSettings, UwalemiMemberRole } from '../types/uwalemi';
+import { 
+  UwalemiState, 
+  UwalemiMember, 
+  UwalemiGroupSettings, 
+  UwalemiMemberRole, 
+  UwalemiFinePayment,
+  UwalemiElection,
+  UwalemiMonthlyPayment,
+  UwalemiVoterRecord,
+  UwalemiElectionPosition,
+  UwalemiCandidate,
+  UwalemiAnonymousBallot
+} from '../types/uwalemi';
 
 export const UWALEMI_ROLE_PRIORITY: Record<string, number> = {
   'Mwenyekiti': 1,
@@ -53,9 +65,19 @@ export function getMemberLocationGroup(member: { residence?: string; locationGro
   return 'Dar es Salaam';
 }
 
+export function normalizePaymentMethod(method?: string): string {
+  if (!method) return 'M Koba';
+  const trimmed = method.trim();
+  if (/m-?pesa/i.test(trimmed) || /taslimu/i.test(trimmed) || /cash/i.test(trimmed)) {
+    return 'M Koba';
+  }
+  return trimmed;
+}
+
 export const INITIAL_UWALEMI_SETTINGS: UwalemiGroupSettings = {
   groupName: 'UWALEMI',
   slogan: 'Lema, Nguvu Moja.',
+  logoUrl: '/uwalemi_logo.png',
   registrationFeeDefault: 0,
   monthlyFeeDefault: 0,
   emergencyFeeDefault: 0,
@@ -64,10 +86,10 @@ export const INITIAL_UWALEMI_SETTINGS: UwalemiGroupSettings = {
   paymentMethods: [
     {
       id: 'pm-1',
-      provider: 'M-Koba / Vodacom M-Pesa',
+      provider: 'M Koba',
       type: 'Mobile',
       number: '0758 219 298',
-      accountName: 'Eva O Lema (M-Koba)'
+      accountName: 'Eva O Lema (M Koba)'
     },
     {
       id: 'pm-2',
@@ -105,6 +127,7 @@ export const INITIAL_UWALEMI_STATE: UwalemiState & { initialized: boolean } = {
   meetings: [],
   finePayments: [],
   accruedFines: [],
+  elections: [],
   messageLogs: [],
   lastUpdated: new Date().toISOString()
 };
@@ -121,8 +144,22 @@ export async function fetchUwalemiState(): Promise<UwalemiState> {
   }
 
   const sanitizeState = (s: UwalemiState): UwalemiState => {
+    if (!Array.isArray(s.elections)) {
+      s.elections = [];
+    }
     if (!s.finePayments) {
       s.finePayments = [];
+    } else {
+      // Remove any known duplicate or corrupted fine payment IDs
+      s.finePayments = s.finePayments.filter(fp => fp.id !== 'fine-pay-1788768387595');
+      // Deduplicate fine payments with identical receipt numbers or IDs
+      const seen = new Set<string>();
+      s.finePayments = s.finePayments.filter(fp => {
+        const key = fp.id || fp.receiptNo || `${fp.memberId}-${fp.meetingId}-${fp.amount}-${fp.paymentDate}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
     if (!s.accruedFines) {
       s.accruedFines = [];
@@ -157,8 +194,45 @@ export async function fetchUwalemiState(): Promise<UwalemiState> {
       }));
     }
 
-    // Do NOT override member fee amounts or registration fees automatically.
-    // Preserve manual entries exactly as set by the user.
+    // Preserve accrued late fee fines so that paying Ada in matrix never wipes out incurred fines
+    s = autoAccrueLateFeeFines(s);
+
+    // Normalize any legacy M-Pesa occurrences to M Koba across all payment records
+    if (s.groupSettings?.paymentMethods) {
+      s.groupSettings.paymentMethods = s.groupSettings.paymentMethods.map(pm => ({
+        ...pm,
+        provider: normalizePaymentMethod(pm.provider),
+        accountName: pm.accountName?.replace(/m-?koba/i, 'M Koba').replace(/vodacom m-?pesa/i, 'M Koba') || pm.accountName
+      }));
+    }
+    if (Array.isArray(s.monthlyPayments)) {
+      s.monthlyPayments = s.monthlyPayments.map(p => ({
+        ...p,
+        paymentMethod: normalizePaymentMethod(p.paymentMethod)
+      }));
+    }
+    if (Array.isArray(s.finePayments)) {
+      s.finePayments = s.finePayments.map(fp => ({
+        ...fp,
+        paymentMethod: normalizePaymentMethod(fp.paymentMethod)
+      }));
+    }
+    if (Array.isArray(s.emergencyFunds)) {
+      s.emergencyFunds = s.emergencyFunds.map(ef => ({
+        ...ef,
+        payments: (ef.payments || []).map(p => ({
+          ...p,
+          paymentMethod: normalizePaymentMethod(p.paymentMethod)
+        }))
+      }));
+    }
+    if (Array.isArray(s.expenses)) {
+      s.expenses = s.expenses.map(e => ({
+        ...e,
+        paymentMethod: normalizePaymentMethod(e.paymentMethod)
+      }));
+    }
+
     return s;
   };
 
@@ -188,8 +262,114 @@ export async function fetchUwalemiState(): Promise<UwalemiState> {
   return INITIAL_UWALEMI_STATE;
 }
 
+export function autoAccrueLateFeeFines(s: UwalemiState, activeUntickedMonth?: { year: number; month: number }): UwalemiState {
+  if (!s || !Array.isArray(s.members) || s.members.length === 0) {
+    return s;
+  }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  const accruedFines = Array.isArray(s.accruedFines) ? [...s.accruedFines] : [];
+  let changed = false;
+
+  s.members.forEach(member => {
+    const isJimson = member.suppressLateFeePenalty || 
+      member.memberNo === 'UWL-001' || 
+      (member.fullName && member.fullName.toLowerCase().includes('jimson')) ||
+      member.id === 'uwl-mem-1787293910280-307';
+
+    if (isJimson) {
+      let existingIdx;
+      while ((existingIdx = accruedFines.findIndex(
+        af => (af.memberId === member.id || (member.memberNo && af.memberNo === member.memberNo)) && af.fineType === 'ada_late_fee'
+      )) >= 0) {
+        accruedFines.splice(existingIdx, 1);
+        changed = true;
+      }
+      return;
+    }
+
+    const payments = s.monthlyPayments || [];
+    let unpaidFromJuneCount = 0;
+
+    // Faini ya ada inapaswa kutozwa kwa miezi iliyokwishapita au iliyofika pekee (hadi currentMonth).
+    // Miezi ya mbeleni (kama Oktoba, Novemba, Desemba) haiwezi kutozwa faini kabla haijafika.
+    for (let y = 2026; y <= currentYear; y++) {
+      const startM = y === 2026 ? 6 : 1;
+      const endM = y < currentYear ? 12 : currentMonth;
+
+      for (let m = startM; m <= endM; m++) {
+        const p = payments.find(pay => 
+          (pay.memberId === member.id || (member.memberNo && pay.memberNo === member.memberNo)) &&
+          Number(pay.year) === y &&
+          Number(pay.month) === m
+        );
+        const paidAmount = p ? (Number(p.paidAmount) || 0) : 0;
+        const expectedAmount = getDefaultFeeForMonth(y, m, member.monthlyFeeAmount);
+        if (expectedAmount - paidAmount > 0) {
+          unpaidFromJuneCount++;
+        }
+      }
+    }
+
+    const { penalty: calculatedPenalty } = calculateLateFeePenalty(unpaidFromJuneCount);
+
+    const existingIdx = accruedFines.findIndex(
+      af => (af.memberId === member.id || (member.memberNo && af.memberNo === member.memberNo)) && af.fineType === 'ada_late_fee'
+    );
+
+    if (calculatedPenalty > 0) {
+      const fineReason = `Faini ya Kuchelewa Ada (>Miezi 3 kuanzia Juni 2026 - Miezi ${unpaidFromJuneCount})`;
+
+      if (existingIdx >= 0) {
+        const ex = accruedFines[existingIdx];
+        // KANUNI KUU: Faini haipungui wala kuondoka hata mwanachama akilipa ada zote!
+        // Faini inaweza tu kuongezeka ikiwa ataongeza miezi ya uchelewaji.
+        const targetAmt = Math.max(Number(ex.amount) || 0, calculatedPenalty);
+        if (ex.amount !== targetAmt || (targetAmt === calculatedPenalty && ex.reason !== fineReason)) {
+          accruedFines[existingIdx] = {
+            ...ex,
+            amount: targetAmt,
+            reason: targetAmt > calculatedPenalty ? ex.reason : fineReason,
+            status: (ex.paidAmount || 0) >= targetAmt ? 'paid' : (ex.paidAmount || 0) > 0 ? 'partial' : 'unpaid'
+          };
+          changed = true;
+        }
+      } else {
+        accruedFines.push({
+          id: `accrued-fine-${member.id}-auto`,
+          memberId: member.id,
+          memberNo: member.memberNo,
+          memberName: member.fullName,
+          fineType: 'ada_late_fee',
+          reason: fineReason,
+          amount: calculatedPenalty,
+          assessedDate: new Date().toISOString().split('T')[0],
+          status: 'unpaid',
+          paidAmount: 0
+        });
+        changed = true;
+      }
+    }
+    // TANBIHI: Hatuondoi (splice) faini iliyopo hata kama calculatedPenalty iko 0 (kwa sababu mwanachama amelipa ada).
+    // Faini itaendelea kubaki kama deni thabiti hadi pale malipo ya faini (finePayments) yatakaporekodiwa!
+  });
+
+  if (changed || !s.accruedFines) {
+    return {
+      ...s,
+      accruedFines
+    };
+  }
+
+  return s;
+}
+
 export async function saveUwalemiState(state: UwalemiState): Promise<boolean> {
-  const updatedState = { ...state, initialized: true, lastUpdated: new Date().toISOString() };
+  const reconciledState = autoAccrueLateFeeFines(state);
+  const updatedState = { ...reconciledState, initialized: true, lastUpdated: new Date().toISOString() };
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedState));
 
   try {
@@ -229,6 +409,10 @@ export interface UwalemiMemberFeeDebtInfo {
   unpaidFromJuneCount: number; // Total unpaid months on or after Month 6 (June 2026)
   otherFinesDebt: number; // Meeting or other group fines
   otherFinesPaid: number;
+  meetingLateDebt?: number;
+  meetingLatePaid?: number;
+  meetingAbsentDebt?: number;
+  meetingAbsentPaid?: number;
   totalFinesDebt: number; // lateFeePenalty + otherFinesDebt
   totalDebt: number; // feeDebt + totalFinesDebt
   unpaidCount: number; // total unpaid monthly fees across all time
@@ -241,6 +425,10 @@ export interface UwalemiMemberFeeDebtInfo {
   unpaidMonthsList: string[];
   unpaidMonthsText: string;
   periodSummary: string;
+  meetingFinesText?: string;
+  meetingFinesDatesText?: string;
+  meetingFinesTitlesText?: string;
+  meetingFinesList?: { id?: string; meetingId?: string; meetingTitle: string; date: string; amount: number; paid: boolean; reason: string; status: 'absent' | 'late' | 'other' }[];
   breakdown: {
     year: number;
     month: number;
@@ -282,22 +470,55 @@ export function calculateLateFeePenalty(unpaidMonthsFromJuneCount: number): { pe
 }
 
 /**
- * Calculates other fines (e.g. meeting absence fines) for a specific member.
+ * Calculates other fines (e.g. meeting absence fines, late arrival fines, and constitutional fines) for a specific member.
+ * Reconciles meeting attendee statuses with fine payment receipts and accrued fines.
  */
 export function calculateMemberOtherFines(
   memberId: string,
   state: UwalemiState
-): { finesPaid: number; finesDebt: number; finesList: { meetingTitle: string; date: string; amount: number; paid: boolean }[] } {
-  let finesPaid = 0;
-  let finesDebt = 0;
-  const finesList: { meetingTitle: string; date: string; amount: number; paid: boolean }[] = [];
-
+): {
+  finesPaid: number;
+  finesDebt: number;
+  meetingLateDebt: number;
+  meetingLatePaid: number;
+  meetingAbsentDebt: number;
+  meetingAbsentPaid: number;
+  otherDebt: number;
+  otherPaid: number;
+  finesList: { id?: string; meetingId?: string; meetingTitle: string; date: string; amount: number; paid: boolean; reason: string; status: 'absent' | 'late' | 'other' }[];
+  unpaidFinesSummary: string;
+  unpaidDatesSummary: string;
+  unpaidTitlesSummary: string;
+} {
   const member = (state.members || []).find(m => m.id === memberId || m.memberNo === memberId);
   const targetMemberId = member?.id || memberId;
   const targetMemberNo = member?.memberNo || memberId;
 
   const defaultAbsentFine = state.groupSettings?.meetingFineDefault || 10000;
   const defaultLateFine = state.groupSettings?.meetingFineLateDefault || 2000;
+
+  // 1. Gather all fine payments for this member from finePayments receipts
+  const memberFinePayments = (state.finePayments || []).filter(fp =>
+    (fp.memberId === targetMemberId || (targetMemberNo && fp.memberNo === targetMemberNo))
+  );
+
+  let receiptsMeetingLatePaid = 0;
+  let receiptsMeetingAbsentPaid = 0;
+  let receiptsOtherPaid = 0;
+
+  memberFinePayments.forEach(fp => {
+    const decomp = decomposeFinePaymentAmounts(fp, state);
+    receiptsMeetingLatePaid += decomp.meetingLate;
+    receiptsMeetingAbsentPaid += decomp.meetingAbsent;
+    receiptsOtherPaid += decomp.other;
+  });
+
+  const finesList: { id?: string; meetingId?: string; meetingTitle: string; date: string; amount: number; paid: boolean; reason: string; status: 'absent' | 'late' | 'other' }[] = [];
+
+  let attendeeLateAssessed = 0;
+  let attendeeLateExplicitPaid = 0;
+  let attendeeAbsentAssessed = 0;
+  let attendeeAbsentExplicitPaid = 0;
 
   (state.meetings || []).forEach(mtg => {
     const att = (mtg.attendees || []).find(a =>
@@ -314,22 +535,106 @@ export function calculateMemberOtherFines(
       }
 
       if (amt > 0) {
-        if (att.finePaid) {
-          finesPaid += amt;
+        const isLate = att.status === 'late';
+        if (isLate) {
+          attendeeLateAssessed += amt;
+          if (att.finePaid) attendeeLateExplicitPaid += amt;
         } else {
-          finesDebt += amt;
+          attendeeAbsentAssessed += amt;
+          if (att.finePaid) attendeeAbsentExplicitPaid += amt;
         }
+
+        // Check if explicitly paid via meetingId in finePayments or finePaid flag
+        const hasMatchingReceipt = memberFinePayments.some(fp => fp.meetingId === mtg.id);
+        const isPaid = !!att.finePaid || hasMatchingReceipt;
+
+        const reason = att.fineReason || (isLate ? 'Kuchelewa kikao' : 'Kutohudhuria kikao');
         finesList.push({
+          id: `mtg-fine-${mtg.id}-${targetMemberId}`,
+          meetingId: mtg.id,
           meetingTitle: mtg.title || 'Kikao',
           date: mtg.date,
           amount: amt,
-          paid: !!att.finePaid
+          paid: isPaid,
+          reason,
+          status: isLate ? 'late' : 'absent'
         });
       }
     }
   });
 
-  return { finesPaid, finesDebt, finesList };
+  // Reconcile total paid amounts: Max of explicit attendee toggles vs receipt totals
+  const totalMeetingLatePaid = Math.max(attendeeLateExplicitPaid, receiptsMeetingLatePaid);
+  const totalMeetingLateDebt = Math.max(0, attendeeLateAssessed - totalMeetingLatePaid);
+
+  const totalMeetingAbsentPaid = Math.max(attendeeAbsentExplicitPaid, receiptsMeetingAbsentPaid);
+  const totalMeetingAbsentDebt = Math.max(0, attendeeAbsentAssessed - totalMeetingAbsentPaid);
+
+  // General accrued fines (non-ada, non-meeting)
+  let otherAssessed = 0;
+  let otherPaidExplicit = 0;
+  (state.accruedFines || []).forEach(af => {
+    if ((af.memberId === targetMemberId || (targetMemberNo && af.memberNo === targetMemberNo)) && af.fineType === 'nyingine') {
+      const amt = Number(af.amount) || 0;
+      otherAssessed += amt;
+      otherPaidExplicit += (Number(af.paidAmount) || 0);
+      finesList.push({
+        id: af.id,
+        meetingTitle: 'Adhabu ya Kikatiba',
+        date: af.assessedDate || '',
+        amount: amt,
+        paid: af.status === 'paid' || (af.paidAmount || 0) >= amt,
+        reason: af.reason || 'Faini ya Kikatiba',
+        status: 'other'
+      });
+    }
+  });
+
+  const totalOtherPaid = Math.max(otherPaidExplicit, receiptsOtherPaid);
+  const totalOtherDebt = Math.max(0, otherAssessed - totalOtherPaid);
+
+  // Update `paid` boolean in finesList if aggregate payment covers items
+  let latePaidPool = totalMeetingLatePaid;
+  let absentPaidPool = totalMeetingAbsentPaid;
+  finesList.forEach(item => {
+    if (!item.paid) {
+      if (item.status === 'late' && latePaidPool >= item.amount) {
+        item.paid = true;
+        latePaidPool -= item.amount;
+      } else if (item.status === 'absent' && absentPaidPool >= item.amount) {
+        item.paid = true;
+        absentPaidPool -= item.amount;
+      }
+    }
+  });
+
+  const finesPaid = totalMeetingLatePaid + totalMeetingAbsentPaid + totalOtherPaid;
+  const finesDebt = totalMeetingLateDebt + totalMeetingAbsentDebt + totalOtherDebt;
+
+  const unpaidFines = finesList.filter(f => !f.paid);
+  const unpaidFinesSummary = unpaidFines.map(f => {
+    const reasonText = f.status === 'late' ? 'Kuchelewa' : f.status === 'absent' ? 'Kutohudhuria' : 'Faini';
+    const dateText = f.date ? ` tarehe ${f.date}` : '';
+    return `${reasonText} ${f.meetingTitle}${dateText} (TZS ${f.amount.toLocaleString()})`;
+  }).join(', ');
+
+  const unpaidDatesSummary = unpaidFines.map(f => f.date).filter(Boolean).join(', ');
+  const unpaidTitlesSummary = unpaidFines.map(f => f.meetingTitle).filter(Boolean).join(', ');
+
+  return {
+    finesPaid,
+    finesDebt,
+    meetingLateDebt: totalMeetingLateDebt,
+    meetingLatePaid: totalMeetingLatePaid,
+    meetingAbsentDebt: totalMeetingAbsentDebt,
+    meetingAbsentPaid: totalMeetingAbsentPaid,
+    otherDebt: totalOtherDebt,
+    otherPaid: totalOtherPaid,
+    finesList,
+    unpaidFinesSummary,
+    unpaidDatesSummary,
+    unpaidTitlesSummary
+  };
 }
 
 /**
@@ -394,24 +699,52 @@ export function calculateMemberFeeDebt(
   // Kanuni ya Kikundi: Faini ya ada inaanza rasmi kuhesabiwa kuanzia Mwezi wa 6 (Juni 2026).
   // Mwanachama anayedaiwa zaidi ya miezi 3 kuanzia Mwezi wa 6 (Juni 2026)
   // hutozwa faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya kwanza kuanzia mwezi huo wa 6.
-  // Hadi sasa (Septemba 2026), miezi iliyopita kuanzia Juni 2026 ni 4 pekee (Juni, Julai, Agosti, Septemba).
-  // Hivyo hakuna mwanachama anayeweza kudaiwa faini ya ada inayozidi TZS 5,000 (4 - 3 = mwezi 1 wa faini = TZS 5,000).
-  // Mwanachama akilipa mwezi wowote kati ya hiyo kwenye Matrix, miezi kuanzia Juni inakuwa <= 3, na faini inashuka papo hapo kuwa TZS 0.
-  const unpaidFromJuneItems = unpaidItems.filter(item => item.year > 2026 || (item.year === 2026 && item.month >= 6));
+  // MUHIMU: Faini haitozwi kwa miezi ya mbeleni ambayo bado haijafika (kama Oktoba, Novemba, Desemba).
+  const currentY = now.getFullYear();
+  const currentM = now.getMonth() + 1;
+  const unpaidFromJuneItems = unpaidItems.filter(item => 
+    ((item.year === 2026 && item.month >= 6) || item.year > 2026) &&
+    (item.year < currentY || (item.year === currentY && item.month <= currentM))
+  );
   const unpaidFromJuneCount = unpaidFromJuneItems.length;
-  const { penalty: currentUnpaidPenalty, penaltyMonths } = calculateLateFeePenalty(unpaidFromJuneCount);
+  const { penalty: currentUnpaidPenalty } = calculateLateFeePenalty(unpaidFromJuneCount);
 
-  // Faini za ada zilizokwisha lipwa na mwanachama huyu
-  const lateFinesPaid = (state.finePayments || [])
-    .filter(p => (p.memberId === member.id || (member.memberNo && p.memberNo === member.memberNo)) && p.fineType === 'ada_late_fee')
+  const isJimson = member.suppressLateFeePenalty || 
+    member.memberNo === 'UWL-001' || 
+    (member.fullName && member.fullName.toLowerCase().includes('jimson')) ||
+    member.id === 'uwl-mem-1787293910280-307';
+
+  // Faini za ada zilizowahi kuingizwa au kujilimbikiza kwenye accruedFines za mwanachama huyu
+  const accruedLateFines = isJimson ? 0 : (state.accruedFines || [])
+    .filter(af => (af.memberId === member.id || (member.memberNo && af.memberNo === member.memberNo)) && af.fineType === 'ada_late_fee')
+    .reduce((sum, af) => sum + (Number(af.amount) || 0), 0);
+
+  // Kiasi cha jumla cha faini iliyopatikana:
+  // Inakuwa kiasi cha juu zaidi kati ya kilichotokana na miezi ya sasa isiyolipwa NA kile kilichowahi kutozwa/kujilimbikiza kwenye accruedFines.
+  // Mwanachama akilipa ada pekee bila kulipa faini, faini aliyokuwa nayo inabaki thabiti na ISIONDOKE ki-automatic hadi ilipwe kupitia malipo ya faini.
+  const totalAssessedLatePenalty = isJimson ? 0 : Math.max(accruedLateFines, currentUnpaidPenalty);
+
+  // Faini za ada zilizokwisha lipwa na mwanachama huyu (kupitia finePayments)
+  const lateFinesPaid = isJimson ? 0 : (state.finePayments || [])
+    .filter(p => (p.memberId === member.id || (member.memberNo && p.memberNo === member.memberNo)) && classifyFinePaymentType(p, state) === 'ada_late_fee')
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  // Salio la Faini ya Kuchelewa Ada (Haliwezi kuwa chini ya 0)
-  // Badiliko lolote katika Matrix ya Miezi 12 huathiri mara moja idadi ya miezi inayodaiwa na faini inavyohesabiwa
-  const lateFeePenalty = Math.max(0, currentUnpaidPenalty - lateFinesPaid);
+  // Salio la Faini ya Kuchelewa Ada
+  const lateFeePenalty = isJimson ? 0 : Math.max(0, totalAssessedLatePenalty - lateFinesPaid);
   const penaltyMonthsCount = lateFeePenalty > 0 ? Math.ceil(lateFeePenalty / 5000) : 0;
 
-  const { finesPaid: otherFinesPaid, finesDebt: otherFinesDebt } = calculateMemberOtherFines(member.id, state);
+  const {
+    finesPaid: otherFinesPaid,
+    finesDebt: otherFinesDebt,
+    meetingLateDebt,
+    meetingLatePaid,
+    meetingAbsentDebt,
+    meetingAbsentPaid,
+    finesList: meetingFinesList,
+    unpaidFinesSummary: meetingFinesText,
+    unpaidDatesSummary: meetingFinesDatesText,
+    unpaidTitlesSummary: meetingFinesTitlesText
+  } = calculateMemberOtherFines(member.id, state);
   const totalFinesDebt = lateFeePenalty + otherFinesDebt;
   const totalDebt = feeDebt + totalFinesDebt;
 
@@ -449,6 +782,10 @@ export function calculateMemberFeeDebt(
     unpaidFromJuneCount,
     otherFinesDebt,
     otherFinesPaid,
+    meetingLateDebt,
+    meetingLatePaid,
+    meetingAbsentDebt,
+    meetingAbsentPaid,
     totalFinesDebt,
     totalDebt,
     unpaidCount,
@@ -461,6 +798,10 @@ export function calculateMemberFeeDebt(
     unpaidMonthsList: unpaidItems.map(item => item.monthName),
     unpaidMonthsText,
     periodSummary,
+    meetingFinesText,
+    meetingFinesDatesText,
+    meetingFinesTitlesText,
+    meetingFinesList,
     breakdown: unpaidItems
   };
 }
@@ -503,6 +844,236 @@ export function getSwahiliDayAndDate(dateStr?: string): { dayName: string; forma
   }
 }
 
+export function formatSwahiliDate(dateStr?: string): string {
+  if (!dateStr) return '';
+  return getSwahiliDayAndDate(dateStr).formattedDate;
+}
+
+export function getAmountInSwahiliWords(amount: number): string {
+  if (amount === 5000) return 'Shilingi Elfu Tano Tu';
+  if (amount === 10000) return 'Shilingi Elfu Kumi Tu';
+  if (amount === 15000) return 'Shilingi Elfu Kumi na Tano Tu';
+  if (amount === 20000) return 'Shilingi Elfu Ishirini Tu';
+  if (amount === 25000) return 'Shilingi Elfu Ishirini na Tano Tu';
+  if (amount === 30000) return 'Shilingi Elfu Thelathini Tu';
+  if (amount === 50000) return 'Shilingi Elfu Hamsini Tu';
+  if (amount === 100000) return 'Shilingi Laki Moja Tu';
+
+  if (amount > 0 && amount % 1000 === 0) {
+    const thousands = Math.floor(amount / 1000);
+    const thousandsMap: Record<number, string> = {
+      1: 'Moja', 2: 'Mbili', 3: 'Tatu', 4: 'Nne', 5: 'Tano',
+      6: 'Sita', 7: 'Saba', 8: 'Nane', 9: 'Tisa', 10: 'Kumi',
+      15: 'Kumi na Tano', 20: 'Ishirini', 25: 'Ishirini na Tano',
+      30: 'Thelathini', 40: 'Arobaini', 50: 'Hamsini', 60: 'Sitini',
+      70: 'Sabini', 80: 'Themanini', 90: 'Tisini'
+    };
+    if (thousandsMap[thousands]) {
+      return `Shilingi Elfu ${thousandsMap[thousands]} Tu`;
+    }
+    return `Shilingi Elfu ${thousands} Tu`;
+  }
+  return `Shilingi ${amount.toLocaleString()} Tu`;
+}
+
+export interface OfficialBereavementSmsParams {
+  memberName: string;
+  relationType: string;
+  relationCustomLabel?: string;
+  deceasedName?: string;
+  deathDate?: string;
+  deathPlace?: string;
+  location?: string;
+  meetingLocation?: string;
+  meetingDate?: string;
+  meetingTime?: string;
+  contributionAmount: number;
+  paymentMethod?: string;
+  deadlineDate?: string;
+  burialSchedule?: string;
+  includeGreeting?: boolean;
+}
+
+export function buildOfficialBereavementSms(params: OfficialBereavementSmsParams): string {
+  const memberName = params.memberName?.trim() || '[Jina la Mwanachama]';
+  const deceasedName = params.deceasedName?.trim() || '[Jina la Marehemu]';
+
+  // Format death details (tarehe na hospitali / mahali)
+  const deathParts: string[] = [];
+  if (params.deathDate) {
+    const { dayName, formattedDate } = getSwahiliDayAndDate(params.deathDate);
+    if (dayName) {
+      deathParts.push(`siku ya ${dayName} tarehe ${formattedDate}`);
+    } else if (formattedDate) {
+      deathParts.push(`tarehe ${formattedDate}`);
+    }
+  }
+  if (params.deathPlace && params.deathPlace.trim()) {
+    const dpClean = params.deathPlace.trim()
+      .replace(/^katika\s+/i, '')
+      .replace(/^akiwa\s+/i, '')
+      .replace(/\.+$/, '');
+    const placePart = params.deathPlace.trim().toLowerCase().startsWith('akiwa')
+      ? params.deathPlace.trim()
+      : `katika ${dpClean}`;
+    deathParts.push(placePart);
+  }
+  const deathDetailStr = deathParts.length > 0 ? `, amefariki ${deathParts.join(' ')}` : '';
+
+  // Opening line according to relation
+  let openingLine = '';
+  const isMwanachamaMwenyewe = params.relationType === 'mwanachama' || 
+    (params.relationCustomLabel && params.relationCustomLabel.toLowerCase().includes('mwanachama mwenyewe'));
+
+  if (isMwanachamaMwenyewe) {
+    openingLine = `Uongozi wa UWALEMI unasikitika kukutaarifu msiba wa mwanachama mwenzetu ${memberName}${deathDetailStr}.`;
+  } else {
+    let relText = 'mama mkwe wake';
+    const rawRel = `${params.relationType || ''} ${params.relationCustomLabel || ''}`.toLowerCase();
+
+    if (params.relationType === 'mkwe_mama' || rawRel.includes('mama mkwe') || rawRel.includes('mkwe_mama')) {
+      relText = 'mama mkwe wake';
+    } else if (params.relationType === 'mkwe_baba' || rawRel.includes('baba mkwe') || rawRel.includes('mkwe_baba')) {
+      relText = 'baba mkwe wake';
+    } else if (params.relationType === 'mzazi_mama' || (rawRel.includes('mama') && (rawRel.includes('mzazi') || rawRel.includes('yake')))) {
+      relText = 'mama yake mzazi';
+    } else if (params.relationType === 'mzazi_baba' || (rawRel.includes('baba') && (rawRel.includes('mzazi') || rawRel.includes('yake')))) {
+      relText = 'baba yake mzazi';
+    } else if (params.relationType === 'mke' || rawRel.includes('mke')) {
+      relText = 'mke wake mpendwa';
+    } else if (params.relationType === 'mume' || rawRel.includes('mume')) {
+      relText = 'mume wake mpendwa';
+    } else if (params.relationType === 'mtoto' || rawRel.includes('mtoto')) {
+      relText = 'mtoto wake';
+    } else {
+      let cleanLabel = (params.relationCustomLabel || 'ndugu').trim();
+      cleanLabel = cleanLabel.replace(/\s+wa\s+mwanachama/i, '').trim();
+      relText = cleanLabel;
+      if (!relText.toLowerCase().includes('wake') && !relText.toLowerCase().includes('yake')) {
+        relText += ' wake';
+      }
+    }
+
+    openingLine = `Uongozi wa UWALEMI unasikitika kukutaarifu kuwa mwanachama mwenzetu ${memberName} amefiwa na ${relText} ${deceasedName}${deathDetailStr}.`;
+  }
+
+  // Location line
+  let rawLoc = params.location?.trim();
+  if (!rawLoc) {
+    rawLoc = '[Eneo la Msiba]';
+  } else {
+    rawLoc = rawLoc
+      .replace(/^(mahali\s+msiba\s+ulipo|eneo\s+la\s+msiba|msiba\s+upo)\s*[:\-]?\s*/i, '')
+      .trim();
+    if (!rawLoc.endsWith('.')) {
+      rawLoc += '.';
+    }
+  }
+  let locationSection = `MAHALI MSIBA ULIPO : Msiba upo ${rawLoc}`;
+  if ((params.meetingLocation && params.meetingLocation.trim()) || params.meetingDate || params.meetingTime) {
+    const meetParts: string[] = [];
+    if (params.meetingLocation?.trim()) {
+      let rawMeeting = params.meetingLocation.trim();
+      rawMeeting = rawMeeting.replace(/^(mahali\s+pa\s+vikao|ukumbi\s+wa\s+vikao|vikao\s+vya\s+msiba)\s*[:\-]?\s*/i, '').trim();
+      meetParts.push(rawMeeting);
+    }
+    if (params.meetingDate?.trim()) {
+      const { dayName, formattedDate } = getSwahiliDayAndDate(params.meetingDate);
+      if (dayName) {
+        meetParts.push(`siku ya ${dayName} tarehe ${formattedDate}`);
+      } else if (formattedDate) {
+        meetParts.push(`tarehe ${formattedDate}`);
+      }
+    }
+    if (params.meetingTime?.trim()) {
+      let rawTime = params.meetingTime.trim();
+      if (!rawTime.toLowerCase().startsWith('kuanzia') && !rawTime.toLowerCase().startsWith('saa')) {
+        rawTime = `kuanzia ${rawTime}`;
+      }
+      meetParts.push(rawTime);
+    }
+
+    if (meetParts.length > 0) {
+      let meetStr = meetParts.join(', ');
+      if (!meetStr.endsWith('.')) {
+        meetStr += '.';
+      }
+      locationSection += `\nVIKAO VYA MSIBA : Vikao vitafanyika ${meetStr}`;
+    }
+  }
+
+  // Contribution section
+  const amountNum = Number(params.contributionAmount) || 5000;
+  const amountFormatted = amountNum.toLocaleString();
+  const amountWords = getAmountInSwahiliWords(amountNum);
+  const contributionSection = `MCHANGO WA RAMBIRAMBI (KILA MWANACHAMA):
+Kulingana na Mwongozo wa kikundi chetu cha UWALEMI, kiwango cha mchango kinachopaswa kutolewa na kila mwanachama ni TZS ${amountFormatted} (${amountWords}) kama rambirambi na mkono wa pole kwa familia.`;
+
+  // Payment method section
+  let rawPayment = (params.paymentMethod || 'M Koba au 0758219298 (Eva O. Lema)').trim();
+  rawPayment = rawPayment.replace(/^NJIA\s+YA\s+KUWASILISHA\s+MCHANGO\s*:\s*/i, '').trim();
+  if (!rawPayment.endsWith('.')) {
+    rawPayment += '.';
+  }
+  const paymentSection = `NJIA YA KUWASILISHA MCHANGO: ${rawPayment}`;
+
+  // Deadline line
+  let deadlineStr = '[Tarehe ya Mwisho]';
+  if (params.deadlineDate) {
+    const { dayName, formattedDate } = getSwahiliDayAndDate(params.deadlineDate);
+    deadlineStr = dayName ? `siku ya ${dayName} tarehe ${formattedDate}` : `tarehe ${formattedDate}`;
+  }
+  const deadlinePrefix = (deadlineStr.startsWith('siku') || deadlineStr.startsWith('tarehe') || deadlineStr.startsWith('[')) ? '' : 'tarehe ';
+  const deadlineSection = `Mwisho wa kuwasilisha michango yote ni ${deadlinePrefix}${deadlineStr}, tunaombwa kukamilisha kwa wakati.`;
+
+  // Burial schedule section
+  let rawBurial = (params.burialSchedule || '').trim();
+  if (!rawBurial) {
+    rawBurial = '[Ratiba ya Mazishi Kuwekwa]';
+  } else {
+    rawBurial = rawBurial.replace(/^RATIBA\s+YA\s+MAZISHI\s*:\s*/i, '').trim();
+  }
+  const burialSection = `RATIBA YA MAZISHI: ${rawBurial}
+Tunaombwa wanachama wote tushirikiane kwa sala, pole msibani na michango kumfariji mwenzetu.`;
+
+  // Quote and signature
+  const closingSection = `"Bwana alitoa, na Bwana ametwaa; jina la Bwana lihimidiwe." (Ayubu 1:21)
+
+Uongozi wa UWALEMI 
+
+Lema, Nguvu Moja!`;
+
+  const greetingPrefix = params.includeGreeting !== false ? 'Habari {name},\n\n' : '';
+
+  return `${greetingPrefix}${openingLine}
+
+${locationSection}
+
+${contributionSection}
+
+${paymentSection}
+
+${deadlineSection}
+
+${burialSection}
+
+${closingSection}`;
+}
+
+export const UWALEMI_THREE_MONTHS_ALERT_TEMPLATE = `Habari {name},
+
+Uongozi wa UWALEMI unakutaarifu kuwa unadaiwa ada ya jumla ya TZS {feeDebt} ({unpaidMonthsCount} miezi: {unpaidMonths}) pamoja na faini ya TZS {faini}, hivyo jumla ya kiasi chote unachodaiwa (ada + faini) ni TZS {totalDebt}.
+
+ANGALIZO MUHIMU: Kesho tarehe 1 faini itatozwa kwa wanachama wote wanaodaiwa ada zaidi ya miezi mitatu, na kwa wale wenye madeni ya faini ya nyuma ya kuchelewesha ada, faini zao zitaongezeka.
+
+Tafadhali fanya malipo yako mapema leo kuepuka faini za ucheleweshaji na hatua za kikatiba za kuwa nje ya umoja (kusimamishwa uanachama) kwa mujibu wa Katiba ya UWALEMI.
+
+Lipa kupitia: M Koba au 0758 219 298 Eva O Lema
+
+Uongozi wa UWALEMI 
+
+Lema, Nguvu Moja!`;
+
 /**
  * Replaces dynamic variables in a template message for a specific member.
  */
@@ -521,6 +1092,10 @@ export function formatPersonalizedUwalemiSms(
     ? debtInfo.breakdown.map(item => `${item.monthName}: TZS ${item.debt.toLocaleString()}`).join(', ')
     : debtInfo.unpaidMonthsText;
 
+  const cleanMonthsList = debtInfo.breakdown && debtInfo.breakdown.length > 0
+    ? debtInfo.breakdown.map(item => item.monthName).join(', ')
+    : debtInfo.unpaidMonthsText;
+
   let finesSummaryText = '';
   if (debtInfo.totalFinesDebt > 0) {
     const parts: string[] = [];
@@ -528,42 +1103,68 @@ export function formatPersonalizedUwalemiSms(
       parts.push(`Faini ya kuchelewa ada: TZS ${debtInfo.lateFeePenalty.toLocaleString()} (${penaltyMonths} ${penaltyMonths === 1 ? 'mwezi wa ziada' : 'miezi ya ziada'})`);
     }
     if (debtInfo.otherFinesDebt > 0) {
-      parts.push(`Faini za vikao: TZS ${debtInfo.otherFinesDebt.toLocaleString()}`);
+      if (debtInfo.meetingFinesText) {
+        parts.push(`Faini za vikao: ${debtInfo.meetingFinesText}`);
+      } else {
+        parts.push(`Faini za vikao: TZS ${debtInfo.otherFinesDebt.toLocaleString()}`);
+      }
     }
     finesSummaryText = parts.join(', ');
   } else {
     finesSummaryText = 'Hakuna faini';
   }
 
+  const meetingFineDetailStr = debtInfo.meetingFinesText || formattedOtherFines;
+
   return template
     .replace(/{name}/g, debtInfo.memberName)
-    .replace(/{memberNo}/g, debtInfo.memberNo)
+    .replace(/\s*\(\s*{memberNo}\s*\)/g, debtInfo.memberNo ? ` (${debtInfo.memberNo})` : '')
+    .replace(/{memberNo}/g, debtInfo.memberNo || '')
     .replace(/{phone}/g, debtInfo.phone)
     .replace(/{role}/g, debtInfo.role)
+    .replace(/TZS\s*{totalDebt}/gi, `TZS ${debtInfo.totalDebt.toLocaleString()}`)
+    .replace(/TZS\s*{jumlaKuu}/gi, `TZS ${debtInfo.totalDebt.toLocaleString()}`)
+    .replace(/TZS\s*{jumlaDeni}/gi, `TZS ${debtInfo.totalDebt.toLocaleString()}`)
+    .replace(/TZS\s*{kiasiChote}/gi, `TZS ${debtInfo.totalDebt.toLocaleString()}`)
+    .replace(/TZS\s*{kiasi_chote}/gi, `TZS ${debtInfo.totalDebt.toLocaleString()}`)
+    .replace(/TZS\s*{feeDebt}/gi, `TZS ${(debtInfo.feeDebt ?? debtInfo.totalDebt).toLocaleString()}`)
+    .replace(/TZS\s*{ada}/gi, `TZS ${(debtInfo.feeDebt ?? debtInfo.totalDebt).toLocaleString()}`)
+    .replace(/TZS\s*{faini}/gi, `TZS ${(debtInfo.totalFinesDebt ?? 0).toLocaleString()}`)
+    .replace(/TZS\s*{debtAmount}/gi, `TZS ${debtInfo.totalDebt.toLocaleString()}`)
     .replace(/{debtAmount}/g, formattedTotalDebt)
+    .replace(/{totalDebt}/g, formattedTotalDebt)
+    .replace(/{jumlaKuu}/g, formattedTotalDebt)
+    .replace(/{jumlaDeni}/g, formattedTotalDebt)
+    .replace(/{kiasiChote}/g, formattedTotalDebt)
+    .replace(/{kiasi_chote}/g, formattedTotalDebt)
     .replace(/{feeDebt}/g, formattedFeeDebt)
     .replace(/{ada}/g, formattedFeeDebt)
     .replace(/{faini}/g, formattedTotalFines)
     .replace(/{fainiAda}/g, formattedLatePenalty)
-    .replace(/{fainiVikao}/g, formattedOtherFines)
+    .replace(/{fainiVikao}/g, meetingFineDetailStr)
+    .replace(/{fainiVikaoKiasi}/g, formattedOtherFines)
+    .replace(/{fainiVikaoMchanganuo}/g, meetingFineDetailStr)
+    .replace(/{fainiVikaoTarehe}/g, debtInfo.meetingFinesDatesText || 'Tarehe ya kikao')
+    .replace(/{fainiVikaoJina}/g, debtInfo.meetingFinesTitlesText || 'Kikao cha UWALEMI')
     .replace(/{fainiSummary}/g, finesSummaryText)
     .replace(/{fainiMiezi}/g, `${penaltyMonths} ${penaltyMonths === 1 ? 'mwezi' : 'miezi'}`)
     .replace(/{deni}/g, formattedTotalDebt)
-    .replace(/{jumlaKuu}/g, formattedTotalDebt)
     .replace(/{startMonth}/g, debtInfo.startMonthName || 'Mwezi huu')
     .replace(/{kuanzia}/g, debtInfo.startMonthName || 'Mwezi huu')
     .replace(/{endMonth}/g, debtInfo.endMonthName || 'Mwezi huu')
     .replace(/{hadi}/g, debtInfo.endMonthName || 'Mwezi huu')
-    .replace(/{unpaidMonths}/g, debtInfo.unpaidMonthsText)
-    .replace(/{miezi}/g, debtInfo.unpaidMonthsText)
+    .replace(/{unpaidMonths}/g, cleanMonthsList)
+    .replace(/{miezi}/g, cleanMonthsList)
     .replace(/{mchanganuo}/g, breakdownText)
     .replace(/{breakdown}/g, breakdownText)
+    .replace(/{unpaidMonthsCount}/g, String(debtInfo.unpaidCount))
     .replace(/{monthsCount}/g, String(debtInfo.unpaidCount))
     .replace(/{idadi_ya_miezi}/g, `${debtInfo.unpaidCount} miezi`)
     .replace(/{periodSummary}/g, debtInfo.periodSummary)
     .replace(/{monthlyFee}/g, `TZS ${debtInfo.monthlyFee.toLocaleString()}`)
     .replace(/{lipaNamba}/g, 'M Koba au 0758 219 298 Eva O Lema')
-    .replace(/{lipaNumber}/g, 'M Koba au 0758 219 298 Eva O Lema');
+    .replace(/{lipaNumber}/g, 'M Koba au 0758 219 298 Eva O Lema')
+    .replace(/TZS\s+TZS/gi, 'TZS');
 }
 
 export async function sendUwalemiSms(payload: {
@@ -770,13 +1371,15 @@ export async function triggerAutoReceiptSms(params: {
   remainingFineDebt?: number;
   totalDebtAfter?: number;
   customMessage?: string;
+  forceSend?: boolean;
+  targetPhone?: string;
 }): Promise<{ triggered: boolean; success: boolean; message: string }> {
-  const autoSend = params.state.groupSettings?.smsConfig?.autoSendReceipts;
+  const autoSend = params.forceSend || params.state.groupSettings?.smsConfig?.autoSendReceipts;
   if (!autoSend) {
     return { triggered: false, success: false, message: 'Utumaji wa stakabadhi kiotomatiki umezimwa kwenye mipangilio.' };
   }
 
-  const phone = (params.member.phone || '').trim();
+  const phone = (params.targetPhone || params.member.phone || '').trim();
   if (!phone) {
     return { triggered: false, success: false, message: `Mwanachama ${params.member.fullName || ''} hana namba ya simu ya kutumiwa stakabadhi.` };
   }
@@ -924,6 +1527,105 @@ Lema, Nguvu Moja!`;
   };
 }
 
+export interface DecomposedFineAmounts {
+  adaLateFee: number;
+  meetingLate: number;
+  meetingAbsent: number;
+  other: number;
+}
+
+/**
+ * Hubainisha na kutenganisha viwango vya malipo ya faini (Ada, Kuchelewa, Utoro na Nyingine).
+ * Hutenganisha malipo mseto (k.m. TZS 22,000 => TZS 20,000 Utoro + TZS 2,000 Kuchelewa).
+ */
+export function decomposeFinePaymentAmounts(
+  fp: UwalemiFinePayment,
+  state?: UwalemiState
+): DecomposedFineAmounts {
+  const amt = Number(fp.amount) || 0;
+  if (amt <= 0) {
+    return { adaLateFee: 0, meetingLate: 0, meetingAbsent: 0, other: 0 };
+  }
+
+  const titleLower = (fp.fineTitle || '').toLowerCase();
+  const notesLower = (fp.notes || '').toLowerCase();
+
+  // 1. Faini ya Ada (>Miezi 3 Mwezi wa 6+)
+  if (
+    fp.fineType === 'ada_late_fee' ||
+    (titleLower.includes('ada') && (titleLower.includes('kuchelewa') || titleLower.includes('>miezi') || titleLower.includes('miezi 3')))
+  ) {
+    return { adaLateFee: amt, meetingLate: 0, meetingAbsent: 0, other: 0 };
+  }
+
+  // 2. Faini ya Kuchelewa kiasi halisi cha 2,000 (au 4,000 / 6,000 / 8,000)
+  if (amt > 0 && amt % 2000 === 0 && amt < 10000) {
+    return { adaLateFee: 0, meetingLate: amt, meetingAbsent: 0, other: 0 };
+  }
+
+  // 3. Faini ya Utoro kiasi cha 10,000 (au mafungu ya 10,000)
+  if (amt >= 10000 && amt % 10000 === 0) {
+    return { adaLateFee: 0, meetingLate: 0, meetingAbsent: amt, other: 0 };
+  }
+
+  // 4. Malipo Mseto (Combined Fine Payment, k.m. TZS 12,000 = 10,000 Utoro + 2,000 Kuchelewa)
+  if (amt >= 12000 && amt % 2000 === 0 && amt % 10000 !== 0) {
+    const lateRemainder = amt % 10000;
+    const absentPart = amt - lateRemainder;
+    return { adaLateFee: 0, meetingLate: lateRemainder, meetingAbsent: absentPart, other: 0 };
+  }
+
+  // 5. Kikao maalum kimetajwa moja kwa moja (kwa viwango vingine visivyo vya kawaida)
+  if (fp.meetingId && state?.meetings) {
+    const mtg = state.meetings.find(m => m.id === fp.meetingId);
+    const att = (mtg?.attendees || []).find(a => a.memberId === fp.memberId || (fp.memberNo && a.memberNo === fp.memberNo));
+    if (att?.status === 'late') {
+      return { adaLateFee: 0, meetingLate: amt, meetingAbsent: 0, other: 0 };
+    }
+    if (att?.status === 'absent') {
+      return { adaLateFee: 0, meetingLate: 0, meetingAbsent: amt, other: 0 };
+    }
+  }
+
+  // 6. Kuchelewa kwa maelezo
+  const isLateOnly = (titleLower.includes('kuchelewa') || notesLower.includes('kuchelewa')) &&
+    !titleLower.includes('utoro') && !titleLower.includes('kutohudhuria') && !titleLower.includes('kutokuhudhuria') && !titleLower.includes('zote');
+
+  if (isLateOnly) {
+    return { adaLateFee: 0, meetingLate: amt, meetingAbsent: 0, other: 0 };
+  }
+
+  // 7. Utoro kwa maelezo
+  const isAbsentOnly = (titleLower.includes('utoro') || titleLower.includes('kutohudhuria') || titleLower.includes('kutokuhudhuria')) &&
+    !titleLower.includes('kuchelewa') && !titleLower.includes('zote');
+
+  if (isAbsentOnly) {
+    return { adaLateFee: 0, meetingLate: 0, meetingAbsent: amt, other: 0 };
+  }
+
+  if (fp.fineType === 'kikao') {
+    return { adaLateFee: 0, meetingLate: 0, meetingAbsent: amt, other: 0 };
+  }
+
+  return { adaLateFee: 0, meetingLate: 0, meetingAbsent: 0, other: amt };
+}
+
+/**
+ * Hubainisha aina kamili ya malipo ya faini (Faini ya Ada, Faini ya Kuchelewa Kikao, Faini ya Utoro/Kutohudhuria au Nyingine).
+ */
+export function classifyFinePaymentType(
+  fp: UwalemiFinePayment,
+  state?: UwalemiState
+): 'ada_late_fee' | 'meeting_late' | 'meeting_absent' | 'other' {
+  const decomposed = decomposeFinePaymentAmounts(fp, state);
+  if (decomposed.adaLateFee > 0 && decomposed.meetingLate === 0 && decomposed.meetingAbsent === 0) return 'ada_late_fee';
+  if (decomposed.meetingLate > 0 && decomposed.meetingAbsent === 0) return 'meeting_late';
+  if (decomposed.meetingAbsent > 0 && decomposed.meetingLate === 0) return 'meeting_absent';
+  if (decomposed.meetingAbsent > 0) return 'meeting_absent';
+  if (decomposed.meetingLate > 0) return 'meeting_late';
+  return 'other';
+}
+
 /**
  * Kuita mfumo wa kutuma vikumbusho vya ada ya kila mwezi (kama tarehe 25 au kuanzisha mwenyewe kwa jaribio).
  */
@@ -963,5 +1665,200 @@ export async function triggerMonthlyAutoRemindersApi(forceNow = false): Promise<
       message: e.message || 'Hitilafu ya mtandao'
     };
   }
+}
+
+// ==========================================
+// UWALEMI DIGITAL ELECTION (E-VOTING) UTILS
+// ==========================================
+
+export function generateVoterToken(memberNo: string, electionId: string): string {
+  const cleanMNo = (memberNo || 'MEM').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const timePart = Date.now().toString(36).slice(-4).toUpperCase();
+  return `VT-${cleanMNo}-${rand}${timePart}`;
+}
+
+export function generateVoteReceiptCode(): string {
+  const randNum = Math.floor(10000 + Math.random() * 90000);
+  const letterCode = Math.random().toString(36).substring(2, 5).toUpperCase();
+  return `UWL-VT-${letterCode}${randNum}`;
+}
+
+export function recomputeElectionVoters(
+  election: Partial<UwalemiElection>,
+  members: UwalemiMember[],
+  payments: UwalemiMonthlyPayment[]
+): UwalemiVoterRecord[] {
+  if (!Array.isArray(members)) return [];
+  const criteria = election.eligibilityCriteria || {
+    activeMembersOnly: true,
+    requireRegistrationFeePaid: false,
+    maxAllowedFeeDebtMonths: 99
+  };
+
+  const existingVoterMap = new Map<string, UwalemiVoterRecord>();
+  if (Array.isArray(election.voters)) {
+    election.voters.forEach(v => {
+      existingVoterMap.set(v.memberId, v);
+    });
+  }
+
+  return members.map(m => {
+    const existing = existingVoterMap.get(m.id);
+    let isEligible = true;
+    let reason = '';
+
+    if (criteria.activeMembersOnly && m.status !== 'active') {
+      isEligible = false;
+      reason = 'Mwanachama hayuko hai (Status: ' + (m.status === 'suspended' ? 'Amesimamishwa' : 'Hajahuishwa') + ')';
+    }
+
+    if (isEligible && criteria.requireRegistrationFeePaid && !m.registrationFeePaid) {
+      isEligible = false;
+      reason = 'Haijakamilika ada ya kiingilio cha uanachama';
+    }
+
+    if (isEligible && criteria.maxAllowedFeeDebtMonths < 99) {
+      const dummyState: any = { monthlyPayments: payments || [], members };
+      const debtInfo = calculateMemberFeeDebt(m, dummyState);
+      const unpaidCount = debtInfo.penaltyMonthsCount || 0;
+      if (unpaidCount > criteria.maxAllowedFeeDebtMonths) {
+        isEligible = false;
+        reason = `Madeni ya ada za mwezi yamezidi kiwango cha kikatiba (${unpaidCount} miezi bila ada)`;
+      }
+    }
+
+    const token = existing?.voterToken || generateVoterToken(m.memberNo, election.id || 'ELEC');
+
+    return {
+      voterToken: token,
+      memberId: m.id,
+      memberNo: m.memberNo,
+      fullName: m.fullName,
+      phone: m.phone,
+      isEligible,
+      ineligibilityReason: reason || undefined,
+      hasVoted: existing?.hasVoted || false,
+      votedAt: existing?.votedAt,
+      receiptCode: existing?.receiptCode,
+      smsSentAt: existing?.smsSentAt
+    };
+  });
+}
+
+export interface ElectionPositionTally {
+  positionId: string;
+  positionTitle: string;
+  maxWinners: number;
+  totalVotesForPosition: number;
+  results: {
+    candidateId: string;
+    candidateName: string;
+    candidateNo: string;
+    candidatePhone?: string;
+    avatarUrl?: string;
+    slogan?: string;
+    votesCount: number;
+    percentage: number;
+    isWinner: boolean;
+    isTie: boolean;
+  }[];
+}
+
+export function calculateElectionTally(election: UwalemiElection): {
+  totalEligibleVoters: number;
+  totalBallotsCast: number;
+  turnoutPercentage: number;
+  positionsTally: ElectionPositionTally[];
+} {
+  const eligibleVoters = (election.voters || []).filter(v => v.isEligible);
+  const totalEligibleVoters = eligibleVoters.length;
+  const ballots = election.ballots || [];
+  const totalBallotsCast = ballots.length;
+  const turnoutPercentage = totalEligibleVoters > 0 
+    ? Math.round((totalBallotsCast / totalEligibleVoters) * 100) 
+    : 0;
+
+  const positionsTally: ElectionPositionTally[] = (election.positions || []).map(pos => {
+    // Count votes per candidate
+    const voteCountMap = new Map<string, number>();
+    let totalVotesForPosition = 0;
+
+    pos.candidates.forEach(c => {
+      voteCountMap.set(c.id, 0);
+    });
+
+    ballots.forEach(ballot => {
+      const chosenCandidateIds = ballot.votes?.[pos.id];
+      if (Array.isArray(chosenCandidateIds)) {
+        chosenCandidateIds.forEach(cId => {
+          if (voteCountMap.has(cId)) {
+            voteCountMap.set(cId, (voteCountMap.get(cId) || 0) + 1);
+            totalVotesForPosition += 1;
+          }
+        });
+      }
+    });
+
+    const results = pos.candidates.map(c => {
+      const votesCount = voteCountMap.get(c.id) || 0;
+      const percentage = totalVotesForPosition > 0 
+        ? Math.round((votesCount / totalVotesForPosition) * 1000) / 10 
+        : 0;
+      return {
+        candidateId: c.id,
+        candidateName: c.fullName,
+        candidateNo: c.memberNo,
+        candidatePhone: c.phone,
+        avatarUrl: c.avatarUrl,
+        slogan: c.slogan || c.manifesto,
+        votesCount,
+        percentage,
+        isWinner: false,
+        isTie: false
+      };
+    });
+
+    // Sort descending by votes
+    results.sort((a, b) => b.votesCount - a.votesCount);
+
+    // Identify winners based on maxWinners
+    if (totalVotesForPosition > 0 && results.length > 0) {
+      const maxW = Math.max(1, pos.maxWinners || 1);
+      const topVotes = results[0].votesCount;
+      
+      if (maxW === 1) {
+        // Single winner position: Check if tie for 1st place
+        if (results.length > 1 && results[1].votesCount === topVotes && topVotes > 0) {
+          results[0].isTie = true;
+          results[1].isTie = true;
+        } else if (topVotes > 0) {
+          results[0].isWinner = true;
+        }
+      } else {
+        // Multi-winner position
+        for (let i = 0; i < Math.min(maxW, results.length); i++) {
+          if (results[i].votesCount > 0) {
+            results[i].isWinner = true;
+          }
+        }
+      }
+    }
+
+    return {
+      positionId: pos.id,
+      positionTitle: pos.title,
+      maxWinners: pos.maxWinners,
+      totalVotesForPosition,
+      results
+    };
+  });
+
+  return {
+    totalEligibleVoters,
+    totalBallotsCast,
+    turnoutPercentage,
+    positionsTally
+  };
 }
 

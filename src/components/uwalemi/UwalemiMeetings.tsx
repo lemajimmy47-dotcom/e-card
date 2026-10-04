@@ -36,9 +36,10 @@ interface Props {
   state: UwalemiState;
   onSaveState: (state: UwalemiState) => Promise<boolean>;
   onOpenSmsWithTemplate?: (recipients: { name: string; phone: string; memberNo: string }[], templateText: string) => void;
+  readOnly?: boolean;
 }
 
-export const UwalemiMeetings: React.FC<Props> = ({ state, onSaveState, onOpenSmsWithTemplate }) => {
+export const UwalemiMeetings: React.FC<Props> = ({ state, onSaveState, onOpenSmsWithTemplate, readOnly }) => {
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(
     state.meetings?.[0]?.id || null
   );
@@ -102,6 +103,10 @@ export const UwalemiMeetings: React.FC<Props> = ({ state, onSaveState, onOpenSms
 
   const handleCreateMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) {
+      alert('Hali ya Kutazama Tu: Hauruhusiwi kupanga kikao kipya.');
+      return;
+    }
     if (!meetingForm.title || !meetingForm.date) {
       alert('Tafadhali jaza Jina na Tarehe ya Kikao.');
       return;
@@ -133,7 +138,7 @@ export const UwalemiMeetings: React.FC<Props> = ({ state, onSaveState, onOpenSms
   };
 
   const handleUpdateAttendance = async (attendees: UwalemiMeetingAttendee[]) => {
-    if (!selectedMeeting) return;
+    if (readOnly || !selectedMeeting) return;
 
     const updatedMeeting: UwalemiMeeting = {
       ...selectedMeeting,
@@ -145,7 +150,7 @@ export const UwalemiMeetings: React.FC<Props> = ({ state, onSaveState, onOpenSms
   };
 
   const handleSaveMinutes = async () => {
-    if (!selectedMeeting) return;
+    if (readOnly || !selectedMeeting) return;
 
     const updatedMeeting: UwalemiMeeting = {
       ...selectedMeeting,
@@ -319,6 +324,7 @@ Lema, Nguvu Moja!`;
 
   // Change a member's location group (Dar es Salaam vs Mkoani)
   const handleToggleMemberLocation = async (memberId: string, newGroup: 'Dar es Salaam' | 'Mkoani') => {
+    if (readOnly) return;
     const updatedMembers = (state.members || []).map(m => {
       if (m.id === memberId) {
         return {
@@ -349,28 +355,34 @@ Lema, Nguvu Moja!`;
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setMeetingForm({
-              title: `Kikao cha Kawaida cha Mwezi`,
-              date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              time: '14:00 - 17:00',
-              location: 'Sinza, Dar es Salaam',
-              agendas: [
-                'Kufungua kikao na sala',
-                'Kupitia muhtasari wa kikao kilichopita',
-                'Taarifa ya mapato, ada na matumizi ya hazina',
-                'Mengineyo na kufunga kikao'
-              ],
-              newAgendaInput: ''
-            });
-            setIsNewMeetingModalOpen(true);
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Panga Kikao Kipya
-        </button>
+        {!readOnly ? (
+          <button
+            onClick={() => {
+              setMeetingForm({
+                title: `Kikao cha Kawaida cha Mwezi`,
+                date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                time: '14:00 - 17:00',
+                location: 'Sinza, Dar es Salaam',
+                agendas: [
+                  'Kufungua kikao na sala',
+                  'Kupitia muhtasari wa kikao kilichopita',
+                  'Taarifa ya mapato, ada na matumizi ya hazina',
+                  'Mengineyo na kufunga kikao'
+                ],
+                newAgendaInput: ''
+              });
+              setIsNewMeetingModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Panga Kikao Kipya
+          </button>
+        ) : (
+          <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+            <span>👁️ Hali ya Kutazama Tu</span>
+          </div>
+        )}
       </div>
 
       {/* Meetings Selector Grid */}
@@ -432,13 +444,15 @@ Lema, Nguvu Moja!`;
             </div>
 
             <div className="flex flex-wrap gap-2.5">
-              <button
-                onClick={() => handleOpenBroadcastModal('official_invitation')}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
-              >
-                <Send className="w-4 h-4" />
-                Tuma Wito / Taarifa (SMS)
-              </button>
+              {!readOnly && (
+                <button
+                  onClick={() => handleOpenBroadcastModal('official_invitation')}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                  Tuma Wito / Taarifa (SMS)
+                </button>
+              )}
 
               <button
                 onClick={() => {
@@ -783,6 +797,7 @@ Lema, Nguvu Moja!`;
           const locGroup = getMemberLocationGroup(m);
 
           const updateStatus = (newStatus: 'present' | 'absent' | 'apology' | 'late') => {
+            if (readOnly) return;
             const updatedAttendees = members.map(mem => {
               if (mem.id === m.id) {
                 let fineAmt = 0;
@@ -812,6 +827,7 @@ Lema, Nguvu Moja!`;
           };
 
           const toggleFinePaid = () => {
+            if (readOnly) return;
             const updatedAttendees = members.map(mem => {
               const existing = (selectedMeeting.attendees || []).find(a => a.memberId === mem.id);
               if (mem.id === m.id) {
@@ -1260,14 +1276,16 @@ Lema, Nguvu Moja!`;
                 onClick={() => setIsMinutesModalOpen(false)}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
               >
-                Ghairi
+                Funga
               </button>
-              <button
-                onClick={handleSaveMinutes}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 cursor-pointer"
-              >
-                Hifadhi Muhtasari
-              </button>
+              {!readOnly && (
+                <button
+                  onClick={handleSaveMinutes}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 cursor-pointer"
+                >
+                  Hifadhi Muhtasari
+                </button>
+              )}
             </div>
           </div>
         </div>

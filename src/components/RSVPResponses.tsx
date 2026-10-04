@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clipboard, CheckCircle, XCircle, HelpCircle, MessageSquare, AlertCircle, RefreshCw, Send, ArrowRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Bell, CheckCircle2, Phone, Edit2, Check, X, ShieldCheck } from 'lucide-react';
+import { Clipboard, CheckCircle, XCircle, HelpCircle, MessageSquare, AlertCircle, RefreshCw, Send, ArrowRight, Search, ArrowUpDown, ArrowUp, ArrowDown, Bell, CheckCircle2, Phone, Edit2, Check, X, ShieldCheck, Sparkles } from 'lucide-react';
 import { EventDetails, Guest } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { normalizeRsvpStatus, calculateRsvpPax } from '../utils/rsvpUtils';
 
 interface RSVPResponsesProps {
   event: EventDetails;
@@ -104,41 +105,68 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
   const [filterRsvpStatus, setFilterRsvpStatus] = useState<string>('ALL');
   const [filterCardType, setFilterCardType] = useState<string>('ALL');
 
-  // Computations
+  // Real-time background sync with server so WhatsApp and Web RSVPs appear live
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      fetch('/api/state')
+        .then(r => r.json())
+        .then(data => {
+          if (data && Array.isArray(data.guests)) {
+            const serverGuests: Guest[] = data.guests;
+            // Check if any guest RSVP status or timestamps changed
+            const hasRsvpDifference = serverGuests.some(sg => {
+              const localG = guests.find(g => g.id === sg.id);
+              if (!localG) return false;
+              return normalizeRsvpStatus(localG.rsvpStatus) !== normalizeRsvpStatus(sg.rsvpStatus) ||
+                localG.rsvpGuestsCount !== sg.rsvpGuestsCount ||
+                localG.rsvpComment !== sg.rsvpComment;
+            });
+            if (hasRsvpDifference) {
+              onUpdateGuests(serverGuests);
+            }
+          }
+        })
+        .catch(() => {});
+    }, 4000);
+
+    return () => clearInterval(syncInterval);
+  }, [guests, onUpdateGuests]);
+
+  // Computations with rock-solid normalization
   const totalGuests = guests.length;
-  const attendingGuests = guests.filter(g => g.rsvpStatus === 'Atahudhuria');
+  const attendingGuests = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Atahudhuria');
   const countAttendingCards = attendingGuests.length;
-  const countAttendingPax = attendingGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' ? 2 : 1)), 0);
+  const countAttendingPax = attendingGuests.reduce((acc, current) => acc + calculateRsvpPax(current), 0);
   const attendingSingle = attendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const attendingDouble = attendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
-  const declinedGuests = guests.filter(g => g.rsvpStatus === 'Hatahudhuria');
+  const declinedGuests = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Hatahudhuria');
   const countDeclined = declinedGuests.length;
   const countDeclinedPax = declinedGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0);
   const declinedSingle = declinedGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const declinedDouble = declinedGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
-  const maybeGuests = guests.filter(g => g.rsvpStatus === 'Labda');
+  const maybeGuests = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Labda');
   const countMaybe = maybeGuests.length;
-  const countMaybePax = maybeGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1)), 0);
+  const countMaybePax = maybeGuests.reduce((acc, current) => acc + calculateRsvpPax(current), 0);
   const maybeSingle = maybeGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const maybeDouble = maybeGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
-  const pendingGuests = guests.filter(g => g.rsvpStatus === 'Bado' || !g.rsvpStatus);
+  const pendingGuests = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Bado');
   const countNotResponded = pendingGuests.length;
   const countNotRespondedPax = pendingGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0);
   const pendingSingle = pendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const pendingDouble = pendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
   const countAttending = countAttendingPax;
-  const unseenCount = guests.filter(g => g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen).length;
+  const unseenCount = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) !== 'Bado' && !g.rsvpSeen).length;
 
   // Automatically mark all as seen when page opens
   React.useEffect(() => {
-    const hasUnseen = guests.some(g => g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen);
+    const hasUnseen = guests.some(g => normalizeRsvpStatus(g.rsvpStatus) !== 'Bado' && !g.rsvpSeen);
     if (hasUnseen) {
       const updated = guests.map(g => 
-        (g.rsvpStatus && g.rsvpStatus !== 'Bado' && !g.rsvpSeen) ? { ...g, rsvpSeen: true } : g
+        (normalizeRsvpStatus(g.rsvpStatus) !== 'Bado' && !g.rsvpSeen) ? { ...g, rsvpSeen: true } : g
       );
       onUpdateGuests(updated);
     }
@@ -146,7 +174,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
 
   const handleMarkAllSeen = () => {
     const updated = guests.map(g => 
-      (g.rsvpStatus && g.rsvpStatus !== 'Bado') ? { ...g, rsvpSeen: true } : g
+      (normalizeRsvpStatus(g.rsvpStatus) !== 'Bado') ? { ...g, rsvpSeen: true } : g
     );
     onUpdateGuests(updated);
   };
@@ -155,7 +183,8 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
     setSelectedSimGuestId(guestId);
     const target = guests.find(g => g.id === guestId);
     if (target) {
-      setSimStatus(target.rsvpStatus !== 'Bado' ? target.rsvpStatus as any : 'Atahudhuria');
+      const currentNorm = normalizeRsvpStatus(target.rsvpStatus);
+      setSimStatus(currentNorm !== 'Bado' ? currentNorm as any : 'Atahudhuria');
       setSimCompanions(target.rsvpGuestsCount || (target.cardType === 'DOUBLE' ? 2 : 1));
       setSimComment(target.rsvpComment || '');
       setIsSimulatorOpen(true);
@@ -287,9 +316,10 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
                         g.phone.includes(searchTerm) ||
                         (g.code && g.code.toLowerCase().includes(searchTerm.toLowerCase()));
     
+    const norm = normalizeRsvpStatus(g.rsvpStatus);
     const matchStatus = filterRsvpStatus === 'ALL' || 
-                        (filterRsvpStatus === 'BADO' && (!g.rsvpStatus || g.rsvpStatus === 'Bado')) ||
-                        g.rsvpStatus === filterRsvpStatus;
+                        (filterRsvpStatus === 'BADO' && norm === 'Bado') ||
+                        norm === filterRsvpStatus;
 
     const matchCardType = filterCardType === 'ALL' || g.cardType === filterCardType;
 
@@ -303,8 +333,8 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
       return sortOrder === 'asc' ? valA.localeCompare(valB, 'sw') : valB.localeCompare(valA, 'sw');
     }
     if (sortBy === 'rsvpStatus') {
-      const valA = a.rsvpStatus || 'Bado';
-      const valB = b.rsvpStatus || 'Bado';
+      const valA = normalizeRsvpStatus(a.rsvpStatus);
+      const valB = normalizeRsvpStatus(b.rsvpStatus);
       return sortOrder === 'asc' ? valA.localeCompare(valB, 'sw') : valB.localeCompare(valA, 'sw');
     }
     return 0;

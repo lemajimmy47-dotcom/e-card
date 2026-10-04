@@ -14,6 +14,7 @@ import {
   generatePaymentReceiptPDF, 
   downloadPdfDocument, 
   getPdfBlobUrl, 
+  loadUwalemiLogoAsBase64,
   formatTZS 
 } from '../../services/uwalemiPdfGenerator';
 import { 
@@ -73,7 +74,7 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
   const [paymentMethod, setPaymentMethod] = useState<string>(
     state.groupSettings?.paymentMethods?.[0]?.provider 
       ? `${state.groupSettings.paymentMethods[0].provider} (${state.groupSettings.paymentMethods[0].number})`
-      : 'M Koba / M-Pesa (0758 219 298 - Eva O Lema)'
+      : 'M Koba (0758 219 298 - Eva O Lema)'
   );
   const [referenceNo, setReferenceNo] = useState<string>('');
   const [receivedBy, setReceivedBy] = useState<string>('Eva O Lema (Mweka Hazina)');
@@ -168,7 +169,10 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
     if (fineType === 'kikao') {
       const mtg = (state.meetings || []).find(m => m.id === selectedMeetingId);
       targetMeetingTitle = mtg?.title || 'Kikao cha UWALEMI';
-      fineTitle = `Faini ya Kikao (${targetMeetingTitle})`;
+      const att = (mtg?.attendees || []).find(a => a.memberId === selectedMember.id || a.memberNo === selectedMember.memberNo);
+      const isLate = att?.status === 'late' || (Number(amount) > 0 && Number(amount) < 10000 && Number(amount) % 2000 === 0);
+      const categoryName = isLate ? 'Kuchelewa Kikao' : 'Utoro Kikao';
+      fineTitle = `Faini ya ${categoryName} (${targetMeetingTitle})`;
     } else if (fineType === 'ada_late_fee') {
       fineTitle = `Faini ya Kuchelewa Ada (>Miezi 3)`;
     } else {
@@ -274,12 +278,14 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
     }
   };
 
-  const handleDownloadReceiptPdf = () => {
+  const handleDownloadReceiptPdf = async () => {
     if (!completedPayment || !selectedMember) return;
+    await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
     const doc = generatePaymentReceiptPDF({
       receiptNo: completedPayment.receiptNo,
       groupName: state.groupSettings?.groupName || 'UWALEMI',
       slogan: state.groupSettings?.slogan || 'Lema, Nguvu Moja.',
+      logoUrl: state.groupSettings?.logoUrl || '/uwalemi_logo.png',
       memberNo: completedPayment.memberNo,
       memberName: completedPayment.memberName,
       memberPhone: completedPayment.memberPhone,
@@ -296,12 +302,14 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
     downloadPdfDocument(doc, `Risiti_Faini_${completedPayment.receiptNo}_${completedPayment.memberNo}.pdf`);
   };
 
-  const handlePreviewReceiptPdf = () => {
+  const handlePreviewReceiptPdf = async () => {
     if (!completedPayment || !selectedMember) return;
+    await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
     const doc = generatePaymentReceiptPDF({
       receiptNo: completedPayment.receiptNo,
       groupName: state.groupSettings?.groupName || 'UWALEMI',
       slogan: state.groupSettings?.slogan || 'Lema, Nguvu Moja.',
+      logoUrl: state.groupSettings?.logoUrl || '/uwalemi_logo.png',
       memberNo: completedPayment.memberNo,
       memberName: completedPayment.memberName,
       memberPhone: completedPayment.memberPhone,
@@ -362,8 +370,16 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
         {completedPayment ? (
           <div className="space-y-5 py-2">
             <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 text-center space-y-2">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center border border-emerald-500/40">
-                <CheckCircle2 className="w-7 h-7" />
+              <div className="flex items-center justify-center gap-3 mb-1">
+                <img 
+                  src={state.groupSettings?.logoUrl || '/uwalemi_logo.png'} 
+                  alt="UWALEMI Logo" 
+                  className="w-12 h-12 rounded-full object-cover shadow-md border border-emerald-500/40"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
               </div>
               <h4 className="text-sm font-bold text-white">Malipo Yamethibitishwa Kikamilifu!</h4>
               <p className="text-xs text-slate-300">
@@ -591,7 +607,7 @@ export const UwalemiFinePaymentModal: React.FC<Props> = ({
                       {pm.provider} - {pm.number} ({pm.accountName})
                     </option>
                   ))}
-                  <option value="Vodacom M-Pesa (0758 219 298 - Eva O Lema)">M-Pesa (0758 219 298 - Eva O Lema)</option>
+                  <option value="M Koba (0758 219 298 - Eva O Lema)">M Koba (0758 219 298 - Eva O Lema)</option>
                   <option value="CRDB Bank (0152435678900)">CRDB Bank (0152435678900)</option>
                   <option value="Taslimu (Cash)">Taslimu (Cash)</option>
                   <option value="Airtel Money">Airtel Money</option>

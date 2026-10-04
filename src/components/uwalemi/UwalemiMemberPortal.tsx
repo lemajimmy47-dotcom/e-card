@@ -103,8 +103,15 @@ export const UwalemiMemberPortal: React.FC<Props> = ({ memberNoOrPhone, onClose,
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Top Nav */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-900 border border-slate-700/80 flex items-center justify-center p-0.5">
+              <img 
+                src={groupSettings?.logoUrl || '/uwalemi_logo.png'} 
+                alt="UWALEMI Logo" 
+                className="w-full h-full object-cover rounded-full"
+                referrerPolicy="no-referrer"
+              />
+            </div>
             <span className="font-bold text-sm uppercase tracking-wider text-emerald-400">
               {groupSettings?.groupName || 'UWALEMI'} Member Portal
             </span>
@@ -125,13 +132,23 @@ export const UwalemiMemberPortal: React.FC<Props> = ({ memberNoOrPhone, onClose,
           <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
           <div className="flex justify-between items-start mb-6">
-            <div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-1 border border-emerald-500/30">
-                <Award className="w-3 h-3" />
-                Mjumbe Rasmi
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-emerald-500 via-blue-500 to-teal-400 shadow-lg shadow-emerald-950/60 flex-shrink-0">
+                <img 
+                  src={groupSettings?.logoUrl || '/uwalemi_logo.png'} 
+                  alt="UWALEMI Emblem" 
+                  className="w-full h-full object-cover rounded-full bg-slate-950 border border-slate-900"
+                  referrerPolicy="no-referrer"
+                />
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">{member.fullName}</h1>
-              <div className="text-xs text-emerald-400 font-semibold">{member.role}</div>
+              <div>
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-1 border border-emerald-500/30">
+                  <Award className="w-3 h-3" />
+                  Mjumbe Rasmi
+                </div>
+                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">{member.fullName}</h1>
+                <div className="text-xs text-emerald-400 font-semibold">{member.role}</div>
+              </div>
             </div>
 
             <div className="text-right">

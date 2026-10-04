@@ -497,7 +497,7 @@ export default function SMSGatewayConfig() {
             className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500/50 transition-all font-semibold text-xs cursor-pointer"
           >
             <option value="simulation">Simulated Gateway (Simulation)</option>
-            <option value="swalasms">SwalaSMS (Tanzania) - Salio: 100 SMS (Inafanya Kazi)</option>
+            <option value="swalasms">SwalaSMS (Tanzania) - Salio: {balance !== null ? balance : '70'} SMS (Inafanya Kazi)</option>
             <option value="ehub">eHub SMS API (Secure)</option>
             <option value="meseji">Meseji API (Tanzania)</option>
             <option value="beem">Beem Africa (Tanzania)</option>
@@ -515,7 +515,7 @@ export default function SMSGatewayConfig() {
                 SwalaSMS Imeunganishwa (Live)
               </span>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-                Salio: 100 SMS
+                Salio: {balance !== null ? balance : '70'} SMS
               </span>
             </div>
             <p className="text-[11px] text-emerald-200/80 leading-relaxed">

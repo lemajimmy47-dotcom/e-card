@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UwalemiState } from '../../types/uwalemi';
 import { 
   FileText, 
@@ -25,7 +25,10 @@ import {
   Plus,
   Share2,
   Trash2,
-  Coins
+  Coins,
+  Edit2,
+  Pencil,
+  Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { 
@@ -33,7 +36,10 @@ import {
   getDefaultFeeForMonth, 
   calculateMemberFeeDebt, 
   calculateAllMembersFeeDebts,
-  calculateLateFeePenalty
+  calculateLateFeePenalty,
+  classifyFinePaymentType,
+  decomposeFinePaymentAmounts,
+  normalizePaymentMethod
 } from '../../services/uwalemiService';
 import { UwalemiFinePaymentModal } from './UwalemiFinePaymentModal';
 import { 
@@ -43,6 +49,7 @@ import {
   generateFinesReportPDF,
   downloadPdfDocument,
   getPdfBlobUrl,
+  loadUwalemiLogoAsBase64,
   formatTZS,
   ReportPeriodFilter,
   isPeriodMatch,
@@ -57,9 +64,10 @@ interface Props {
   state: UwalemiState;
   onSaveState?: (state: UwalemiState) => Promise<boolean>;
   onOpenSmsWithTemplate?: (recipients: { name: string; phone: string; memberNo: string }[], templateText: string) => void;
+  readOnly?: boolean;
 }
 
-export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsWithTemplate }) => {
+export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsWithTemplate, readOnly }) => {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
 
@@ -87,9 +95,22 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
   const [finePaymentModalType, setFinePaymentModalType] = useState<'kikao' | 'ada_late_fee' | 'nyingine'>('kikao');
   const [finePaymentModalAmount, setFinePaymentModalAmount] = useState<number | undefined>(undefined);
 
+  // Edit Existing Fine Payment Modal state
+  const [editingFinePayment, setEditingFinePayment] = useState<any | null>(null);
+
   const [selectedEmergencyId, setSelectedEmergencyId] = useState<string>(
     state.emergencyFunds?.[0]?.id || ''
   );
+
+  // Synchronize selectedEmergencyId when emergencyFunds change
+  useEffect(() => {
+    if (state.emergencyFunds && state.emergencyFunds.length > 0) {
+      if (!selectedEmergencyId || !state.emergencyFunds.some(f => f.id === selectedEmergencyId)) {
+        setSelectedEmergencyId(state.emergencyFunds[0].id);
+      }
+    }
+  }, [state.emergencyFunds, selectedEmergencyId]);
+
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [downloadSuccessToast, setDownloadSuccessToast] = useState<{
     show: boolean;
@@ -109,23 +130,88 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
   const emergencyFunds = state.emergencyFunds || [];
   const expenses = state.expenses || [];
 
-  const handleDeleteFinePaymentInReports = async (fp: any) => {
-    const amt = (Number(fp.amount) || Number(fp.paidAmount) || 0).toLocaleString();
-    if (!window.confirm(`Je, una uhakika unataka kufuta rekodi hii ya malipo ya faini ya TZS ${amt} kwa mwanachama ${fp.memberName || fp.memberNo} (Risiti: ${fp.receiptNo || fp.id})? Malipo haya yataondolewa kabisa kwenye rekodi za kikundi.`)) {
+  const handleDeleteEmergencyFundInReports = async (fundId: string) => {
+    if (readOnly) {
+      alert('Hali ya Kutazama Tu: Hauruhusiwi kufuta mchango.');
       return;
     }
-    const updatedFinePayments = (state.finePayments || []).filter(p => p.id !== fp.id);
+    const targetFund = emergencyFunds.find(f => f.id === fundId);
+    if (!targetFund) return;
+
+    const totalCollected = (targetFund.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const confirmMsg = `Je, una uhakika unataka kufuta kabisa tangazo na mfuko huu wa msiba:\n"${targetFund.title}"?\n\nKiasi kilichokusanywa: TZS ${totalCollected.toLocaleString()} (${targetFund.payments?.length || 0} michango).\n\nTangazo hili litaondolewa kabisa kwenye mfumo mzima (Ripoti, SMS na Daftari la Michango).`;
+
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    const updatedFunds = emergencyFunds.filter(f => f.id !== fundId);
+    await onSaveState({ ...state, emergencyFunds: updatedFunds });
+    if (selectedEmergencyId === fundId) {
+      setSelectedEmergencyId(updatedFunds[0]?.id || '');
+    }
+  };
+
+  const handleDeleteFinePaymentInReports = async (fp: any) => {
+    const amt = (Number(fp.amount) || Number(fp.paidAmount) || 0).toLocaleString();
+    if (!window.confirm(`Je, una uhakika unataka kufuta rekodi hii ya malipo ya faini ya TZS ${amt} kwa mwanachama ${fp.memberName || fp.memberNo} (Risiti: ${fp.receiptNo || fp.id})?\n\nMalipo haya yataondolewa kabisa kwenye mfumo mzima (Ripoti, PDF, na Daftari la Wanachama) na hali ya kikao itarejeshwa kama HAIJALIPWA.`)) {
+      return;
+    }
+    const updatedFinePayments = (state.finePayments || []).filter(p => p.id !== fp.id && p.receiptNo !== fp.receiptNo);
     const updatedAccruedFines = (state.accruedFines || []).filter(af => af.id !== fp.id && !(af.memberId === fp.memberId && af.fineType === fp.fineType));
     
+    let updatedMeetings = (state.meetings || []).map(m => {
+      const isTargetMeeting = fp.meetingId ? m.id === fp.meetingId : true;
+      if (isTargetMeeting) {
+        return {
+          ...m,
+          attendees: (m.attendees || []).map(a => {
+            if (a.memberId === fp.memberId || (fp.memberNo && a.memberNo === fp.memberNo)) {
+              return { ...a, finePaid: false };
+            }
+            return a;
+          })
+        };
+      }
+      return m;
+    });
+
+    if (onSaveState) {
+      await onSaveState({
+        ...state,
+        finePayments: updatedFinePayments,
+        accruedFines: updatedAccruedFines,
+        meetings: updatedMeetings
+      });
+    }
+  };
+
+  const handleSaveEditedFinePayment = async (edited: any) => {
+    const numAmt = Number(edited.amount) || 0;
+    const updatedFinePayments = (state.finePayments || []).map(p => {
+      if (p.id === edited.id || (edited.receiptNo && p.receiptNo === edited.receiptNo)) {
+        return {
+          ...p,
+          amount: numAmt,
+          paymentDate: edited.paymentDate || p.paymentDate,
+          paymentMethod: edited.paymentMethod || p.paymentMethod,
+          fineType: edited.fineType || p.fineType,
+          fineTitle: edited.fineTitle || p.fineTitle,
+          notes: edited.notes || p.notes
+        };
+      }
+      return p;
+    });
+
     let updatedMeetings = state.meetings;
-    if (fp.fineType === 'kikao' && fp.meetingId) {
+    if (edited.meetingId) {
       updatedMeetings = (state.meetings || []).map(m => {
-        if (m.id === fp.meetingId) {
+        if (m.id === edited.meetingId) {
           return {
             ...m,
             attendees: (m.attendees || []).map(a => {
-              if (a.memberId === fp.memberId || a.memberNo === fp.memberNo) {
-                return { ...a, finePaid: false };
+              if (a.memberId === edited.memberId || (edited.memberNo && a.memberNo === edited.memberNo)) {
+                return { ...a, fineAmount: numAmt, finePaid: true };
               }
               return a;
             })
@@ -139,10 +225,10 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
       await onSaveState({
         ...state,
         finePayments: updatedFinePayments,
-        accruedFines: updatedAccruedFines,
         meetings: updatedMeetings
       });
     }
+    setEditingFinePayment(null);
   };
 
   const getReportPeriodFilter = (): ReportPeriodFilter => {
@@ -278,22 +364,21 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
   });
 
   let totalLateFeePaidInPeriod = 0;
-  let totalKikaoReceiptsPeriod = 0;
+  let totalMeetingLateReceiptsPeriod = 0;
+  let totalMeetingAbsentReceiptsPeriod = 0;
+  let totalOtherFinesReceiptsPeriod = 0;
+
   periodFinePayments.forEach(fp => {
-    const amt = Number(fp.amount) || 0;
-    if (fp.fineType === 'ada_late_fee') {
-      totalLateFeePaidInPeriod += amt;
-    } else {
-      totalKikaoReceiptsPeriod += amt;
-    }
+    const decomp = decomposeFinePaymentAmounts(fp, state);
+    totalLateFeePaidInPeriod += decomp.adaLateFee;
+    totalMeetingLateReceiptsPeriod += decomp.meetingLate;
+    totalMeetingAbsentReceiptsPeriod += decomp.meetingAbsent;
+    totalOtherFinesReceiptsPeriod += decomp.other;
   });
 
-  const totalMeetingLatePaidInPeriod = Math.max(
-    totalMeetingLatePeriodCollected,
-    totalKikaoReceiptsPeriod > totalMeetingAbsentPeriodCollected ? (totalKikaoReceiptsPeriod - totalMeetingAbsentPeriodCollected) : totalMeetingLatePeriodCollected
-  );
-  const totalMeetingAbsentPaidInPeriod = totalMeetingAbsentPeriodCollected;
-  const totalMeetingFinesPeriodCollected = Math.max(totalMeetingLatePeriodCollected + totalMeetingAbsentPeriodCollected, totalKikaoReceiptsPeriod);
+  const totalMeetingLatePaidInPeriod = totalMeetingLateReceiptsPeriod > 0 ? totalMeetingLateReceiptsPeriod : totalMeetingLatePeriodCollected;
+  const totalMeetingAbsentPaidInPeriod = totalMeetingAbsentReceiptsPeriod > 0 ? totalMeetingAbsentReceiptsPeriod : totalMeetingAbsentPeriodCollected;
+  const totalMeetingFinesPeriodCollected = totalMeetingLatePaidInPeriod + totalMeetingAbsentPaidInPeriod + totalOtherFinesReceiptsPeriod;
   const totalMeetingFinesPeriodUnpaid = totalMeetingLatePeriodUnpaid + totalMeetingAbsentPeriodUnpaid;
 
   const totalAllFinesPeriodCollected = totalLateFeePaidInPeriod + totalMeetingFinesPeriodCollected;
@@ -351,9 +436,10 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
   };
 
   // Actions
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setIsGenerating(true);
     try {
+      await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
       const { doc, fileName } = getCurrentPDFDoc();
       const blobUrl = downloadPdfDocument(doc, fileName);
       setDownloadSuccessToast({
@@ -372,8 +458,9 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
     }
   };
 
-  const handlePreviewPDF = () => {
+  const handlePreviewPDF = async () => {
     try {
+      await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
       const { doc, fileName, title } = getCurrentPDFDoc();
       const blobUrl = getPdfBlobUrl(doc);
       setPreviewPdfModal({
@@ -393,55 +480,94 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
   };
 
   const handleExportExcel = () => {
+    const filter = getReportPeriodFilter();
+    const safeLabel = (filter.periodLabel || 'Kipindi').replace(/[^a-zA-Z0-9]/g, '_');
+
     if (reportType === 'financial') {
-      const data = [
-        ['UWALEMI - TAARIFA YA FEDHA NA HAZINA'],
-        ['Mwaka', selectedYear, 'Mwezi', selectedMonth === 'all' ? 'Mwaka Mzima' : monthNamesSw[selectedMonth - 1]],
-        [],
-        ['AINA YA MAPATO', 'KIASI (TZS)'],
-        ['Ada za Kila Mwezi', totalMonthlyCollected],
-        ...(includeRegFee ? [['Ada za Usajili wa Wanachama (2023)', totalRegFees]] : []),
-        ['Michango ya Dharura & Misiba', emergencyCollectedInPeriod],
-        ['JUMLA KUU YA MAPATO', totalInflowsPeriod],
-        [],
-        ['ORODHA YA MATUMIZI'],
-        ['Tarehe', 'Aina ya Matumizi', 'Kundi', 'Mlipwaji', 'Mwidhinishaji', 'Kiasi (TZS)'],
-        ...filteredExpenses.map(e => [e.date, e.title, e.category, e.paidTo, e.approvedBy, e.amount]),
-        [],
-        ['JUMLA YA MATUMIZI', totalExpensesPeriod],
-        ['SALIO HALISI LA KIPINDI', netBalancePeriod]
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(data);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Ripoti ya Fedha');
-      XLSX.writeFile(wb, `UWALEMI_Fedha_${selectedYear}.xlsx`);
+
+      // Sheet 1: Muhtasari wa Hazina
+      const summaryData = [
+        ['UWALEMI - TAARIFA YA MAPATO, MATUMIZI NA HAZINA'],
+        ['Kipindi:', filter.periodLabel],
+        ['Tarehe ya Ripoti:', new Date().toLocaleDateString('sw-TZ', { dateStyle: 'long' })],
+        [],
+        ['1. TAARIFA YA MAPATO (INFLOWS)', 'KIASI (TZS)'],
+        ['Ada za Kila Mwezi (Monthly Fees)', totalMonthlyCollected],
+        ...(includeRegFee ? [['Ada za Usajili wa Wanachama (Registration)', totalRegFees]] : []),
+        ['Faini na Adhabu Zilizokusanywa (Fines & Penalties)', totalAllFinesPeriodCollected],
+        ['Michango ya Dharura & Misiba (Emergency Funds)', emergencyCollectedInPeriod],
+        ['JUMLA KUU YA MAPATO (TOTAL INFLOW)', totalInflowsPeriod],
+        [],
+        ['2. TAARIFA YA MATUMIZI (OUTFLOWS)', 'KIASI (TZS)'],
+        ['Matumizi ya Kikundi (Expenses)', totalExpensesPeriod],
+        ['JUMLA KUU YA MATUMIZI (TOTAL OUTFLOW)', totalExpensesPeriod],
+        [],
+        ['3. SALIO LA HAZINA (TREASURY BALANCE)', 'KIASI (TZS)'],
+        ['SALIO HALISI (NET TREASURY BALANCE)', netBalancePeriod]
+      ];
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Muhtasari wa Hazina');
+
+      // Sheet 2: Mchanganuo wa Matumizi
+      const expensesRows = filteredExpenses.map(e => ({
+        'Tarehe': e.date,
+        'Matumizi / Kazi': e.title,
+        'Kundi': e.category || 'Mengineyo',
+        'Mlipwaji': e.paidTo || '-',
+        'Mwidhinishaji': e.approvedBy || '-',
+        'Namba ya Risiti / Kumbukumbu': e.receiptNo || '-',
+        'Kiasi (TZS)': Number(e.amount) || 0
+      }));
+      const wsExpenses = XLSX.utils.json_to_sheet(expensesRows);
+      XLSX.utils.book_append_sheet(wb, wsExpenses, 'Mchango wa Matumizi');
+
+      // Sheet 3: Michango ya Dharura
+      const emergencyPaymentsRows: any[] = [];
+      emergencyFunds.forEach(ef => {
+        (ef.payments || []).forEach(p => {
+          const iso = normalizeDateToISO(p.paymentDate);
+          const pYear = iso ? Number(iso.substring(0, 4)) : 0;
+          const pMonth = iso ? Number(iso.substring(5, 7)) : 0;
+          if (isPeriodMatch(currentPeriodFilter, pYear, pMonth, p.paymentDate)) {
+            emergencyPaymentsRows.push({
+              'Mfuko / Mchango': ef.title,
+              'Namba ya Mjumbe': p.memberNo || '-',
+              'Jina la Mjumbe': p.memberName || '-',
+              'Tarehe ya Malipo': p.paymentDate,
+              'Njia ya Malipo': normalizePaymentMethod(p.paymentMethod),
+              'Kumbukumbu / Risiti': p.referenceNo || p.receiptNo || '-',
+              'Kiasi (TZS)': Number(p.amount) || 0
+            });
+          }
+        });
+      });
+      const wsEmergency = XLSX.utils.json_to_sheet(emergencyPaymentsRows);
+      XLSX.utils.book_append_sheet(wb, wsEmergency, 'Michango ya Dharura');
+
+      XLSX.writeFile(wb, `UWALEMI_Ripoti_ya_Fedha_${safeLabel}.xlsx`);
+
     } else if (reportType === 'members') {
-      const defaultMonthlyFee = Number(state.groupSettings?.monthlyFeeDefault) || 0;
       const activeMonths = getActiveMonthsForPeriod(currentPeriodFilter);
 
       const rows = members.map(m => {
-        // 1. Registration (Only in 2023)
         const regFeeAmount = includeRegFee ? (Number(m.registrationFeeAmount) || 0) : 0;
         const regPaid = includeRegFee ? (m.registrationFeePaidAmount !== undefined ? m.registrationFeePaidAmount : (m.registrationFeePaid ? regFeeAmount : 0)) : 0;
         const regDebt = includeRegFee ? Math.max(0, regFeeAmount - regPaid) : 0;
 
-        // 2. Month-by-month values
         const monthCols: Record<string, any> = {};
         activeMonths.forEach(am => {
           const rec = monthlyPayments.find(p => (p.memberId === m.id || (m.memberNo && p.memberNo === m.memberNo)) && Number(p.year) === Number(am.year) && Number(p.month) === Number(am.month));
           monthCols[am.label] = rec && Number(rec.paidAmount) > 0 ? Number(rec.paidAmount) : 0;
         });
 
-        // 3. Monthly Fee Total & Late Fee Penalty
         const expFee = activeMonths.reduce((s, am) => s + getDefaultFeeForMonth(am.year, am.month, m.monthlyFeeAmount), 0);
         const paidFee = monthlyPayments.filter(p => (p.memberId === m.id || (m.memberNo && p.memberNo === m.memberNo)) && isPeriodMatch(currentPeriodFilter, p.year, p.month, p.paymentDate)).reduce((s, p) => s + (Number(p.paidAmount) || 0), 0);
         const feeDebt = Math.max(0, expFee - paidFee);
 
-        // Calculate member debt info with late fee penalty
         const memberDebtInfo = calculateMemberFeeDebt(m, state);
         const lateFeePenalty = memberDebtInfo.lateFeePenalty || 0;
 
-        // 4. Meeting Fines
         let meetingFinesPaid = 0;
         let meetingFinesDebt = 0;
         (state.meetings || []).forEach(mtg => {
@@ -457,7 +583,6 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
           }
         });
 
-        // 5. Emergency
         let emergencyPaid = 0;
         (state.emergencyFunds || []).forEach(ef => {
           (ef.payments || []).forEach(p => {
@@ -484,14 +609,14 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
         };
 
         if (includeRegFee) {
-          rowData['KIINGILIO (2023)'] = regPaid > 0 ? regPaid : 0;
+          rowData['Kiingilio (2023)'] = regPaid;
         }
 
         Object.assign(rowData, monthCols);
         rowData['Ada Zilizolipwa'] = paidFee;
         rowData['Deni la Ada'] = feeDebt;
-        rowData['Faini ya Kuchelewa Ada (>Miezi 3)'] = lateFeePenalty;
-        rowData['Faini za Vikao'] = meetingFinesDebt;
+        rowData['Faini ya Kuchelewa Ada (Kuanzia Mwezi wa 6)'] = lateFeePenalty;
+        rowData['Faini za Vikao (Zisizolipwa)'] = meetingFinesDebt;
         rowData['Jumla ya Faini'] = totalFinesDebt;
         rowData['Michango ya Dharura'] = emergencyPaid;
         rowData['Jumla ya Fedha Alizotoa'] = memberTotalContributed;
@@ -500,12 +625,17 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
 
         return rowData;
       });
+
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Daftari la Wanachama');
-      XLSX.writeFile(wb, `UWALEMI_Daftari_la_Wanachama_${Date.now()}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, 'Daftari la Ada za Wanachama');
+      XLSX.writeFile(wb, `UWALEMI_Mchanganuo_Ada_${safeLabel}.xlsx`);
+
     } else if (reportType === 'fines') {
-      const rows = members.map(m => {
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Muhtasari wa Faini za Wajumbe
+      const summaryFinesRows = members.map(m => {
         const debtInfo = calculateMemberFeeDebt(m, state);
         const lateFeePenalty = debtInfo.lateFeePenalty || 0;
         const unpaidMonthsCount = debtInfo.unpaidCount || 0;
@@ -534,7 +664,7 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
           'Namba ya Simu': m.phone,
           'Wadhifa': m.role || 'Mjumbe',
           'Miezi ya Deni la Ada': unpaidMonthsCount,
-          'Faini ya Kuchelewa Ada (>Miezi 3)': lateFeePenalty,
+          'Faini ya Kuchelewa Ada (Kuanzia Mwezi wa 6)': lateFeePenalty,
           'Faini za Vikao (Zisizolipwa)': meetingFinesDebt,
           'Faini za Vikao (Zilizolipwa)': meetingFinesPaid,
           'Jumla ya Faini Zinazodaiwa': totalMemberFineDebt,
@@ -542,25 +672,55 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
           'Hali ya Faini': totalMemberFineDebt > 0 ? 'Inadaiwa' : meetingFinesPaid > 0 ? 'Imelipwa' : 'Hakuna Faini'
         };
       });
+      const wsSummaryFines = XLSX.utils.json_to_sheet(summaryFinesRows);
+      XLSX.utils.book_append_sheet(wb, wsSummaryFines, 'Muhtasari wa Faini za Wajumbe');
 
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Ripoti ya Faini');
-      XLSX.writeFile(wb, `UWALEMI_Ripoti_ya_Faini_${Date.now()}.xlsx`);
+      // Sheet 2: Mchanganuo wa Faini za Vikao
+      const meetingFinesRows = meetingFinesDetailedList.map(item => ({
+        'Tarehe ya Kikao': item.date,
+        'Kikao': item.title,
+        'Namba ya Mjumbe': item.memberNo,
+        'Jina la Mjumbe': item.memberName,
+        'Kosa / Sababu': item.reason,
+        'Kiasi cha Faini (TZS)': item.amount,
+        'Hali ya Malipo': item.paid ? 'Imelipwa' : 'Haijalipwa'
+      }));
+      const wsMeetingFines = XLSX.utils.json_to_sheet(meetingFinesRows);
+      XLSX.utils.book_append_sheet(wb, wsMeetingFines, 'Faini za Vikao');
+
+      // Sheet 3: Marekodi ya Malipo ya Faini
+      const receiptsRows = periodFinePayments.map(fp => {
+        const decomp = decomposeFinePaymentAmounts(fp, state);
+        return {
+          'Namba ya Risiti': fp.receiptNo || fp.id,
+          'Tarehe ya Malipo': fp.paymentDate,
+          'Namba ya Mjumbe': fp.memberNo || '-',
+          'Jina la Mjumbe': fp.memberName || '-',
+          'Aina ya Faini': fp.fineType === 'kikao' ? 'Faini ya Kikao' : fp.fineType === 'ada_late_fee' ? 'Faini ya Kuchelewa Ada' : fp.fineTitle || 'Faini Nyingine',
+          'Njia ya Malipo': normalizePaymentMethod(fp.paymentMethod),
+          'Kiasi Kilicholipwa (TZS)': fp.amount || fp.paidAmount || 0,
+          'Maelezo': fp.notes || '-'
+        };
+      });
+      const wsReceipts = XLSX.utils.json_to_sheet(receiptsRows);
+      XLSX.utils.book_append_sheet(wb, wsReceipts, 'Malipo ya Faini yaliyofanyika');
+
+      XLSX.writeFile(wb, `UWALEMI_Ripoti_ya_Faini_${safeLabel}.xlsx`);
+
     } else {
       if (!currentEmergencyFund) return;
       const rows = (currentEmergencyFund.payments || []).map(p => ({
         'Namba ya Mjumbe': p.memberNo,
         'Jina la Mjumbe': p.memberName,
         'Tarehe': p.paymentDate,
-        'Njia ya Malipo': p.paymentMethod,
+        'Njia ya Malipo': normalizePaymentMethod(p.paymentMethod),
         'Kumbukumbu': p.referenceNo || p.receiptNo || '',
         'Kiasi Kilicholipwa': p.amount
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Mchango wa Dharura');
-      XLSX.writeFile(wb, `UWALEMI_${currentEmergencyFund.title.replace(/\s+/g, '_')}.xlsx`);
+      XLSX.writeFile(wb, `UWALEMI_Mchango_${currentEmergencyFund.title.replace(/\s+/g, '_')}.xlsx`);
     }
   };
 
@@ -891,18 +1051,34 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
             </div>
           ) : (
             <div className="w-full">
-              <label className="text-xs text-slate-400 block mb-1">Chagua Mchango wa Dharura:</label>
-              <select
-                value={selectedEmergencyId}
-                onChange={(e) => setSelectedEmergencyId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
-              >
-                {emergencyFunds.map(f => (
-                  <option key={f.id} value={f.id}>
-                    {f.title} (Mfaidikaji: {f.beneficiaryName}) - TZS {(f.targetAmount || 0).toLocaleString()}
-                  </option>
-                ))}
-              </select>
+              <label className="text-xs text-slate-400 block mb-1">Chagua Mchango wa Dharura / Msiba:</label>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <select
+                  value={selectedEmergencyId || emergencyFunds[0]?.id || ''}
+                  onChange={(e) => setSelectedEmergencyId(e.target.value)}
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                >
+                  {emergencyFunds.map(f => {
+                    const pSum = (f.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+                    return (
+                      <option key={f.id} value={f.id}>
+                        {f.title} — Mfaidikaji: {f.beneficiaryName} | Zilizokusanywa: TZS {pSum.toLocaleString()} ({f.payments?.length || 0} michango)
+                      </option>
+                    );
+                  })}
+                </select>
+                {!readOnly && currentEmergencyFund && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteEmergencyFundInReports(currentEmergencyFund.id)}
+                    className="px-3 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white text-xs font-semibold border border-rose-500/30 transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
+                    title="Futa Mchango / Tangazo Hili la Msiba"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Futa Mchango
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -912,8 +1088,13 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 sm:p-8 backdrop-blur-md" id="printable-report-area">
         {/* Letterhead Preview */}
         <div className="border-b-2 border-emerald-600/60 pb-5 mb-6 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 mb-2">
-            <Building className="w-6 h-6" />
+          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-full p-0.5 bg-gradient-to-tr from-emerald-500 via-blue-500 to-teal-400 shadow-xl shadow-emerald-950/60 mb-2.5 flex items-center justify-center">
+            <img 
+              src={state.groupSettings?.logoUrl || '/uwalemi_logo.png'} 
+              alt="UWALEMI Emblem" 
+              className="w-full h-full object-cover rounded-full bg-slate-950 border border-slate-900"
+              referrerPolicy="no-referrer"
+            />
           </div>
           <h3 className="text-2xl font-black text-white tracking-tight uppercase">
             {state.groupSettings?.groupName || 'UWALEMI'}
@@ -1629,26 +1810,30 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
             });
 
             let memLateFeePaid = 0;
-            let memKikaoReceipts = 0;
+            let memMeetingLatePaidFromReceipts = 0;
+            let memMeetingAbsentPaidFromReceipts = 0;
+            let memOtherFinesPaid = 0;
+
             memberFinePayments.forEach(fp => {
-              const amt = Number(fp.amount) || 0;
-              if (fp.fineType === 'ada_late_fee') {
-                memLateFeePaid += amt;
-              } else {
-                memKikaoReceipts += amt;
-              }
+              const decomp = decomposeFinePaymentAmounts(fp, state);
+              memLateFeePaid += decomp.adaLateFee;
+              memMeetingLatePaidFromReceipts += decomp.meetingLate;
+              memMeetingAbsentPaidFromReceipts += decomp.meetingAbsent;
+              memOtherFinesPaid += decomp.other;
             });
 
-            if (memKikaoReceipts > 0) {
-              const totalMeetingAttPaid = memMeetingLatePaid + memMeetingAbsentPaid;
-              if (memKikaoReceipts > totalMeetingAttPaid) {
-                const extra = memKikaoReceipts - totalMeetingAttPaid;
-                memMeetingLatePaid += extra;
-              }
+            memMeetingLatePaid = Math.max(memMeetingLatePaid, memMeetingLatePaidFromReceipts);
+            memMeetingAbsentPaid = Math.max(memMeetingAbsentPaid, memMeetingAbsentPaidFromReceipts);
+
+            if (memMeetingLatePaid > 0 && memMeetingLateDebt > 0) {
+              memMeetingLateDebt = Math.max(0, memMeetingLateDebt - memMeetingLatePaidFromReceipts);
+            }
+            if (memMeetingAbsentPaid > 0 && memMeetingAbsentDebt > 0) {
+              memMeetingAbsentDebt = Math.max(0, memMeetingAbsentDebt - memMeetingAbsentPaidFromReceipts);
             }
 
             const totalMemberFineDebt = lateFeeDebt + memMeetingLateDebt + memMeetingAbsentDebt;
-            const totalMemberFinePaid = memLateFeePaid + memMeetingLatePaid + memMeetingAbsentPaid;
+            const totalMemberFinePaid = memLateFeePaid + memMeetingLatePaid + memMeetingAbsentPaid + memOtherFinesPaid;
             const totalMemberFines = totalMemberFineDebt + totalMemberFinePaid;
 
             if (totalMemberFineDebt > 0) {
@@ -1690,7 +1875,7 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
               if (penaltyMonths > 0) {
                 feeDebtNote = `${unpaidMonthsCount} miezi (${penaltyMonths} ya faini Mz 6+)`;
               } else {
-                feeDebtNote = `${unpaidMonthsCount} miezi (msamaha <=3M Mz 6+)`;
+                feeDebtNote = `${unpaidMonthsCount} miezi (Ada tu)`;
               }
             }
 
@@ -2223,33 +2408,69 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
-                        {(state.finePayments || []).map((fp) => (
-                          <tr key={fp.id} className="hover:bg-slate-900/40">
-                            <td className="p-3 font-mono font-bold text-emerald-400">{fp.receiptNo || fp.id}</td>
-                            <td className="p-3 text-slate-400">{fp.paymentDate}</td>
-                            <td className="p-3 font-mono text-slate-300">{fp.memberNo || '-'}</td>
-                            <td className="p-3 font-semibold text-white">{fp.memberName || '-'}</td>
-                            <td className="p-3 text-slate-300">
-                              {fp.fineType === 'kikao' ? 'Faini ya Kikao' : fp.fineType === 'ada_late_fee' ? 'Faini ya Kuchelewa Ada' : 'Faini Nyingine'}
-                            </td>
-                            <td className="p-3 text-right font-bold text-emerald-400">
-                              {formatTZS(Number(fp.amount) || Number((fp as any).paidAmount) || 0)}
-                            </td>
-                            <td className="p-3 text-slate-400">{fp.paymentMethod}</td>
-                            <td className="p-3 text-center">
-                              {onSaveState && (
-                                <button
-                                  onClick={() => handleDeleteFinePaymentInReports(fp)}
-                                  className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/30 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px]"
-                                  title="Futa / Ondoa rekodi hii ya malipo ya faini"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span>Futa</span>
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                        {(state.finePayments || []).map((fp) => {
+                          const decomp = decomposeFinePaymentAmounts(fp, state);
+                          return (
+                            <tr key={fp.id} className="hover:bg-slate-900/40">
+                              <td className="p-3 font-mono font-bold text-emerald-400">{fp.receiptNo || fp.id}</td>
+                              <td className="p-3 text-slate-400">{fp.paymentDate}</td>
+                              <td className="p-3 font-mono text-slate-300">{fp.memberNo || '-'}</td>
+                              <td className="p-3 font-semibold text-white">{fp.memberName || '-'}</td>
+                              <td className="p-3 text-slate-300">
+                                <div className="flex flex-wrap gap-1">
+                                  {decomp.meetingAbsent > 0 && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                      Utoro ({formatTZS(decomp.meetingAbsent)})
+                                    </span>
+                                  )}
+                                  {decomp.meetingLate > 0 && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                      Kuchelewa ({formatTZS(decomp.meetingLate)})
+                                    </span>
+                                  )}
+                                  {decomp.adaLateFee > 0 && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                      Kuchelewa Ada ({formatTZS(decomp.adaLateFee)})
+                                    </span>
+                                  )}
+                                  {decomp.other > 0 && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/10 text-slate-300 border border-slate-500/20">
+                                      Faini Nyingine ({formatTZS(decomp.other)})
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-3 text-right font-bold text-emerald-400">
+                                {formatTZS(Number(fp.amount) || Number((fp as any).paidAmount) || 0)}
+                              </td>
+                              <td className="p-3 text-slate-400">{normalizePaymentMethod(fp.paymentMethod)}</td>
+                              <td className="p-3 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {onSaveState && (
+                                    <button
+                                      onClick={() => setEditingFinePayment({ ...fp })}
+                                      className="p-1.5 rounded-lg text-emerald-400 hover:text-white hover:bg-emerald-500/30 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px]"
+                                      title="Hariri taarifa za risiti / kiasi cha faini hii"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                      <span>Hariri</span>
+                                    </button>
+                                  )}
+                                  {onSaveState && (
+                                    <button
+                                      onClick={() => handleDeleteFinePaymentInReports(fp)}
+                                      className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/30 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px]"
+                                      title="Futa / Ondoa rekodi hii ya malipo ya faini kwenye mfumo mzima"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <span>Futa</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2260,65 +2481,205 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
         })()}
 
         {/* 4. EMERGENCY FUND REPORT PREVIEW */}
-        {reportType === 'emergency' && currentEmergencyFund && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 block">Lengo la Mchango (Target)</span>
-                <span className="text-lg font-black text-rose-400">{formatTZS(currentEmergencyFund.targetAmount)}</span>
-                <span className="text-[10px] text-slate-500 block mt-1">Kila mjumbe: {formatTZS(currentEmergencyFund.perMemberTarget || 20000)}</span>
-              </div>
-
-              <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 block">Kiasi Kilichokusanywa</span>
-                <span className="text-lg font-black text-emerald-400">
-                  {formatTZS((currentEmergencyFund.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0))}
-                </span>
-                <span className="text-[10px] text-emerald-500/80 block mt-1">
-                  {currentEmergencyFund.payments?.length || 0} wamechanga
-                </span>
-              </div>
-
-              <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 block">Mfaidikaji</span>
-                <span className="text-lg font-black text-white">{currentEmergencyFund.beneficiaryName}</span>
-                <span className="text-[10px] text-slate-400 block mt-1">Uhusiano: {currentEmergencyFund.beneficiaryRelation || 'Mwanachama'}</span>
-              </div>
+        {reportType === 'emergency' && (
+          !currentEmergencyFund ? (
+            <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl bg-slate-950/40">
+              <HeartHandshake className="w-12 h-12 text-slate-600 mx-auto mb-2" />
+              <h3 className="text-base font-bold text-slate-300">Hakuna Mfuko au Tangazo la Dharura lililopo</h3>
+              <p className="text-xs text-slate-500 mt-1">Hakuna taarifa za michango ya dharura zilizosajiliwa kwa sasa.</p>
             </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Fund Title & Metadata Banner */}
+              <div className="bg-slate-950/90 p-5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                      {currentEmergencyFund.type === 'msiba' ? 'Msiba & Rambirambi' : currentEmergencyFund.type}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Mwisho wa Kuchanga: <strong className="text-slate-200">{currentEmergencyFund.deadline || 'Bila Kikomo'}</strong>
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-white mt-1.5">{currentEmergencyFund.title}</h3>
+                  {currentEmergencyFund.description && (
+                    <p className="text-xs text-slate-300 mt-1 max-w-2xl">{currentEmergencyFund.description}</p>
+                  )}
+                </div>
 
-            {/* List of payments */}
-            <div>
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">
-                Orodha ya Wajumbe Waliochanga ({currentEmergencyFund.payments?.length || 0}):
-              </h4>
-              <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800">
-                    <tr>
-                      <th className="p-3">#</th>
-                      <th className="p-3">Namba</th>
-                      <th className="p-3">Jina la Mjumbe</th>
-                      <th className="p-3">Tarehe</th>
-                      <th className="p-3">Njia ya Malipo</th>
-                      <th className="p-3 text-right">Kiasi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {(currentEmergencyFund.payments || []).map((p, idx) => (
-                      <tr key={p.id || idx} className="hover:bg-slate-900/40">
-                        <td className="p-3 text-slate-500">{idx + 1}</td>
-                        <td className="p-3 font-mono font-bold text-emerald-400">{p.memberNo}</td>
-                        <td className="p-3 font-semibold text-white">{p.memberName}</td>
-                        <td className="p-3 text-slate-400">{p.paymentDate}</td>
-                        <td className="p-3 text-slate-400">{p.paymentMethod}</td>
-                        <td className="p-3 text-right font-bold text-emerald-400">{formatTZS(p.amount)}</td>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteEmergencyFundInReports(currentEmergencyFund.id)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-800/60 text-xs font-semibold transition-all cursor-pointer shrink-0"
+                    title="Futa Kabisa Tangazo na Mchango Huu"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Futa Mchango Huu
+                  </button>
+                )}
+              </div>
+
+              {/* Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+                  <span className="text-[11px] text-slate-400 block">Lengo la Mchango (Target)</span>
+                  <span className="text-lg font-black text-rose-400 font-mono">{formatTZS(currentEmergencyFund.targetAmount)}</span>
+                  <span className="text-[10px] text-slate-500 block mt-1">Kila mjumbe: {formatTZS(currentEmergencyFund.perMemberTarget || 20000)}</span>
+                </div>
+
+                <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+                  <span className="text-[11px] text-slate-400 block">Kiasi Kilichokusanywa</span>
+                  <span className="text-lg font-black text-emerald-400 font-mono">
+                    {formatTZS((currentEmergencyFund.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0))}
+                  </span>
+                  <span className="text-[10px] text-emerald-500/80 block mt-1">
+                    {currentEmergencyFund.payments?.length || 0} ya {members.length} wajumbe
+                  </span>
+                </div>
+
+                <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+                  <span className="text-[11px] text-slate-400 block">Mfaidikaji</span>
+                  <span className="text-base font-bold text-white line-clamp-1">{currentEmergencyFund.beneficiaryName}</span>
+                  <span className="text-[10px] text-slate-400 block mt-1">Uhusiano: {currentEmergencyFund.beneficiaryRelation || 'Mwanachama'}</span>
+                </div>
+
+                <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+                  <span className="text-[11px] text-slate-400 block">Hali ya Mfuko</span>
+                  <span className={`text-base font-bold block ${
+                    currentEmergencyFund.status === 'active' ? 'text-emerald-400' :
+                    currentEmergencyFund.status === 'disbursed' ? 'text-blue-400' : 'text-slate-400'
+                  }`}>
+                    {currentEmergencyFund.status === 'active' ? 'Inaendelea Kupokea' :
+                     currentEmergencyFund.status === 'disbursed' ? 'Imekabidhiwa' : 'Imefungwa'}
+                  </span>
+                  {currentEmergencyFund.disbursedAmount ? (
+                    <span className="text-[10px] text-blue-400 block mt-1">Kiasi Kilichotolewa: {formatTZS(currentEmergencyFund.disbursedAmount)}</span>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* List of payments received */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Orodha ya Malipo ya Michango Yaliyopokelewa ({currentEmergencyFund.payments?.length || 0}):
+                  </h4>
+                  <span className="text-xs font-mono font-bold text-emerald-400">
+                    Jumla: {formatTZS((currentEmergencyFund.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0))}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-3">#</th>
+                        <th className="p-3">Namba</th>
+                        <th className="p-3">Jina la Mjumbe</th>
+                        <th className="p-3">Tarehe ya Malipo</th>
+                        <th className="p-3">Njia ya Malipo</th>
+                        <th className="p-3">Risiti / Kumbukumbu</th>
+                        <th className="p-3 text-right">Kiasi Kilichopokewa</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {(!currentEmergencyFund.payments || currentEmergencyFund.payments.length === 0) ? (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-slate-500 text-xs">
+                            Bado hakuna malipo ya michango yaliyorekodiwa kwa mfuko huu.
+                          </td>
+                        </tr>
+                      ) : (
+                        (currentEmergencyFund.payments || []).map((p, idx) => (
+                          <tr key={p.id || idx} className="hover:bg-slate-900/40">
+                            <td className="p-3 text-slate-500">{idx + 1}</td>
+                            <td className="p-3 font-mono font-bold text-emerald-400">{p.memberNo}</td>
+                            <td className="p-3 font-semibold text-white">{p.memberName}</td>
+                            <td className="p-3 text-slate-400">{p.paymentDate || '—'}</td>
+                            <td className="p-3 text-slate-400">{normalizePaymentMethod(p.paymentMethod)}</td>
+                            <td className="p-3 font-mono text-[11px] text-slate-400">{p.receiptNo || '—'}</td>
+                            <td className="p-3 text-right font-mono font-bold text-emerald-400">{formatTZS(Number(p.amount) || 0)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    {(currentEmergencyFund.payments && currentEmergencyFund.payments.length > 0) && (
+                      <tfoot className="bg-slate-900/90 font-bold border-t border-slate-800 text-slate-200">
+                        <tr>
+                          <td colSpan={6} className="p-3 text-right uppercase tracking-wider text-[11px]">
+                            Jumla Kuu Iliyokusanywa:
+                          </td>
+                          <td className="p-3 text-right font-mono text-emerald-400 font-black text-sm">
+                            {formatTZS((currentEmergencyFund.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+
+              {/* Full Members Contribution Matrix (Waliochanga & Wasiochanga) */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">
+                  Uchanganuzi wa Wanachama Wote kwa Mchango Huu ({members.length} Wajumbe):
+                </h4>
+                <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-3">#</th>
+                        <th className="p-3">Namba</th>
+                        <th className="p-3">Jina la Mjumbe</th>
+                        <th className="p-3">Lengo (TZS)</th>
+                        <th className="p-3">Kiasi Kilichotolewa</th>
+                        <th className="p-3">Hali</th>
+                        <th className="p-3">Tarehe & Njia</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {members.map((m, idx) => {
+                        const payment = (currentEmergencyFund.payments || []).find(
+                          p => p.memberId === m.id || p.memberNo === m.memberNo
+                        );
+                        const targetAmt = currentEmergencyFund.perMemberTarget || 20000;
+                        const paidAmt = payment ? (Number(payment.amount) || 0) : 0;
+                        const isComplete = paidAmt >= targetAmt;
+                        const isPartial = paidAmt > 0 && paidAmt < targetAmt;
+
+                        return (
+                          <tr key={m.id} className="hover:bg-slate-900/40">
+                            <td className="p-3 text-slate-500">{idx + 1}</td>
+                            <td className="p-3 font-mono font-bold text-emerald-400">{m.memberNo}</td>
+                            <td className="p-3 font-semibold text-white">{m.fullName}</td>
+                            <td className="p-3 font-mono text-slate-400">{formatTZS(targetAmt)}</td>
+                            <td className="p-3 font-mono font-bold">
+                              <span className={isComplete ? 'text-emerald-400' : isPartial ? 'text-amber-400' : 'text-slate-600'}>
+                                {formatTZS(paidAmt)}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                isComplete ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
+                                isPartial ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' :
+                                'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                              }`}>
+                                {isComplete ? 'Amekamilisha' : isPartial ? 'Amelipa Nusu' : 'Hajachanga'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-400 text-[11px]">
+                              {payment ? `${payment.paymentDate || '—'} (${normalizePaymentMethod(payment.paymentMethod)})` : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-          </div>
+          )
         )}
 
         {/* Signatures & Official Stamp Preview */}
@@ -2486,6 +2847,162 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
           initialAmount={finePaymentModalAmount}
           onOpenSmsWithTemplate={onOpenSmsWithTemplate}
         />
+      )}
+
+      {/* Edit Fine Payment Modal */}
+      {editingFinePayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Hariri Malipo ya Faini / Risiti</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Mwanachama: <span className="text-emerald-400 font-semibold">{editingFinePayment.memberName}</span> ({editingFinePayment.memberNo || 'Bila Namba'})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingFinePayment(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveEditedFinePayment(editingFinePayment);
+              }}
+              className="p-6 space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-medium mb-1">Namba ya Risiti</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingFinePayment.receiptNo || editingFinePayment.id}
+                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-slate-400 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-medium mb-1">Tarehe ya Malipo</label>
+                  <input
+                    type="date"
+                    required
+                    value={editingFinePayment.paymentDate || ''}
+                    onChange={(e) => setEditingFinePayment({ ...editingFinePayment, paymentDate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">Kiasi Kilicholipwa (TZS)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="500"
+                  value={editingFinePayment.amount || ''}
+                  onChange={(e) => setEditingFinePayment({ ...editingFinePayment, amount: Number(e.target.value) })}
+                  className="w-full bg-slate-950 border border-emerald-500/50 rounded-xl px-3 py-2.5 text-base font-bold text-emerald-400 focus:outline-none focus:border-emerald-500 font-mono"
+                />
+                {/* Quick Presets */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingFinePayment({ ...editingFinePayment, amount: 2000, fineType: 'kikao', fineTitle: 'Faini ya Kuchelewa Kikao' })}
+                    className="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 text-[11px] font-semibold cursor-pointer"
+                  >
+                    TZS 2,000 (Kuchelewa)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingFinePayment({ ...editingFinePayment, amount: 10000, fineType: 'kikao', fineTitle: 'Faini ya Utoro Kikao' })}
+                    className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 text-[11px] font-semibold cursor-pointer"
+                  >
+                    TZS 10,000 (Utoro)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingFinePayment({ ...editingFinePayment, amount: 12000, fineType: 'kikao', fineTitle: 'Faini ya Kikao (Utoro + Kuchelewa)' })}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 text-[11px] font-semibold cursor-pointer"
+                  >
+                    TZS 12,000 (Zote Mbili)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingFinePayment({ ...editingFinePayment, amount: 5000, fineType: 'ada_late_fee', fineTitle: 'Faini ya Kuchelewa Ada' })}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 text-[11px] font-semibold cursor-pointer"
+                  >
+                    TZS 5,000 (Ada)
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-medium mb-1">Aina ya Faini</label>
+                  <select
+                    value={editingFinePayment.fineType || 'kikao'}
+                    onChange={(e) => setEditingFinePayment({ ...editingFinePayment, fineType: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="kikao">Faini ya Kikao</option>
+                    <option value="ada_late_fee">Faini ya Kuchelewa Ada</option>
+                    <option value="nyingine">Faini Nyingine</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-medium mb-1">Njia ya Malipo</label>
+                  <select
+                    value={editingFinePayment.paymentMethod || 'M Koba'}
+                    onChange={(e) => setEditingFinePayment({ ...editingFinePayment, paymentMethod: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="M Koba">M Koba</option>
+                    <option value="TigoPesa">TigoPesa</option>
+                    <option value="Airtel Money">Airtel Money</option>
+                    <option value="Benki">Benki (NMB/CRDB)</option>
+                    <option value="Pesa Taslimu (Cash)">Pesa Taslimu (Cash)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-medium mb-1">Maelezo / Sababu ya Faini</label>
+                <input
+                  type="text"
+                  value={editingFinePayment.fineTitle || editingFinePayment.notes || ''}
+                  onChange={(e) => setEditingFinePayment({ ...editingFinePayment, fineTitle: e.target.value, notes: e.target.value })}
+                  placeholder="Mfano: Faini ya Utoro Kikao cha Tarehe 15/02/2026"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingFinePayment(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer"
+                >
+                  Ghairi
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/40"
+                >
+                  <Check className="w-4 h-4" />
+                  Hifadhi Mabadiliko
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

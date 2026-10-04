@@ -30,17 +30,23 @@ import {
   Coins,
   Scale,
   AlertTriangle,
-  FileText
+  FileText,
+  MessageSquare,
+  Phone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { generatePaymentReceiptPDF } from '../../services/uwalemiPdfGenerator';
+import { generatePaymentReceiptPDF, loadUwalemiLogoAsBase64 } from '../../services/uwalemiPdfGenerator';
 import { 
   sortMembersByLeadership, 
   getDefaultFeeForMonth, 
   triggerAutoReceiptSms,
   calculateMemberFeeDebt,
   calculateMemberOtherFines,
-  formatMemberReceiptDebtLines 
+  calculateLateFeePenalty,
+  autoAccrueLateFeeFines,
+  formatMemberReceiptDebtLines,
+  normalizePaymentMethod,
+  UWALEMI_THREE_MONTHS_ALERT_TEMPLATE
 } from '../../services/uwalemiService';
 
 interface Props {
@@ -49,6 +55,7 @@ interface Props {
   onOpenSmsWithTemplate?: (recipients: { name: string; phone: string; memberNo: string }[], templateText: string) => void;
   autoOpenRecordModal?: boolean;
   onResetAutoOpen?: () => void;
+  readOnly?: boolean;
 }
 
 export const UwalemiMonthlyFees: React.FC<Props> = ({ 
@@ -56,16 +63,17 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
   onSaveState, 
   onOpenSmsWithTemplate,
   autoOpenRecordModal,
-  onResetAutoOpen
+  onResetAutoOpen,
+  readOnly
 }) => {
   useEffect(() => {
-    if (autoOpenRecordModal) {
+    if (autoOpenRecordModal && !readOnly) {
       setIsRecordModalOpen(true);
       if (onResetAutoOpen) {
         onResetAutoOpen();
       }
     }
-  }, [autoOpenRecordModal, onResetAutoOpen]);
+  }, [autoOpenRecordModal, onResetAutoOpen, readOnly]);
 
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
@@ -112,9 +120,37 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     totalDebtAfter: number;
   } | null>(null);
 
+  // SMS Resend state for receipts
+  const [resendingReceiptSms, setResendingReceiptSms] = useState<boolean>(false);
+  const [receiptSmsStatus, setReceiptSmsStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [receiptPhoneInput, setReceiptPhoneInput] = useState<string>('');
+
+  useEffect(() => {
+    if (viewingReceipt) {
+      const member = state.members.find(m => m.id === viewingReceipt.memberId || m.memberNo === viewingReceipt.memberNo);
+      setReceiptPhoneInput(member?.phone || '');
+      setReceiptSmsStatus(null);
+    }
+  }, [viewingReceipt, state.members]);
+
+  useEffect(() => {
+    if (viewingMultiReceipt) {
+      setReceiptPhoneInput(viewingMultiReceipt.member?.phone || '');
+      setReceiptSmsStatus(null);
+    }
+  }, [viewingMultiReceipt]);
+
   // Custom Confirmation Dialog States
   const [wholeYearConfirmOpen, setWholeYearConfirmOpen] = useState(false);
   const [wholeYearData, setWholeYearData] = useState<{ member: UwalemiMember; year: number } | null>(null);
+  const [matrixToast, setMatrixToast] = useState<{ message: string; type: 'info' | 'warning' | 'success' } | null>(null);
+
+  useEffect(() => {
+    if (matrixToast) {
+      const timer = setTimeout(() => setMatrixToast(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [matrixToast]);
 
   // Annual Manual Entry Modal State (Jan - Dec)
   const [isAnnualModalOpen, setIsAnnualModalOpen] = useState<boolean>(false);
@@ -145,7 +181,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       12: getDefaultFeeForMonth(currentYear, 12),
     },
     paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'M-Pesa (Lipa Namba)',
+    paymentMethod: 'M Koba',
     referenceNo: '',
     note: `Ada ya mwaka mzima wa ${currentYear}`
   });
@@ -167,7 +203,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     amountPerMonth: getDefaultFeeForMonth(currentYear, currentMonth),
     useDefaultRates: true,
     paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'M-Pesa (Lipa Namba)',
+    paymentMethod: 'M Koba',
     referenceNo: ''
   });
 
@@ -198,7 +234,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     meetingId: '',
     fineReason: '',
     paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'M-Pesa (Lipa Namba)',
+    paymentMethod: 'M Koba',
     referenceNo: '',
     note: '',
     isTopUp: true
@@ -380,7 +416,9 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     const matchesSearch = 
       item.member.fullName.toLowerCase().includes(term) ||
       item.member.memberNo.toLowerCase().includes(term) ||
-      item.member.phone.includes(term);
+      item.member.phone.includes(term) ||
+      (item.payment?.receiptNo && item.payment.receiptNo.toLowerCase().includes(term)) ||
+      (item.payment?.referenceNo && item.payment.referenceNo.toLowerCase().includes(term));
     
     const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
     return matchesSearch && matchesStatus;
@@ -388,6 +426,10 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
 
   const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) {
+      alert('Hali ya Kutazama Tu: Hauruhusiwi kurekodi malipo.');
+      return;
+    }
     if (!paymentForm.memberId) {
       alert('Tafadhali chagua mwanachama.');
       return;
@@ -441,10 +483,18 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
 
       let updatedAccruedFines = [...(state.accruedFines || [])];
       if (selectedMemberDebtInfo && selectedMemberDebtInfo.lateFeePenalty > 0) {
-        const existing = updatedAccruedFines.find(
+        const existingIdx = updatedAccruedFines.findIndex(
           f => (f.memberId === member.id || f.memberNo === member.memberNo) && f.fineType === 'ada_late_fee'
         );
-        if (!existing) {
+        if (existingIdx >= 0) {
+          const ex = updatedAccruedFines[existingIdx];
+          const newAmt = Math.max(Number(ex.amount) || 0, selectedMemberDebtInfo.lateFeePenalty);
+          updatedAccruedFines[existingIdx] = {
+            ...ex,
+            amount: newAmt,
+            status: (ex.paidAmount || 0) >= newAmt ? 'paid' : (ex.paidAmount || 0) > 0 ? 'partial' : 'unpaid'
+          };
+        } else {
           updatedAccruedFines.push({
             id: `accrued-fine-${member.id}-${Date.now()}`,
             memberId: member.id,
@@ -567,10 +617,18 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
 
       let updatedAccruedFines = [...(state.accruedFines || [])];
       if (selectedMemberDebtInfo && selectedMemberDebtInfo.lateFeePenalty > 0) {
-        const existing = updatedAccruedFines.find(
+        const existingIdx = updatedAccruedFines.findIndex(
           f => (f.memberId === member.id || f.memberNo === member.memberNo) && f.fineType === 'ada_late_fee'
         );
-        if (!existing) {
+        if (existingIdx >= 0) {
+          const ex = updatedAccruedFines[existingIdx];
+          const newAmt = Math.max(Number(ex.amount) || 0, selectedMemberDebtInfo.lateFeePenalty);
+          updatedAccruedFines[existingIdx] = {
+            ...ex,
+            amount: newAmt,
+            status: (ex.paidAmount || 0) >= newAmt ? 'paid' : (ex.paidAmount || 0) > 0 ? 'partial' : 'unpaid'
+          };
+        } else {
           updatedAccruedFines.push({
             id: `accrued-fine-${member.id}-${Date.now()}`,
             memberId: member.id,
@@ -634,7 +692,10 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         fineTypeCategory = 'ada_late_fee';
       } else if (paymentForm.fineType === 'kikao') {
         const mtg = (state.meetings || []).find(m => m.id === paymentForm.meetingId);
-        fineTitle = mtg?.title ? `Faini ya Kikao (${mtg.title})` : 'Faini ya Kikao / Kutohudhuria';
+        const att = (mtg?.attendees || []).find(a => a.memberId === member.id || a.memberNo === member.memberNo);
+        const isLate = att?.status === 'late' || (fineAmt > 0 && fineAmt < 10000 && fineAmt % 2000 === 0);
+        const fineCategoryLabel = isLate ? 'Kuchelewa Kikao' : 'Utoro Kikao';
+        fineTitle = mtg?.title ? `Faini ya ${fineCategoryLabel} (${mtg.title})` : `Faini ya ${fineCategoryLabel}`;
         fineTypeCategory = 'kikao';
       } else if (paymentForm.fineType === 'all_fines') {
         fineTitle = 'Faini Zote (Kuchelewa Ada & Vikao)';
@@ -967,7 +1028,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       expectedAmount: expected,
       paidAmount: expected,
       paymentDate: new Date().toISOString().split('T')[0],
-      paymentMethod: 'M-Pesa (Lipa Namba)',
+      paymentMethod: 'M Koba',
       referenceNo: `AUTO-${Date.now().toString().slice(-6)}`,
       status: 'paid',
       receiptNo,
@@ -997,8 +1058,44 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     }
   };
 
+  // Open Record Payment Modal for a specific member directly
+  const handleOpenRecordModalForMember = (member: UwalemiMember, preferredMode: 'smart' | 'ada_late_fee' = 'smart') => {
+    const debtInfo = calculateMemberFeeDebt(member, state, selectedYear);
+    if (preferredMode === 'ada_late_fee' && debtInfo.lateFeePenalty > 0) {
+      setRecordMode('fine');
+      setPaymentForm({
+        memberId: member.id,
+        year: selectedYear,
+        month: selectedMonth,
+        amount: 0,
+        fineAmount: debtInfo.lateFeePenalty,
+        fineType: 'ada_late_fee',
+        paymentDate: new Date().toISOString().split('T')[0],
+        paymentMethod: 'M Koba',
+        referenceNo: '',
+        note: `Malipo ya Faini ya Kuchelewa Ada (${member.fullName})`
+      });
+    } else {
+      setRecordMode('smart');
+      setPaymentForm({
+        memberId: member.id,
+        year: selectedYear,
+        month: selectedMonth,
+        amount: debtInfo.feeDebt > 0 ? debtInfo.feeDebt : 20000,
+        fineAmount: debtInfo.totalFinesDebt > 0 ? debtInfo.totalFinesDebt : undefined,
+        fineType: debtInfo.lateFeePenalty > 0 ? 'all_fines' : 'kikao',
+        paymentDate: new Date().toISOString().split('T')[0],
+        paymentMethod: 'M Koba',
+        referenceNo: '',
+        note: ''
+      });
+    }
+    setIsRecordModalOpen(true);
+  };
+
   // Toggle single cell in Matrix Mode
   const handleToggleMonthCell = async (member: UwalemiMember, year: number, month: number) => {
+    if (readOnly) return;
     const existing = monthlyPayments.find(p => 
       (p.memberId === member.id || (member.memberNo && p.memberNo === member.memberNo)) && 
       Number(p.year) === Number(year) && 
@@ -1007,6 +1104,8 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     const expected = getDefaultFeeForMonth(year, month, member.monthlyFeeAmount);
 
     let updatedPayments = [...monthlyPayments];
+    let isUnticking = false;
+
     if (existing && Number(existing.paidAmount) >= expected) {
       // Toggle to unpaid
       updatedPayments = updatedPayments.filter(p => 
@@ -1014,6 +1113,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
           Number(p.year) === Number(year) && 
           Number(p.month) === Number(month))
       );
+      isUnticking = true;
     } else {
       // Mark as paid
       const receiptNo = `UWL-REC-${year}${String(month).padStart(2, '0')}-${member.memberNo.replace('UWL-', '')}`;
@@ -1027,7 +1127,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         expectedAmount: expected,
         paidAmount: expected,
         paymentDate: new Date().toISOString().split('T')[0],
-        paymentMethod: 'Taslimu / Benki',
+        paymentMethod: 'M Koba',
         referenceNo: `BULK-${year}`,
         status: 'paid',
         receiptNo,
@@ -1040,7 +1140,30 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       );
       updatedPayments.push(newPayment);
     }
-    await onSaveState({ ...state, monthlyPayments: updatedPayments });
+
+    const nextState: UwalemiState = { ...state, monthlyPayments: updatedPayments };
+    const reconciledState = autoAccrueLateFeeFines(nextState, isUnticking ? { year, month } : undefined);
+    await onSaveState(reconciledState);
+
+    if (isUnticking) {
+      const debtInfo = calculateMemberFeeDebt(member, reconciledState, year, month);
+      if (year >= 2026 && month >= 6 && debtInfo.lateFeePenalty > 0) {
+        setMatrixToast({
+          message: `⚠️ Ada ya ${monthNamesSw[month - 1]} ${year} imeondolewa kwa ${member.fullName}. Faini ya kuchelewa ada (TZS ${debtInfo.lateFeePenalty.toLocaleString()}) imetengenezwa hapo hapo! Faini itabaki hadi malipo ya faini yatakaporekodiwa.`,
+          type: 'warning'
+        });
+      } else {
+        setMatrixToast({
+          message: `Ada ya ${monthNamesSw[month - 1]} ${year} imeondolewa kwa ${member.fullName}.`,
+          type: 'info'
+        });
+      }
+    } else {
+      setMatrixToast({
+        message: `Ada ya ${monthNamesSw[month - 1]} ${year} (TZS ${expected.toLocaleString()}) imewekwa kuwa imelipwa kwa ${member.fullName}.`,
+        type: 'success'
+      });
+    }
   };
 
   // Mark all 12 months paid for a member in a specific year
@@ -1070,7 +1193,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         expectedAmount: expected,
         paidAmount: expected,
         paymentDate: `${year}-${monthStr}-15`,
-        paymentMethod: 'Taslimu / Benki',
+        paymentMethod: 'M Koba',
         referenceNo: `YEAR-${year}`,
         status: 'paid',
         receiptNo,
@@ -1107,7 +1230,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       year: targetYear,
       monthlyAmounts: initialAmounts,
       paymentDate: new Date().toISOString().split('T')[0],
-      paymentMethod: 'M-Pesa (Lipa Namba)',
+      paymentMethod: 'M Koba',
       referenceNo: '',
       note: `Ada ya mwaka mzima wa ${targetYear}`
     });
@@ -1248,7 +1371,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         'Mwezi (1-12)': 1,
         'Kiasi Kilicholipwa': 10000,
         'Tarehe (YYYY-MM-DD)': '2023-01-15',
-        'Njia ya Malipo': 'M-Pesa'
+        'Njia ya Malipo': 'M Koba'
       },
       {
         'Namba ya Mwanachama': 'UWL-001',
@@ -1257,7 +1380,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         'Mwezi (1-12)': 2,
         'Kiasi Kilicholipwa': 10000,
         'Tarehe (YYYY-MM-DD)': '2023-02-15',
-        'Njia ya Malipo': 'M-Pesa'
+        'Njia ya Malipo': 'M Koba'
       },
       {
         'Namba ya Mwanachama': 'UWL-002',
@@ -1304,7 +1427,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
           const month = Number(row['Mwezi (1-12)'] || row['Mwezi'] || row['Month'] || 1);
           const amount = Number(row['Kiasi Kilicholipwa'] || row['Amount'] || row['Kiasi'] || 10000);
           const pDate = String(row['Tarehe (YYYY-MM-DD)'] || row['Tarehe'] || new Date().toISOString().split('T')[0]);
-          const pMethod = String(row['Njia ya Malipo'] || row['Njia'] || 'M-Pesa');
+          const pMethod = normalizePaymentMethod(String(row['Njia ya Malipo'] || row['Njia'] || 'M Koba'));
 
           const member = members.find(m => m.memberNo.toLowerCase() === memberNo.toLowerCase() || m.fullName.toLowerCase() === memberNo.toLowerCase());
           if (member && year >= 2020 && month >= 1 && month <= 12) {
@@ -1425,6 +1548,43 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     }
   };
 
+  const handleSendThreeMonthsAlert = () => {
+    const activeM = members.filter(m => m.status === 'active');
+    const debtors = activeM.filter(m => {
+      const debtInfo = calculateMemberFeeDebt(m, state);
+      return (debtInfo.unpaidCount || 0) >= 3;
+    }).map(m => {
+      const debtInfo = calculateMemberFeeDebt(m, state);
+      return {
+        name: m.fullName,
+        phone: m.phone,
+        memberNo: m.memberNo,
+        memberId: m.id,
+        debtAmount: debtInfo.totalDebt,
+        feeDebt: debtInfo.feeDebt,
+        lateFeePenalty: debtInfo.lateFeePenalty,
+        otherFinesDebt: debtInfo.otherFinesDebt,
+        totalFinesDebt: debtInfo.totalFinesDebt,
+        startMonth: debtInfo.startMonthName,
+        endMonth: debtInfo.endMonthName,
+        unpaidMonths: debtInfo.unpaidMonthsText,
+        periodSummary: debtInfo.periodSummary,
+        monthsCount: debtInfo.unpaidCount
+      };
+    });
+
+    if (debtors.length === 0) {
+      alert('Hakuna mwanachama anayedaiwa ada ya miezi 3 au zaidi!');
+      return;
+    }
+
+    const template = UWALEMI_THREE_MONTHS_ALERT_TEMPLATE;
+
+    if (onOpenSmsWithTemplate) {
+      onOpenSmsWithTemplate(debtors, template);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn pb-12" id="uwalemi-monthly-fees">
       {/* Header Banner */}
@@ -1465,38 +1625,57 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               </button>
             </div>
 
-            <button
-              onClick={() => handleOpenAnnualModal('all', selectedYear)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-400 hover:to-emerald-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/40 transition-all cursor-pointer transform hover:-translate-y-0.5"
-            >
-              <Sparkles className="w-4 h-4 text-slate-950" />
-              ⚡ Jaza Mwaka Mzima (Jan - Des)
-            </button>
+            {!readOnly ? (
+              <>
+                <button
+                  onClick={() => handleOpenAnnualModal('all', selectedYear)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-400 hover:to-emerald-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/40 transition-all cursor-pointer transform hover:-translate-y-0.5"
+                >
+                  <Sparkles className="w-4 h-4 text-slate-950" />
+                  ⚡ Jaza Mwaka Mzima (Jan - Des)
+                </button>
 
-            <button
-              onClick={() => setIsBulkModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md shadow-purple-900/30 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Miezi Mingi (Bulk)
-            </button>
+                <button
+                  onClick={() => setIsBulkModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md shadow-purple-900/30 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Miezi Mingi (Bulk)
+                </button>
 
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-md shadow-teal-900/30 transition-all cursor-pointer"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              Pakia Excel Ada
-            </button>
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-md shadow-teal-900/30 transition-all cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  Pakia Excel Ada
+                </button>
 
-            {onOpenSmsWithTemplate && (
-              <button
-                onClick={handleSendFeeDebtOnlyReminder}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
-              >
-                <Send className="w-3.5 h-3.5 text-emerald-400" />
-                💳 Kumbusha Ada Pekee (SMS)
-              </button>
+                {onOpenSmsWithTemplate && (
+                  <>
+                    <button
+                      onClick={handleSendFeeDebtOnlyReminder}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                    >
+                      <Send className="w-3.5 h-3.5 text-emerald-400" />
+                      💳 Kumbusha Ada Pekee (SMS)
+                    </button>
+
+                    <button
+                      onClick={handleSendThreeMonthsAlert}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600/30 hover:bg-red-600/40 text-red-200 border border-red-500/50 text-xs font-bold transition-all cursor-pointer shadow-sm ring-1 ring-red-500/30"
+                      title="Tuma Alert ya Katiba na Onyo la Faini ya Tarehe 1 kwa wote wenye madeni ya miezi 3+"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                      🚨 Alert ya Katiba (Miezi 3+)
+                    </button>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+                <span>👁️ Hali ya Kutazama Tu</span>
+              </div>
             )}
 
             <button
@@ -1507,25 +1686,27 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               Pakua
             </button>
 
-            <button
-              onClick={() => {
-                setPaymentForm({
-                  memberId: members[0]?.id || '',
-                  year: selectedYear,
-                  month: selectedMonth,
-                  amount: getDefaultFeeForMonth(selectedYear, selectedMonth, members[0]?.monthlyFeeAmount),
-                  paymentDate: new Date().toISOString().split('T')[0],
-                  paymentMethod: 'M-Pesa (Lipa Namba)',
-                  referenceNo: '',
-                  note: ''
-                });
-                setIsRecordModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Mwezi Mmoja
-            </button>
+            {!readOnly && (
+              <button
+                onClick={() => {
+                  setPaymentForm({
+                    memberId: members[0]?.id || '',
+                    year: selectedYear,
+                    month: selectedMonth,
+                    amount: getDefaultFeeForMonth(selectedYear, selectedMonth, members[0]?.monthlyFeeAmount),
+                    paymentDate: new Date().toISOString().split('T')[0],
+                    paymentMethod: 'M Koba',
+                    referenceNo: '',
+                    note: ''
+                  });
+                  setIsRecordModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Mwezi Mmoja
+              </button>
+            )}
           </div>
         </div>
 
@@ -1617,7 +1798,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder={`Tafuta mwanachama kwa jina au namba ya UWL...`}
+                placeholder="Tafuta mwanachama kwa jina, namba ya UWL, au risiti (REC)..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
@@ -1722,34 +1903,38 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                               </button>
                             )}
 
-                            <button
-                              onClick={() => {
-                                setPaymentForm({
-                                  memberId: member.id,
-                                  year: selectedYear,
-                                  month: selectedMonth,
-                                  amount: payment ? payment.paidAmount : expected,
-                                  paymentDate: payment?.paymentDate || new Date().toISOString().split('T')[0],
-                                  paymentMethod: payment?.paymentMethod || 'M-Pesa (Lipa Namba)',
-                                  referenceNo: payment?.referenceNo || '',
-                                  note: payment?.note || ''
-                                });
-                                setIsRecordModalOpen(true);
-                              }}
-                              title="Rekodi / Hariri Kiasi Maalumu cha Mwezi Huu"
-                              className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
-                            >
-                              <CreditCard className="w-3.5 h-3.5" />
-                            </button>
+                            {!readOnly && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setPaymentForm({
+                                      memberId: member.id,
+                                      year: selectedYear,
+                                      month: selectedMonth,
+                                      amount: payment ? payment.paidAmount : expected,
+                                      paymentDate: payment?.paymentDate || new Date().toISOString().split('T')[0],
+                                      paymentMethod: normalizePaymentMethod(payment?.paymentMethod),
+                                      referenceNo: payment?.referenceNo || '',
+                                      note: payment?.note || ''
+                                    });
+                                    setIsRecordModalOpen(true);
+                                  }}
+                                  title="Rekodi / Hariri Kiasi Maalumu cha Mwezi Huu"
+                                  className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                </button>
 
-                            <button
-                              onClick={() => handleOpenAnnualModal(member.id, selectedYear)}
-                              title={`Jaza Taarifa za Mwaka Mzima wa ${selectedYear} (Jan - Des) kwa ${member.fullName}`}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/30 text-[10.5px] font-bold transition-all cursor-pointer whitespace-nowrap"
-                            >
-                              <Sparkles className="w-3 h-3" />
-                              Mwaka
-                            </button>
+                                <button
+                                  onClick={() => handleOpenAnnualModal(member.id, selectedYear)}
+                                  title={`Jaza Taarifa za Mwaka Mzima wa ${selectedYear} (Jan - Des) kwa ${member.fullName}`}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/30 text-[10.5px] font-bold transition-all cursor-pointer whitespace-nowrap"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  Mwaka
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1763,6 +1948,32 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       ) : (
         /* 12-MONTH MATRIX GRID VIEW */
         <div className="space-y-4">
+          {matrixToast && (
+            <div className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs font-medium shadow-lg transition-all ${
+              matrixToast.type === 'warning'
+                ? 'bg-amber-950/80 border-amber-500/50 text-amber-200'
+                : matrixToast.type === 'success'
+                ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
+                : 'bg-blue-950/80 border-blue-500/50 text-blue-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                {matrixToast.type === 'warning' ? (
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                )}
+                <span>{matrixToast.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMatrixToast(null)}
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-300">
             <div>
               <span className="font-bold block text-sm text-white flex items-center gap-1.5">
@@ -1770,23 +1981,31 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                 Ujazaji wa Taarifa za Mwaka Mzima ({selectedYear}):
               </span>
               <span className="text-slate-300 text-xs">
-                Weka kiasi kwa mkono kuanzia Januari hadi Desemba kwa mbofyo mmoja, au badili malipo ya mwezi mmoja mmoja moja kwa moja kwenye jedwali.
+                Weka kiasi kwa mkono kuanzia Januari hadi Desemba kwa mbofyo mmoja, au badili malipo ya mwezi mmoja mmoja moja kwa moja kwenye jedwali. Kuanzia Mwezi wa 6 (Juni 2026), mwanachama anayedaiwa hutengenezewa faini ya TZS 5,000 papo hapo hadi malipo yatakaporekodiwa.
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => handleOpenAnnualModal('all', selectedYear)}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-400 hover:to-emerald-500 text-slate-950 font-black cursor-pointer text-xs whitespace-nowrap shadow-md flex items-center gap-1.5"
-              >
-                <Zap className="w-4 h-4 text-slate-950" />
-                Jaza Mwaka Mzima (Jan - Des)
-              </button>
-              <button
-                onClick={() => setIsBulkModalOpen(true)}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 font-semibold hover:bg-slate-700 cursor-pointer text-xs whitespace-nowrap"
-              >
-                Miezi Mingi (Bulk)
-              </button>
+              {!readOnly ? (
+                <>
+                  <button
+                    onClick={() => handleOpenAnnualModal('all', selectedYear)}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-400 hover:to-emerald-500 text-slate-950 font-black cursor-pointer text-xs whitespace-nowrap shadow-md flex items-center gap-1.5"
+                  >
+                    <Zap className="w-4 h-4 text-slate-950" />
+                    Jaza Mwaka Mzima (Jan - Des)
+                  </button>
+                  <button
+                    onClick={() => setIsBulkModalOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 font-semibold hover:bg-slate-700 cursor-pointer text-xs whitespace-nowrap"
+                  >
+                    Miezi Mingi (Bulk)
+                  </button>
+                </>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+                  <span>👁️ Hali ya Kutazama Tu</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1812,7 +2031,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                     const yearPayments = monthlyPayments.filter(p => (p.memberId === m.id || (m.memberNo && p.memberNo === m.memberNo)) && Number(p.year) === Number(selectedYear));
                     const totalPaidInYear = yearPayments.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
                     const paidCount = yearPayments.filter(p => Number(p.paidAmount) >= getDefaultFeeForMonth(selectedYear, Number(p.month), m.monthlyFeeAmount)).length;
-                    const mDebt = calculateMemberFeeDebt(m, state);
+                    const mDebt = calculateMemberFeeDebt(m, state, selectedYear);
 
                     return (
                       <tr key={m.id} className="hover:bg-slate-800/40">
@@ -1824,9 +2043,15 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                           <div className="text-[10px] text-slate-400 font-normal flex items-center flex-wrap gap-1.5 mt-0.5">
                             <span>Iliyolipiwa: {paidCount}/{totalMonthsInYear} miezi</span>
                             {mDebt.lateFeePenalty > 0 && (
-                              <span className="text-rose-400 font-semibold font-mono bg-rose-950/60 px-1.5 py-0.2 rounded border border-rose-800/40 text-[9.5px]" title={`Deni la Faini ya Kuchelewa Ada (>Miezi 3): TZS ${mDebt.lateFeePenalty.toLocaleString()}`}>
-                                Faini: {mDebt.lateFeePenalty.toLocaleString()}
-                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRecordModalForMember(m, 'ada_late_fee')}
+                                className="inline-flex items-center gap-1 text-rose-300 font-bold font-mono bg-rose-950/90 hover:bg-rose-900 px-2 py-0.5 rounded-full border border-rose-600/60 text-[9.5px] cursor-pointer transition-all shadow-sm"
+                                title={`Deni la Faini ya Kuchelewa Ada: TZS ${mDebt.lateFeePenalty.toLocaleString()} - Bonyeza kurekodi malipo ya faini`}
+                              >
+                                <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                                Faini: {mDebt.lateFeePenalty.toLocaleString()} (Lipa)
+                              </button>
                             )}
                           </div>
                         </td>
@@ -1850,12 +2075,15 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                           return (
                             <td key={mNum} className="py-2.5 px-1 text-center border-r border-slate-800/40">
                               <button
-                                onClick={() => handleToggleMonthCell(m, selectedYear, mNum)}
-                                title={`Mwezi ${mNum} (${monthNamesSw[mNum - 1]} ${selectedYear}) - Bonyeza kubadili malipo`}
-                                className={`px-1.5 py-1.5 rounded font-mono text-[9.5px] font-medium transition-all w-[64px] inline-block text-center cursor-pointer ${
+                                onClick={!readOnly ? () => handleToggleMonthCell(m, selectedYear, mNum) : undefined}
+                                disabled={readOnly}
+                                title={readOnly ? `Mwezi ${mNum} (${monthNamesSw[mNum - 1]} ${selectedYear})` : `Mwezi ${mNum} (${monthNamesSw[mNum - 1]} ${selectedYear}) - Bonyeza kubadili malipo`}
+                                className={`px-1.5 py-1.5 rounded font-mono text-[9.5px] font-medium transition-all w-[64px] inline-block text-center ${
+                                  readOnly ? 'cursor-default' : 'cursor-pointer'
+                                } ${
                                   isPaid
-                                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
-                                    : 'bg-slate-950 text-slate-500 border border-slate-800/60 hover:border-slate-700 hover:text-slate-400'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' + (!readOnly ? ' hover:bg-emerald-500/25' : '')
+                                    : 'bg-slate-950 text-slate-500 border border-slate-800/60' + (!readOnly ? ' hover:border-slate-700 hover:text-slate-400' : '')
                                 }`}
                               >
                                 {paidAmountValue > 0 
@@ -1872,21 +2100,37 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
 
                         <td className="py-2.5 px-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleOpenAnnualModal(m.id, selectedYear)}
-                              title={`Jaza kiasi maalum kwa miezi yote 12 ya mwaka ${selectedYear} kwa ${m.fullName}`}
-                              className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 text-amber-400 text-[10px] font-bold border border-amber-500/30 transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1"
-                            >
-                              <Sparkles className="w-3 h-3" />
-                              Jaza Mwaka
-                            </button>
-                            <button
-                              onClick={() => handleMarkWholeYearPaid(m, selectedYear)}
-                              title="Weka miezi yote 12 kuwa imelipwa ada kamili mara moja"
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 hover:text-white text-emerald-400 text-[10px] font-bold border border-emerald-500/30 transition-all cursor-pointer whitespace-nowrap"
-                            >
-                              ⚡ Mwaka Wote
-                            </button>
+                            {!readOnly ? (
+                              <>
+                                {mDebt.totalDebt > 0 && (
+                                  <button
+                                    onClick={() => handleOpenRecordModalForMember(m, mDebt.lateFeePenalty > 0 ? 'ada_late_fee' : 'smart')}
+                                    title={`Rekodi malipo ya ${mDebt.lateFeePenalty > 0 ? 'Faini au Ada' : 'Ada'} kwa ${m.fullName}`}
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-bold shadow-sm transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1"
+                                  >
+                                    <CreditCard className="w-3 h-3" />
+                                    Rekodi Malipo
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleOpenAnnualModal(m.id, selectedYear)}
+                                  title={`Jaza kiasi maalum kwa miezi yote 12 ya mwaka ${selectedYear} kwa ${m.fullName}`}
+                                  className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 text-amber-400 text-[10px] font-bold border border-amber-500/30 transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  Jaza Mwaka
+                                </button>
+                                <button
+                                  onClick={() => handleMarkWholeYearPaid(m, selectedYear)}
+                                  title="Weka miezi yote 12 kuwa imelipwa ada kamili mara moja"
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 hover:text-white text-emerald-400 text-[10px] font-bold border border-emerald-500/30 transition-all cursor-pointer whitespace-nowrap"
+                                >
+                                  ⚡ Mwaka Wote
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-slate-500 italic">Kutazama tu</span>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -2541,7 +2785,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                     onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
                   >
-                    <option value="M-Pesa (Lipa Namba)">M-Pesa (Lipa Namba)</option>
+                    <option value="M Koba">M Koba</option>
                     <option value="Tigo Pesa">Tigo Pesa</option>
                     <option value="Airtel Money">Airtel Money</option>
                     <option value="CRDB Bank">CRDB Bank</option>
@@ -2601,9 +2845,17 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
           <div className="bg-white text-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
             {/* Header of Receipt */}
             <div className="text-center border-b-2 border-dashed border-slate-300 pb-4">
+              <div className="w-16 h-16 mx-auto mb-2 rounded-full overflow-hidden border border-slate-300 shadow-sm">
+                <img 
+                  src={state.groupSettings?.logoUrl || '/uwalemi_logo.png'} 
+                  alt="UWALEMI Emblem" 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
               <div className="text-xs font-bold uppercase tracking-widest text-emerald-800">KIKUNDI CHA KIJAMII CHA</div>
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">{state.groupSettings.groupName || 'UWALEMI'}</h2>
-              <p className="text-xs text-slate-600 italic mt-0.5">"{state.groupSettings.slogan || 'Kusaidiana Katika Shida na Raha'}"</p>
+              <p className="text-xs text-slate-600 italic mt-0.5">"{state.groupSettings.slogan && !state.groupSettings.slogan.includes('Shida na Raha') ? state.groupSettings.slogan : 'Lema, Nguvu Moja.'}"</p>
               <div className="mt-2 inline-block bg-slate-100 text-slate-800 font-mono text-[11px] font-bold px-3 py-1 rounded-full border border-slate-300">
                 {viewingReceipt.status === 'partial' ? 'STAKABADHI YA MALIPO YA NUSU' : 'STAKABADHI YA ADA YA MWEZI'}
               </div>
@@ -2633,7 +2885,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Njia ya Malipo:</span>
-                <span className="font-semibold text-slate-900">{viewingReceipt.paymentMethod}</span>
+                <span className="font-semibold text-slate-900">{normalizePaymentMethod(viewingReceipt.paymentMethod)}</span>
               </div>
               {viewingReceipt.referenceNo && (
                 <div className="flex justify-between">
@@ -2674,16 +2926,95 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               <p className="font-medium text-slate-700">Ahsante kwa kuwajibika na kujenga kikundi chetu.</p>
             </div>
 
+            {/* SMS Resend Box */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold flex items-center gap-1.5 text-slate-800">
+                  <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                  SMS ya Stakabadhi (Simu ya Mjumbe):
+                </span>
+                {receiptSmsStatus && (
+                  <span className={`text-[11px] font-bold ${receiptSmsStatus.type === 'success' ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {receiptSmsStatus.message}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="tel"
+                    value={receiptPhoneInput}
+                    onChange={(e) => setReceiptPhoneInput(e.target.value)}
+                    placeholder="07XXXXXXXX au 255..."
+                    className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 font-mono text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={resendingReceiptSms}
+                  onClick={async () => {
+                    const phone = receiptPhoneInput.trim();
+                    if (!phone) {
+                      setReceiptSmsStatus({ type: 'error', message: 'Ingiza namba ya simu ya mpokeaji.' });
+                      return;
+                    }
+                    const memberObj = members.find(m => m.id === viewingReceipt.memberId || m.memberNo === viewingReceipt.memberNo) || {
+                      id: viewingReceipt.memberId,
+                      memberNo: viewingReceipt.memberNo,
+                      fullName: viewingReceipt.memberName,
+                      phone
+                    };
+                    setResendingReceiptSms(true);
+                    setReceiptSmsStatus(null);
+                    try {
+                      const rem = Math.max(0, viewingReceipt.expectedAmount - viewingReceipt.paidAmount);
+                      const res = await triggerAutoReceiptSms({
+                        state,
+                        member: { ...memberObj, phone },
+                        paymentType: 'ada',
+                        amount: viewingReceipt.paidAmount,
+                        purpose: `Ada ya ${monthNamesSw[viewingReceipt.month - 1]} ${viewingReceipt.year}`,
+                        receiptNo: viewingReceipt.receiptNo || `REC-${viewingReceipt.id.slice(-6)}`,
+                        paymentDate: viewingReceipt.paymentDate,
+                        paymentMethod: normalizePaymentMethod(viewingReceipt.paymentMethod),
+                        isPartial: viewingReceipt.status === 'partial',
+                        expectedAmount: viewingReceipt.expectedAmount,
+                        monthBalance: rem,
+                        forceSend: true,
+                        targetPhone: phone
+                      });
+                      if (res.success) {
+                        setReceiptSmsStatus({ type: 'success', message: `✓ SMS imetumwa tena kwa ${phone}!` });
+                      } else {
+                        setReceiptSmsStatus({ type: 'error', message: res.message || 'Haikuweza kutuma SMS.' });
+                      }
+                    } catch (e: any) {
+                      setReceiptSmsStatus({ type: 'error', message: e.message || 'Hitilafu ya mtandao.' });
+                    } finally {
+                      setResendingReceiptSms(false);
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all cursor-pointer whitespace-nowrap"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {resendingReceiptSms ? 'Inatuma...' : 'Tuma Tena SMS'}
+                </button>
+              </div>
+            </div>
+
             {/* Buttons */}
             <div className="flex flex-wrap gap-2 pt-2">
               <button
-                onClick={() => {
+                onClick={async () => {
                   try {
+                    await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
                     const member = state.members.find(m => m.id === viewingReceipt.memberId);
                     const doc = generatePaymentReceiptPDF({
                       receiptNo: viewingReceipt.receiptNo || `REC-${viewingReceipt.id.slice(-6)}`,
                       groupName: state.groupSettings?.groupName || 'UWALEMI',
                       slogan: state.groupSettings?.slogan,
+                      logoUrl: state.groupSettings?.logoUrl || '/uwalemi_logo.png',
                       memberNo: viewingReceipt.memberNo,
                       memberName: viewingReceipt.memberName,
                       memberPhone: member?.phone,
@@ -2691,7 +3022,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                       periodOrTitle: `${monthNamesSw[viewingReceipt.month - 1]} ${viewingReceipt.year}`,
                       amount: viewingReceipt.paidAmount,
                       paymentDate: viewingReceipt.paymentDate || new Date().toISOString().split('T')[0],
-                      paymentMethod: viewingReceipt.paymentMethod || 'M-Pesa',
+                      paymentMethod: normalizePaymentMethod(viewingReceipt.paymentMethod),
                       referenceNo: viewingReceipt.referenceNo,
                       receivedBy: 'Mweka Hazina wa UWALEMI',
                       statusType: viewingReceipt.status === 'partial' ? 'partial' : 'paid',
@@ -2750,9 +3081,17 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
           <div className="bg-white text-slate-900 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">
             {/* Header of Receipt */}
             <div className="text-center border-b-2 border-dashed border-slate-300 pb-4">
+              <div className="w-16 h-16 mx-auto mb-2 rounded-full overflow-hidden border border-slate-300 shadow-sm">
+                <img 
+                  src={state.groupSettings?.logoUrl || '/uwalemi_logo.png'} 
+                  alt="UWALEMI Emblem" 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
               <div className="text-xs font-bold uppercase tracking-widest text-emerald-800">KIKUNDI CHA KIJAMII CHA</div>
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">{state.groupSettings.groupName || 'UWALEMI'}</h2>
-              <p className="text-xs text-slate-600 italic mt-0.5">"{state.groupSettings.slogan || 'Kusaidiana Katika Shida na Raha'}"</p>
+              <p className="text-xs text-slate-600 italic mt-0.5">"{state.groupSettings.slogan && !state.groupSettings.slogan.includes('Shida na Raha') ? state.groupSettings.slogan : 'Lema, Nguvu Moja.'}"</p>
               <div className="mt-2 inline-block bg-emerald-100 text-emerald-900 font-mono text-[11px] font-bold px-3 py-1 rounded-full border border-emerald-300">
                 {viewingMultiReceipt.receiptTitle || `STAKABADHI YA MALIPO YA UWALEMI`}
               </div>
@@ -2774,7 +3113,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Njia ya Malipo:</span>
-                <span className="font-semibold text-slate-900">{viewingMultiReceipt.paymentMethod}</span>
+                <span className="font-semibold text-slate-900">{normalizePaymentMethod(viewingMultiReceipt.paymentMethod)}</span>
               </div>
               {viewingMultiReceipt.referenceNo && (
                 <div className="flex justify-between">
@@ -2872,11 +3211,89 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
               <p className="font-medium text-slate-700">Ahsante kwa kuwajibika na kujenga kikundi chetu.</p>
             </div>
 
+            {/* SMS Resend Box */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold flex items-center gap-1.5 text-slate-800">
+                  <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                  SMS ya Stakabadhi (Simu ya Mjumbe):
+                </span>
+                {receiptSmsStatus && (
+                  <span className={`text-[11px] font-bold ${receiptSmsStatus.type === 'success' ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {receiptSmsStatus.message}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="tel"
+                    value={receiptPhoneInput}
+                    onChange={(e) => setReceiptPhoneInput(e.target.value)}
+                    placeholder="07XXXXXXXX au 255..."
+                    className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 font-mono text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={resendingReceiptSms}
+                  onClick={async () => {
+                    const phone = receiptPhoneInput.trim();
+                    if (!phone) {
+                      setReceiptSmsStatus({ type: 'error', message: 'Ingiza namba ya simu ya mpokeaji.' });
+                      return;
+                    }
+                    setResendingReceiptSms(true);
+                    setReceiptSmsStatus(null);
+                    try {
+                      const isCombo = Boolean(viewingMultiReceipt.months?.length && viewingMultiReceipt.fineItems?.length);
+                      const feeAmt = viewingMultiReceipt.months?.reduce((s, m) => s + m.paid, 0);
+                      const fineAmt = viewingMultiReceipt.fineItems?.reduce((s, f) => s + f.amount, 0);
+
+                      const res = await triggerAutoReceiptSms({
+                        state,
+                        member: { ...viewingMultiReceipt.member, phone },
+                        paymentType: isCombo ? 'combo' : viewingMultiReceipt.months?.length ? 'ada' : 'fine',
+                        amount: viewingMultiReceipt.amount,
+                        feeAmount: feeAmt,
+                        fineAmount: fineAmt,
+                        purpose: viewingMultiReceipt.receiptTitle || (isCombo ? 'Ada na Faini' : viewingMultiReceipt.months?.length ? 'Ada ya Miezi' : 'Faini za UWALEMI'),
+                        receiptNo: viewingMultiReceipt.receiptNo,
+                        paymentDate: viewingMultiReceipt.paymentDate,
+                        paymentMethod: normalizePaymentMethod(viewingMultiReceipt.paymentMethod),
+                        multiMonthBreakdown: viewingMultiReceipt.months,
+                        fineBreakdown: viewingMultiReceipt.fineItems,
+                        totalDebtAfter: viewingMultiReceipt.totalDebtAfter,
+                        forceSend: true,
+                        targetPhone: phone
+                      });
+
+                      if (res.success) {
+                        setReceiptSmsStatus({ type: 'success', message: `✓ SMS imetumwa tena kwa ${phone}!` });
+                      } else {
+                        setReceiptSmsStatus({ type: 'error', message: res.message || 'Haikuweza kutuma SMS.' });
+                      }
+                    } catch (e: any) {
+                      setReceiptSmsStatus({ type: 'error', message: e.message || 'Hitilafu ya mtandao.' });
+                    } finally {
+                      setResendingReceiptSms(false);
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all cursor-pointer whitespace-nowrap"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {resendingReceiptSms ? 'Inatuma...' : 'Tuma Tena SMS'}
+                </button>
+              </div>
+            </div>
+
             {/* Buttons */}
             <div className="flex flex-wrap gap-2 pt-2">
               <button
-                onClick={() => {
+                onClick={async () => {
                   try {
+                    await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
                     const breakdownList: { label: string; amount: string; status: string }[] = [];
                     if (viewingMultiReceipt.months) {
                       viewingMultiReceipt.months.forEach(m => {
@@ -2901,6 +3318,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                       receiptNo: viewingMultiReceipt.receiptNo,
                       groupName: state.groupSettings?.groupName || 'UWALEMI',
                       slogan: state.groupSettings?.slogan,
+                      logoUrl: state.groupSettings?.logoUrl || '/uwalemi_logo.png',
                       memberNo: viewingMultiReceipt.member.memberNo,
                       memberName: viewingMultiReceipt.member.fullName,
                       memberPhone: viewingMultiReceipt.member.phone,
@@ -2910,7 +3328,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                         : 'Malipo ya Faini',
                       amount: viewingMultiReceipt.amount,
                       paymentDate: viewingMultiReceipt.paymentDate,
-                      paymentMethod: viewingMultiReceipt.paymentMethod,
+                      paymentMethod: normalizePaymentMethod(viewingMultiReceipt.paymentMethod),
                       referenceNo: viewingMultiReceipt.referenceNo,
                       receivedBy: 'Mweka Hazina wa UWALEMI',
                       balanceRemaining: viewingMultiReceipt.totalDebtAfter,
@@ -3165,7 +3583,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                     onChange={(e) => setBulkForm({ ...bulkForm, paymentMethod: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500"
                   >
-                    <option value="M-Pesa (Lipa Namba)">M-Pesa</option>
+                    <option value="M Koba">M Koba</option>
                     <option value="Airtel Money">Airtel Money</option>
                     <option value="Mix/Tigo Pesa">Tigo Pesa</option>
                     <option value="Amana / NMB / CRDB">Benki</option>
@@ -3613,7 +4031,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                     onChange={(e) => setAnnualForm({ ...annualForm, paymentMethod: e.target.value })}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
                   >
-                    <option value="M-Pesa (Lipa Namba)">M-Pesa (Lipa Namba)</option>
+                    <option value="M Koba">M Koba</option>
                     <option value="Tigo Pesa">Tigo Pesa</option>
                     <option value="Airtel Money">Airtel Money</option>
                     <option value="Benki ya CRDB / NMB">Benki ya CRDB / NMB</option>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
+  Activity,
   BarChart3, 
   Calendar, 
+  Clock,
   Trash2,
   Users, 
   Send, 
@@ -32,14 +34,19 @@ import {
   Play,
   ChevronDown,
   MessageSquare,
-  TrendingUp
+  TrendingUp,
+  Monitor,
+  Tablet,
+  Smartphone
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useLanguage } from './context/LanguageContext';
 import { useEventCard } from './context/EventCardContext';
 import { AIChatbotWidget } from './components/AIChatbotWidget';
+import { normalizeRsvpStatus } from './utils/rsvpUtils';
 import { UwalemiModule } from './components/uwalemi/UwalemiModule';
 import { UwalemiMemberPortal } from './components/uwalemi/UwalemiMemberPortal';
+import { UwalemiVotingPage } from './components/uwalemi/UwalemiVotingPage';
 import LandingPage from './components/LandingPage';
 import Login from './components/Login';
 import CreateEventPage from './components/CreateEventPage';
@@ -88,6 +95,172 @@ type AppTab =
   | 'debug'
   | 'uwalemi';
 
+interface EventCountdownProps {
+  eventDate?: string;
+  eventTime?: string;
+  language: string;
+}
+
+const EventCountdownTimer: React.FC<EventCountdownProps> = ({ eventDate, eventTime, language }) => {
+  const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number; isPassed: boolean }>({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+    isPassed: false,
+  });
+
+  useEffect(() => {
+    const parseTargetDate = (): Date | null => {
+      if (!eventDate) return null;
+      let year = 0, month = 0, day = 0;
+      const cleanDate = eventDate.trim();
+      if (cleanDate.includes('-')) {
+        const parts = cleanDate.split('-');
+        if (parts[0].length === 4) {
+          year = parseInt(parts[0], 10);
+          month = parseInt(parts[1], 10) - 1;
+          day = parseInt(parts[2], 10);
+        } else {
+          day = parseInt(parts[0], 10);
+          month = parseInt(parts[1], 10) - 1;
+          year = parseInt(parts[2], 10);
+        }
+      } else if (cleanDate.includes('/')) {
+        const parts = cleanDate.split('/');
+        if (parts[2] && parts[2].length === 4) {
+          day = parseInt(parts[0], 10);
+          month = parseInt(parts[1], 10) - 1;
+          year = parseInt(parts[2], 10);
+        } else {
+          year = parseInt(parts[0], 10);
+          month = parseInt(parts[1], 10) - 1;
+          day = parseInt(parts[2], 10);
+        }
+      } else {
+        return null;
+      }
+
+      let hour = 18;
+      let minute = 0;
+      if (eventTime) {
+        const timeParts = eventTime.split(':');
+        if (timeParts.length >= 2) {
+          hour = parseInt(timeParts[0], 10) || 18;
+          minute = parseInt(timeParts[1], 10) || 0;
+        }
+      }
+
+      const target = new Date(year, month, day, hour, minute, 0);
+      return isNaN(target.getTime()) ? null : target;
+    };
+
+    const updateCountdown = () => {
+      const target = parseTargetDate();
+      if (!target) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isPassed: true });
+        return;
+      }
+
+      const now = new Date();
+      const diffMs = target.getTime() - now.getTime();
+
+      if (diffMs <= 0) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isPassed: true });
+      } else {
+        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+        setTimeLeft({ days, hours, minutes, seconds, isPassed: false });
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [eventDate, eventTime]);
+
+  const isSw = language === 'sw';
+
+  if (!eventDate) {
+    return (
+      <div className="bg-[#080d1c] border border-white/5 rounded-2xl p-3 text-center text-slate-400 text-xs font-medium">
+        {isSw ? "Tafadhali weka tarehe ya sherehe ili kuona muda uliosalia." : "Please set the event date to activate the countdown timer."}
+      </div>
+    );
+  }
+
+  if (timeLeft.isPassed) {
+    return (
+      <div className="bg-gradient-to-r from-emerald-950/40 via-teal-950/40 to-emerald-950/40 border border-emerald-500/30 rounded-2xl p-3 text-center flex items-center justify-center space-x-2 text-emerald-300 shadow-inner">
+        <Sparkles className="w-4 h-4 text-emerald-400 animate-spin" />
+        <span className="font-extrabold text-xs tracking-wide">
+          {isSw ? "Siku ya Sherehe Imewadia / Sherehe Imekamilika! 🎉" : "The Event Date Has Arrived! 🎉"}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gradient-to-r from-emerald-950/30 via-slate-900/60 to-blue-950/30 border border-emerald-500/20 rounded-2xl p-3.5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3" id="event-realtime-countdown-block">
+      <div className="flex items-center space-x-2.5">
+        <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)] shrink-0">
+          <Clock className="w-4 h-4 animate-pulse" />
+        </div>
+        <div>
+          <h4 className="text-xs font-extrabold text-white flex items-center gap-1.5">
+            <span>{isSw ? "Muda Uliobaki Mpaka Sherehe" : "Countdown to Event"}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+          </h4>
+          <p className="text-[10px] text-slate-400 font-medium">
+            {isSw ? "Siku, masaa, dakika na segundi halisi" : "Real-time countdown in days, hours, mins & secs"}
+          </p>
+        </div>
+      </div>
+
+      {/* Metric digit boxes */}
+      <div className="grid grid-cols-4 gap-2 text-center shrink-0">
+        <div className="bg-[#060a14] border border-white/10 rounded-xl p-2 min-w-[55px]">
+          <span className="block font-mono font-black text-sm sm:text-base text-emerald-400 leading-tight">
+            {String(timeLeft.days).padStart(2, '0')}
+          </span>
+          <span className="text-[9px] font-bold uppercase text-slate-400 block font-sans tracking-wider">
+            {isSw ? "Siku" : "Days"}
+          </span>
+        </div>
+
+        <div className="bg-[#060a14] border border-white/10 rounded-xl p-2 min-w-[55px]">
+          <span className="block font-mono font-black text-sm sm:text-base text-blue-400 leading-tight">
+            {String(timeLeft.hours).padStart(2, '0')}
+          </span>
+          <span className="text-[9px] font-bold uppercase text-slate-400 block font-sans tracking-wider">
+            {isSw ? "Masaa" : "Hours"}
+          </span>
+        </div>
+
+        <div className="bg-[#060a14] border border-white/10 rounded-xl p-2 min-w-[55px]">
+          <span className="block font-mono font-black text-sm sm:text-base text-indigo-400 leading-tight">
+            {String(timeLeft.minutes).padStart(2, '0')}
+          </span>
+          <span className="text-[9px] font-bold uppercase text-slate-400 block font-sans tracking-wider">
+            {isSw ? "Dakika" : "Mins"}
+          </span>
+        </div>
+
+        <div className="bg-[#060a14] border border-white/10 rounded-xl p-2 min-w-[55px]">
+          <span className="block font-mono font-black text-sm sm:text-base text-teal-400 leading-tight animate-pulse">
+            {String(timeLeft.seconds).padStart(2, '0')}
+          </span>
+          <span className="text-[9px] font-bold uppercase text-slate-400 block font-sans tracking-wider">
+            {isSw ? "Segundi" : "Secs"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const { language, setLanguage, t } = useLanguage();
   
@@ -126,12 +299,44 @@ export default function App() {
   });
 
   // App Navigation state
-  const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<AppTab>(() => {
+    try {
+      const search = typeof window !== 'undefined' ? window.location.search || '' : '';
+      const path = typeof window !== 'undefined' ? (window.location.pathname || '').toLowerCase() : '';
+      const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
+      if (search.includes('uwalemi') || search.includes('voteToken') || path.includes('/uwalemi') || hash.includes('uwalemi')) {
+        return 'uwalemi';
+      }
+    } catch {}
+    return 'dashboard';
+  });
+  const [deviceViewMode, setDeviceViewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [searchQuery, setSearchQuery] = useState('');
   const [guestListSearch, setGuestListSearch] = useState('');
   const [sentListSearch, setSentListSearch] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [showLanding, setShowLanding] = useState(!user);
+  const [showLanding, setShowLanding] = useState(() => {
+    try {
+      const search = typeof window !== 'undefined' ? window.location.search || '' : '';
+      const path = typeof window !== 'undefined' ? (window.location.pathname || '').toLowerCase() : '';
+      const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
+      if (search.includes('uwalemi') || search.includes('voteToken') || path.includes('/uwalemi') || hash.includes('uwalemi')) {
+        return false;
+      }
+    } catch {}
+    return !user;
+  });
+  const [uwalemiReadOnlyParam, setUwalemiReadOnlyParam] = useState<boolean>(() => {
+    try {
+      const search = typeof window !== 'undefined' ? window.location.search || '' : '';
+      const params = new URLSearchParams(search);
+      const rawView = params.get('view') || '';
+      const rawMode = params.get('mode') || '';
+      const uwalemiParam = params.get('uwalemi') || '';
+      return rawView === 'uwalemi-view' || rawView === 'view' || rawMode === 'readOnly' || rawMode === 'view' || uwalemiParam === 'view';
+    } catch {}
+    return false;
+  });
 
   // Core Data state from SWR-backed EventCardContext
   const {
@@ -180,17 +385,34 @@ export default function App() {
   const [isScanOnlyPortal, setIsScanOnlyPortal] = useState(false);
   const [scanPortalEventId, setScanPortalEventId] = useState<string | null>(null);
   const [uwalemiMemberParam, setUwalemiMemberParam] = useState<string | null>(null);
+  const [uwalemiVoteToken, setUwalemiVoteToken] = useState<string | null>(null);
 
   // Parse invite search query on mount
   useEffect(() => {
     try {
       const searchStr = window.location.search || '';
+      const pathStr = (window.location.pathname || '').toLowerCase();
+      const hashStr = window.location.hash || '';
       const params = new URLSearchParams(searchStr);
 
-      // Check UWALEMI parameters
-      const uwalemiMember = params.get('uwalemiMember') || params.get('uwalemi_member') || params.get('uwalemi');
+      // Check UWALEMI parameters from search or hash
+      let uwalemiVote = params.get('uwalemiVote') || params.get('voteToken') || params.get('uwalemi_vote');
+      let uwalemiMember = params.get('uwalemiMember') || params.get('uwalemi_member') || params.get('uwalemi');
       const moduleParam = params.get('module');
-      if (uwalemiMember) {
+
+      if (!uwalemiVote && hashStr) {
+        const hashMatch = hashStr.match(/(?:uwalemiVote|voteToken|uwalemi_vote)=([^&]+)/i);
+        if (hashMatch) uwalemiVote = decodeURIComponent(hashMatch[1]);
+      }
+      if (!uwalemiMember && hashStr) {
+        const memberMatch = hashStr.match(/(?:uwalemiMember|uwalemi_member)=([^&]+)/i);
+        if (memberMatch) uwalemiMember = decodeURIComponent(memberMatch[1]);
+      }
+
+      if (uwalemiVote) {
+        setUwalemiVoteToken(uwalemiVote);
+        setShowLanding(false);
+      } else if (uwalemiMember) {
         setUwalemiMemberParam(uwalemiMember);
         setShowLanding(false);
       }
@@ -200,7 +422,7 @@ export default function App() {
       let rawEventId = params.get('eventId') || params.get('event_id');
       let rawView = params.get('view') || params.get('mode') || params.get('v');
 
-      if (rawView === 'uwalemi' || moduleParam === 'uwalemi') {
+      if (rawView === 'uwalemi' || moduleParam === 'uwalemi' || pathStr.includes('/uwalemi') || hashStr.toLowerCase().includes('uwalemi')) {
         setActiveTab('uwalemi');
         setShowLanding(false);
       }
@@ -1040,6 +1262,18 @@ export default function App() {
     );
   }
 
+  if (uwalemiVoteToken) {
+    return (
+      <UwalemiVotingPage 
+        token={uwalemiVoteToken} 
+        onClose={() => {
+          setUwalemiVoteToken(null);
+          setActiveTab('uwalemi');
+        }} 
+      />
+    );
+  }
+
   if (uwalemiMemberParam) {
     return (
       <UwalemiMemberPortal 
@@ -1053,6 +1287,18 @@ export default function App() {
     );
   }
 
+  if (activeTab === 'uwalemi') {
+    return (
+      <UwalemiModule 
+        initialReadOnly={uwalemiReadOnlyParam}
+        onBackToMainApp={() => {
+          setActiveTab('dashboard');
+          if (!user) setShowLanding(true);
+        }} 
+      />
+    );
+  }
+
   if (showLanding) {
     return (
       <LandingPage 
@@ -1060,6 +1306,10 @@ export default function App() {
         onLoginClick={() => {
           setShowLanding(false);
           setActiveTab('dashboard');
+        }}
+        onOpenUwalemi={() => {
+          setShowLanding(false);
+          setActiveTab('uwalemi');
         }}
       />
     );
@@ -1089,6 +1339,17 @@ export default function App() {
   };
 
   const renderContent = () => {
+    if (activeTab === 'uwalemi') {
+      return (
+        <UwalemiModule 
+          onBackToMainApp={() => {
+            setActiveTab('dashboard');
+            if (!user) setShowLanding(true);
+          }} 
+        />
+      );
+    }
+
     if (isLoading && !eventDetails && eventsList.length === 0) {
       return (
         <div className="flex items-center justify-center h-full text-white">
@@ -1097,12 +1358,12 @@ export default function App() {
       );
     }
 
-    if (!eventDetails && activeTab !== 'dashboard' && activeTab !== 'settings') {
+    if (!eventDetails && activeTab !== 'dashboard' && activeTab !== 'settings' && activeTab !== 'uwalemi') {
       setTimeout(() => setActiveTab('dashboard'), 0);
       return null;
     }
 
-    if ((!eventDetails && eventsList.length === 0) || isCreatingEvent) {
+    if (((!eventDetails && eventsList.length === 0) || isCreatingEvent) && activeTab !== 'uwalemi') {
       if (!draftEvent) {
         return (
           <CreateEventPage 
@@ -1123,6 +1384,7 @@ export default function App() {
                 time: '',
                 period: 'Jioni',
                 eventHallName: '',
+                venueLocation: '',
                 coordinates: '',
                 hostName: '',
                 dressCode: '',
@@ -2001,6 +2263,179 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Real-time Countdown Timer */}
+                <EventCountdownTimer 
+                  eventDate={eventDetails?.date} 
+                  eventTime={eventDetails?.time} 
+                  language={language} 
+                />
+
+                {/* At-a-Glance Event Health Status Indicators */}
+                {(() => {
+                  const summaryGuests = eventDetails 
+                    ? guests.filter(g => g.eventId === eventDetails.id || (!g.eventId && eventDetails.id === 'event-starter'))
+                    : guests;
+
+                  const totalSummaryGuests = summaryGuests.length;
+                  const dispatchedSummaryGuests = summaryGuests.filter(
+                    g => g.smsStatus === 'Imetumia' || g.whatsappStatus === 'Imetumia'
+                  ).length;
+                  const attendingSummaryCount = summaryGuests.filter(g => g.rsvpStatus === 'Atahudhuria').length;
+                  const totalRsvpResponded = summaryGuests.filter(g => g.rsvpStatus && g.rsvpStatus !== 'Bado').length;
+                  const pendingPledgesList = summaryGuests.filter(g => (g.pledgeAmount || 0) > (g.paidAmount || 0));
+                  const totalPendingPledgeAmount = summaryGuests.reduce(
+                    (sum, g) => sum + Math.max(0, (g.pledgeAmount || 0) - (g.paidAmount || 0)),
+                    0
+                  );
+                  const checkedInSummaryCount = summaryGuests.filter(g => g.checkedIn).length;
+
+                  return (
+                    <div className="bg-[#070d1e]/80 border border-white/10 rounded-2xl p-4 space-y-3" id="event-health-status-indicators">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                            <Activity className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="text-xs font-extrabold text-white uppercase tracking-wider">
+                            {language === 'sw' ? 'Afya & Hali ya Sherehe' : 'Event Health & Status Check'}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono font-bold text-slate-400 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
+                          {totalSummaryGuests} {language === 'sw' ? 'Wageni Jumla' : 'Total Guests'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* Indicator 1: Dispatched Invitations */}
+                        <div 
+                          onClick={() => setActiveTab('send')}
+                          className="bg-[#0b1328] hover:bg-[#0f1a36] border border-white/10 hover:border-emerald-500/30 rounded-xl p-3 transition duration-200 cursor-pointer flex flex-col justify-between space-y-2 group"
+                          id="status-indicator-dispatched"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                              <Send className="w-3 h-3 text-emerald-400" />
+                              <span>{language === 'sw' ? 'Mialiko Iliyotumwa' : 'Invitations Dispatched'}</span>
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold font-mono border ${
+                              dispatchedSummaryGuests === totalSummaryGuests && totalSummaryGuests > 0
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : dispatchedSummaryGuests > 0
+                                ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                            }`}>
+                              {dispatchedSummaryGuests === totalSummaryGuests && totalSummaryGuests > 0
+                                ? (language === 'sw' ? 'Mialiko Yote' : 'Fully Dispatched')
+                                : dispatchedSummaryGuests > 0
+                                ? (language === 'sw' ? 'Inaendelea' : 'In Progress')
+                                : (language === 'sw' ? 'Inasubiri' : 'Pending')}
+                            </span>
+                          </div>
+
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-sm font-extrabold text-white font-mono">
+                              {dispatchedSummaryGuests} <span className="text-xs text-slate-400 font-normal">/ {totalSummaryGuests}</span>
+                            </span>
+                            <span className="text-[10px] font-mono text-emerald-400 font-bold group-hover:translate-x-0.5 transition-transform">
+                              {totalSummaryGuests > 0 ? Math.round((dispatchedSummaryGuests / totalSummaryGuests) * 100) : 0}% →
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Indicator 2: Pledges Pending */}
+                        <div 
+                          onClick={() => setActiveTab('contributions')}
+                          className="bg-[#0b1328] hover:bg-[#0f1a36] border border-white/10 hover:border-amber-500/30 rounded-xl p-3 transition duration-200 cursor-pointer flex flex-col justify-between space-y-2 group"
+                          id="status-indicator-pledges"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                              <Wallet className="w-3 h-3 text-amber-400" />
+                              <span>{language === 'sw' ? 'Ahadi Inayosubiriwa' : 'Pledges Pending'}</span>
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold font-mono border ${
+                              totalPendingPledgeAmount > 0
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            }`}>
+                              {totalPendingPledgeAmount > 0
+                                ? `${pendingPledgesList.length} ${language === 'sw' ? 'Inasubiri' : 'Pending'}`
+                                : (language === 'sw' ? 'Zimelipwa Yote' : 'Fully Cleared')}
+                            </span>
+                          </div>
+
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-xs sm:text-sm font-extrabold text-white font-mono truncate">
+                              TZS {totalPendingPledgeAmount.toLocaleString()}
+                            </span>
+                            <span className="text-[10px] font-mono text-amber-400 font-bold group-hover:translate-x-0.5 transition-transform">
+                              {language === 'sw' ? 'Fungua' : 'View'} →
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Indicator 3: RSVP Confirmed */}
+                        <div 
+                          onClick={() => setActiveTab('rsvp')}
+                          className="bg-[#0b1328] hover:bg-[#0f1a36] border border-white/10 hover:border-blue-500/30 rounded-xl p-3 transition duration-200 cursor-pointer flex flex-col justify-between space-y-2 group"
+                          id="status-indicator-rsvp"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                              <Users className="w-3 h-3 text-blue-400" />
+                              <span>{language === 'sw' ? 'Majibu ya RSVP' : 'RSVP Responses'}</span>
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold font-mono bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                              {attendingSummaryCount} {language === 'sw' ? 'Wamethibitisha' : 'Confirmed'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-sm font-extrabold text-white font-mono">
+                              {totalRsvpResponded} <span className="text-xs text-slate-400 font-normal">{language === 'sw' ? 'wamejibu' : 'responded'}</span>
+                            </span>
+                            <span className="text-[10px] font-mono text-blue-400 font-bold group-hover:translate-x-0.5 transition-transform">
+                              {language === 'sw' ? 'Orodha' : 'List'} →
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Indicator 4: Event Check-In Status */}
+                        <div 
+                          onClick={() => setActiveTab('scan')}
+                          className="bg-[#0b1328] hover:bg-[#0f1a36] border border-white/10 hover:border-purple-500/30 rounded-xl p-3 transition duration-200 cursor-pointer flex flex-col justify-between space-y-2 group"
+                          id="status-indicator-checkin"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                              <QrCode className="w-3 h-3 text-purple-400" />
+                              <span>{language === 'sw' ? 'Uingiaji Ukumbini' : 'Gate Check-In'}</span>
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold font-mono border ${
+                              checkedInSummaryCount > 0
+                                ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                                : 'bg-white/5 text-slate-400 border-white/10'
+                            }`}>
+                              {checkedInSummaryCount > 0
+                                ? (language === 'sw' ? 'Lango Wazi' : 'Active Gate')
+                                : (language === 'sw' ? 'Tayari' : 'Ready')}
+                            </span>
+                          </div>
+
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-sm font-extrabold text-white font-mono">
+                              {checkedInSummaryCount} <span className="text-xs text-slate-400 font-normal">/ {totalSummaryGuests} {language === 'sw' ? 'waliuingia' : 'in'}</span>
+                            </span>
+                            <span className="text-[10px] font-mono text-purple-400 font-bold group-hover:translate-x-0.5 transition-transform">
+                              {language === 'sw' ? 'Skana' : 'Scan'} →
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Grid layout containing the details */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 pt-4 pb-2 border-t border-white/5" id="details-fields-grid">
                   <div className="space-y-1">
@@ -2478,6 +2913,51 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-3.5">
+            {/* Device View Mode Switcher (Desktop, Tablet, Mobile) */}
+            <div className="hidden sm:flex items-center bg-white/5 p-1 rounded-xl border border-white/10 gap-0.5 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setDeviceViewMode('desktop')}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  deviceViewMode === 'desktop' 
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md font-mono' 
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+                title="Mwonekano wa Kompyuta (Desktop View)"
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Desktop</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeviceViewMode('tablet')}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  deviceViewMode === 'tablet' 
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md font-mono' 
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+                title="Mwonekano wa Tablet / iPad (768px)"
+              >
+                <Tablet className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Tablet</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeviceViewMode('mobile')}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  deviceViewMode === 'mobile' 
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md font-mono' 
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+                title="Mwonekano wa Simu ya Mkononi (Smartphone View - 390px)"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Simu</span>
+              </button>
+            </div>
+
             {/* Language Selector in Header */}
             <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
               <button 
@@ -2587,21 +3067,90 @@ export default function App() {
         </header>
 
         {/* Tab Content Canvas */}
-        <div className="flex-grow overflow-y-auto p-4 sm:p-8 custom-scrollbar">
-          <div className="max-w-7xl mx-auto h-full">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                className="h-full"
+        <div className="flex-grow overflow-y-auto p-2 sm:p-6 custom-scrollbar">
+          {deviceViewMode !== 'desktop' ? (
+            <div className="flex flex-col items-center justify-start min-h-full py-2">
+              {/* Device Mode Badge Header */}
+              <div className="mb-4 flex items-center gap-3 bg-slate-900/90 border border-blue-500/30 px-4 py-1.5 rounded-full shadow-2xl backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                  {deviceViewMode === 'tablet' ? (
+                    <Tablet className="w-4 h-4 text-blue-400" />
+                  ) : (
+                    <Smartphone className="w-4 h-4 text-emerald-400" />
+                  )}
+                  <span className="text-xs font-bold font-mono text-white">
+                    {deviceViewMode === 'tablet' 
+                      ? (language === 'sw' ? 'Mwonekano wa Tablet (768px)' : 'Tablet View (768px)') 
+                      : (language === 'sw' ? 'Mwonekano wa Simu (390px)' : 'Smartphone View (390px)')}
+                  </span>
+                </div>
+                <div className="h-3 w-[1px] bg-white/20" />
+                <button
+                  type="button"
+                  onClick={() => setDeviceViewMode('desktop')}
+                  className="text-[10px] font-bold font-mono text-blue-400 hover:text-blue-300 underline cursor-pointer"
+                >
+                  {language === 'sw' ? 'Rudi Desktop' : 'Reset to Desktop'}
+                </button>
+              </div>
+
+              {/* Physical Mockup Device Frame */}
+              <div 
+                className={`relative bg-slate-950 border-[10px] border-slate-800 rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] transition-all duration-300 flex flex-col overflow-hidden my-auto ${
+                  deviceViewMode === 'tablet' ? 'w-[768px] max-w-full h-[820px]' : 'w-[390px] max-w-full h-[760px]'
+                }`}
               >
-                {renderContent()}
-              </motion.div>
-            </AnimatePresence>
-          </div>
+                {/* Top Speaker & Notch */}
+                <div className="w-full bg-slate-900 h-6 flex items-center justify-center shrink-0 border-b border-white/5 relative">
+                  {deviceViewMode === 'mobile' && (
+                    <div className="w-24 h-4 bg-black rounded-full flex items-center justify-end px-2 gap-1.5 shadow-inner">
+                      <div className="w-2 h-2 rounded-full bg-blue-900/60 border border-blue-500/40" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
+                    </div>
+                  )}
+                  {deviceViewMode === 'tablet' && (
+                    <div className="w-3 h-3 rounded-full bg-slate-800 border border-white/10" />
+                  )}
+                </div>
+
+                {/* Inner Device Screen */}
+                <div className="flex-grow overflow-y-auto p-3 sm:p-4 bg-[#070e1e] custom-scrollbar">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={`${activeTab}-${deviceViewMode}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="h-full"
+                    >
+                      {renderContent()}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+
+                {/* Bottom Home Indicator Bar */}
+                <div className="w-full bg-slate-950 h-5 flex items-center justify-center shrink-0 border-t border-white/5">
+                  <div className="w-28 h-1 bg-white/30 rounded-full" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-7xl mx-auto h-full">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="h-full"
+                >
+                  {renderContent()}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          )}
         </div>
 
         {/* Quick Action Drawer Overlay */}
@@ -2845,9 +3394,9 @@ export default function App() {
 }
 
 function AttendanceSummary({ guests, t, language, setActiveTab, event }: { guests: Guest[], t: any, language: string, setActiveTab: (tab: AppTab) => void, event: EventDetails | null }) {
-  const attendingCount = guests.filter(g => g.rsvpStatus === 'Atahudhuria').length;
-  const declinedCount = guests.filter(g => g.rsvpStatus === 'Hatahudhuria').length;
-  const pendingCount = guests.filter(g => !g.rsvpStatus || g.rsvpStatus === 'Bado').length;
+  const attendingCount = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Atahudhuria').length;
+  const declinedCount = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Hatahudhuria').length;
+  const pendingCount = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Bado').length;
   const checkedInCount = guests.filter(g => g.checkedIn).length;
 
   const stats = [

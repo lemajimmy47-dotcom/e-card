@@ -58,7 +58,7 @@ export const ConnectivityDebug: React.FC = () => {
       response: results?.whatsapp
     },
     {
-      title: 'SMS Gateway (Meseji)',
+      title: results?.sms?.provider ? `SMS Gateway (${results.sms.provider})` : 'SMS Gateway',
       icon: <Smartphone className="w-5 h-5" />,
       status: results?.sms?.status || (loading ? 'loading' : 'idle'),
       message: results?.sms?.message,

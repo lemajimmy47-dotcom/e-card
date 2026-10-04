@@ -25,6 +25,7 @@ export interface UwalemiMember {
   nextOfKin: UwalemiNextOfKin;
   notes?: string;
   avatarUrl?: string;
+  suppressLateFeePenalty?: boolean;
 }
 
 export interface UwalemiMonthlyPayment {
@@ -69,6 +70,14 @@ export interface UwalemiEmergencyFund {
   beneficiaryName: string; // Nani anayesaidiwa
   beneficiaryPhone?: string;
   beneficiaryRelation?: string;
+  deceasedName?: string;
+  deathDate?: string;
+  deathPlace?: string;
+  location?: string;
+  meetingLocation?: string;
+  meetingDate?: string;
+  meetingTime?: string;
+  burialSchedule?: string;
   startDate: string;
   deadline: string;
   status: 'active' | 'closed' | 'disbursed';
@@ -173,6 +182,7 @@ export interface UwalemiPaymentMethod {
 export interface UwalemiGroupSettings {
   groupName: string;
   slogan: string;
+  logoUrl?: string;
   registrationFeeDefault: number;
   monthlyFeeDefault: number;
   emergencyFeeDefault: number;
@@ -182,17 +192,89 @@ export interface UwalemiGroupSettings {
   smsConfig: UwalemiSmsConfig;
   constitutionSummary?: string;
   createdDate: string;
+  foundedYear?: number;
+  foundedMonth?: number;
+  foundedDay?: number;
 }
 
 export interface UwalemiMessageLog {
   id: string;
-  timestamp: string;
+  timestamp?: string;
+  sentAt?: string;
+  createdAt?: string;
   recipientPhone: string;
   recipientName: string;
-  messageType: 'receipt' | 'reminder' | 'emergency' | 'meeting' | 'broadcast';
-  channel: 'sms' | 'whatsapp';
-  content: string;
-  status: 'delivered' | 'failed' | 'sent' | 'simulated';
+  messageType?: 'receipt' | 'reminder' | 'emergency' | 'meeting' | 'broadcast' | string;
+  type?: string;
+  channel?: 'sms' | 'whatsapp' | string;
+  content?: string;
+  message?: string;
+  text?: string;
+  status: 'delivered' | 'failed' | 'sent' | 'simulated' | string;
+}
+
+export interface UwalemiCandidate {
+  id: string;
+  memberId: string;
+  memberNo: string;
+  fullName: string;
+  phone: string;
+  avatarUrl?: string;
+  manifesto?: string;
+  slogan?: string;
+}
+
+export interface UwalemiElectionPosition {
+  id: string;
+  title: string; // e.g. "Mwenyekiti", "Makamu Mwenyekiti", "Katibu", "Mweka Hazina", "Mjumbe wa Kamati"
+  description?: string;
+  maxWinners: number; // e.g. 1 for chairperson, 2 or 3 for committee members
+  candidates: UwalemiCandidate[];
+}
+
+export interface UwalemiVoterRecord {
+  voterToken: string; // Unique, secret token e.g. "VT-91827481-UWL002"
+  memberId: string;
+  memberNo: string;
+  fullName: string;
+  phone: string;
+  isEligible: boolean;
+  ineligibilityReason?: string;
+  hasVoted: boolean;
+  votedAt?: string;
+  receiptCode?: string; // e.g. "UWL-VT-94817"
+  smsSentAt?: string;
+}
+
+export interface UwalemiAnonymousBallot {
+  id: string;
+  electionId: string;
+  timestamp: string;
+  receiptCode: string;
+  // Map of positionId -> array of candidateIds chosen
+  votes: Record<string, string[]>;
+}
+
+export interface UwalemiElection {
+  id: string;
+  title: string; // e.g. "Uchaguzi Mkuu wa Viongozi wa UWALEMI 2026/2028"
+  description?: string;
+  termYears?: string; // e.g. "2026 - 2028"
+  startDate: string; // YYYY-MM-DDTHH:mm
+  endDate: string; // YYYY-MM-DDTHH:mm
+  status: 'draft' | 'active' | 'paused' | 'completed';
+  eligibilityCriteria: {
+    activeMembersOnly: boolean;
+    requireRegistrationFeePaid: boolean;
+    maxAllowedFeeDebtMonths: number; // 0 = zero debt required, 3 = max 3 months, 99 = all allowed
+  };
+  positions: UwalemiElectionPosition[];
+  voters: UwalemiVoterRecord[];
+  ballots: UwalemiAnonymousBallot[]; // Anonymous votes storage
+  createdAt: string;
+  certifiedAt?: string;
+  certifiedBy?: string;
+  notes?: string;
 }
 
 export interface UwalemiState {
@@ -204,6 +286,7 @@ export interface UwalemiState {
   meetings: UwalemiMeeting[];
   finePayments?: UwalemiFinePayment[];
   accruedFines?: UwalemiAccruedFine[];
+  elections?: UwalemiElection[];
   messageLogs: UwalemiMessageLog[];
   lastMonthlyReminderYearMonth?: string;
   lastMonthlyReminderDate?: string;
@@ -217,6 +300,7 @@ export type UwalemiTab =
   | 'emergency_funds' 
   | 'expenses' 
   | 'meetings' 
+  | 'elections'
   | 'sms_center' 
   | 'reports'
   | 'settings';

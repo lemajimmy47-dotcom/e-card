@@ -30,15 +30,18 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { UwalemiFinePaymentModal } from './UwalemiFinePaymentModal';
-import { calculateMemberFeeDebt } from '../../services/uwalemiService';
+import { calculateMemberFeeDebt, normalizePaymentMethod, MONTH_NAMES_SW } from '../../services/uwalemiService';
+import { generatePaymentReceiptPDF, downloadPdfDocument, loadUwalemiLogoAsBase64 } from '../../services/uwalemiPdfGenerator';
 
 interface Props {
   state: UwalemiState;
   onSaveState: (state: UwalemiState) => Promise<boolean>;
   onOpenSmsForMember?: (member: UwalemiMember) => void;
+  onOpenMemberPortal?: (memberNo: string) => void;
+  readOnly?: boolean;
 }
 
-export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsForMember }) => {
+export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsForMember, onOpenMemberPortal, readOnly }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -179,6 +182,10 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
 
   const handleSaveMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) {
+      alert('Hali ya Kutazama Tu: Hauruhusiwi kuongeza au kubadilisha mwanachama.');
+      return;
+    }
     if (!formData.fullName || !formData.phone || !formData.memberNo) {
       alert('Tafadhali jaza Jina Kamili, Namba ya Mwanachama, na Namba ya Simu.');
       return;
@@ -605,45 +612,53 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
             Pakua Excel
           </button>
 
-          {/* Bulk Import Button */}
-          <button
-            onClick={() => {
-              setParsedPreview([]);
-              setPasteText('');
-              setBulkError(null);
-              setIsBulkModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
-          >
-            <Upload className="w-4 h-4" />
-            Ingiza kwa Wingi (Excel / CSV)
-          </button>
+          {!readOnly ? (
+            <>
+              {/* Bulk Import Button */}
+              <button
+                onClick={() => {
+                  setParsedPreview([]);
+                  setPasteText('');
+                  setBulkError(null);
+                  setIsBulkModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-900/30 transition-all cursor-pointer"
+              >
+                <Upload className="w-4 h-4" />
+                Ingiza kwa Wingi (Excel / CSV)
+              </button>
 
-          {/* Add Single Member */}
-          <button
-            onClick={() => {
-              setEditingMember(null);
-              setFormData({
-                memberNo: nextMemberNumber,
-                fullName: '',
-                phone: '',
-                email: '',
-                residence: 'Dar es Salaam',
-                role: 'Mjumbe',
-                status: 'active',
-                registrationFeePaid: false,
-                registrationFeeAmount: 0,
-                monthlyFeeAmount: 0,
-                nextOfKin: { name: '', relation: 'Mwenzi', phone: '' },
-                notes: ''
-              });
-              setIsAddModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Sajili Mwanachama Mpya
-          </button>
+              {/* Add Single Member */}
+              <button
+                onClick={() => {
+                  setEditingMember(null);
+                  setFormData({
+                    memberNo: nextMemberNumber,
+                    fullName: '',
+                    phone: '',
+                    email: '',
+                    residence: 'Dar es Salaam',
+                    role: 'Mjumbe',
+                    status: 'active',
+                    registrationFeePaid: false,
+                    registrationFeeAmount: 0,
+                    monthlyFeeAmount: 0,
+                    nextOfKin: { name: '', relation: 'Mwenzi', phone: '' },
+                    notes: ''
+                  });
+                  setIsAddModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Sajili Mwanachama Mpya
+              </button>
+            </>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+              <span>👁️ Hali ya Kutazama Tu</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -981,24 +996,28 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                         >
                           <CreditCard className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => {
-                            setEditingMember(member);
-                            setFormData(member);
-                            setIsAddModalOpen(true);
-                          }}
-                          title="Hariri Mjumbe"
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 transition-colors cursor-pointer"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteMember(member.id, member.fullName)}
-                          title="Futa Mjumbe"
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/40 text-rose-400 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!readOnly && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingMember(member);
+                                setFormData(member);
+                                setIsAddModalOpen(true);
+                              }}
+                              title="Hariri Mjumbe"
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMember(member.id, member.fullName)}
+                              title="Futa Mjumbe"
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/40 text-rose-400 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1559,6 +1578,7 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                             <th className="p-2">Tarehe</th>
                             <th className="p-2">Njia</th>
                             <th className="p-2">Stakabadhi</th>
+                            <th className="p-2 text-right">Pakua</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60 text-slate-300">
@@ -1567,8 +1587,44 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                               <td className="p-2 font-mono">{f.year} - Mwezi {f.month}</td>
                               <td className="p-2 text-emerald-400 font-bold">TZS {f.paidAmount.toLocaleString()}</td>
                               <td className="p-2 text-slate-400">{f.paymentDate || '-'}</td>
-                              <td className="p-2">{f.paymentMethod || 'M-Pesa'}</td>
+                              <td className="p-2">{normalizePaymentMethod(f.paymentMethod)}</td>
                               <td className="p-2 font-mono text-[10px] text-slate-400">{f.receiptNo || '-'}</td>
+                              <td className="p-2 text-right">
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
+                                      const doc = generatePaymentReceiptPDF({
+                                        receiptNo: f.receiptNo || `REC-${f.id.slice(-6)}`,
+                                        groupName: state.groupSettings?.groupName || 'UWALEMI',
+                                        slogan: state.groupSettings?.slogan,
+                                        logoUrl: state.groupSettings?.logoUrl || '/uwalemi_logo.png',
+                                        memberNo: viewingStatementMember.memberNo,
+                                        memberName: viewingStatementMember.fullName,
+                                        memberPhone: viewingStatementMember.phone,
+                                        paymentType: 'Ada ya Kila Mwezi',
+                                        periodOrTitle: `${MONTH_NAMES_SW[f.month - 1] || `Mwezi ${f.month}`} ${f.year}`,
+                                        amount: f.paidAmount,
+                                        paymentDate: f.paymentDate || new Date().toISOString().split('T')[0],
+                                        paymentMethod: normalizePaymentMethod(f.paymentMethod),
+                                        referenceNo: f.referenceNo,
+                                        receivedBy: 'Mweka Hazina wa UWALEMI',
+                                        statusType: f.status === 'partial' ? 'partial' : 'paid',
+                                        balanceRemaining: Math.max(0, (f.expectedAmount || 10000) - f.paidAmount)
+                                      });
+                                      downloadPdfDocument(doc, `Risiti_${f.receiptNo || viewingStatementMember.memberNo}_${f.month}_${f.year}.pdf`);
+                                    } catch (err) {
+                                      console.error(err);
+                                      alert('Hitilafu katika kupakua risiti ya PDF.');
+                                    }
+                                  }}
+                                  title="Pakua Risiti ya PDF ya Malipo Haya"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-600/40 text-emerald-300 hover:text-white text-[10px] font-semibold transition-all cursor-pointer"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  PDF
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1731,13 +1787,48 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                                     <td className="p-2 text-right font-bold text-emerald-400">TZS {(Number(fp.amount) || Number((fp as any).paidAmount) || 0).toLocaleString()}</td>
                                     <td className="p-2 text-slate-400">{fp.paymentMethod}</td>
                                     <td className="p-2 text-center">
-                                      <button
-                                        onClick={() => handleDeleteFinePayment(fp)}
-                                        className="p-1 rounded text-rose-400 hover:text-white hover:bg-rose-500/30 transition-colors cursor-pointer"
-                                        title="Futa / Ondoa rekodi hii ya malipo ya faini"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
+                                      <div className="flex items-center justify-center gap-1">
+                                        <button
+                                          onClick={async () => {
+                                            try {
+                                              await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
+                                              const doc = generatePaymentReceiptPDF({
+                                                receiptNo: fp.receiptNo,
+                                                groupName: state.groupSettings?.groupName || 'UWALEMI',
+                                                slogan: state.groupSettings?.slogan || 'Lema, Nguvu Moja.',
+                                                logoUrl: state.groupSettings?.logoUrl || '/uwalemi_logo.png',
+                                                memberNo: viewingStatementMember.memberNo,
+                                                memberName: viewingStatementMember.fullName,
+                                                memberPhone: viewingStatementMember.phone,
+                                                paymentType: fp.fineType === 'kikao' ? 'Faini ya Kikao' : fp.fineType === 'ada_late_fee' ? 'Faini ya Ada' : 'Faini Nyingine',
+                                                periodOrTitle: fp.fineTitle || (fp.fineType === 'kikao' ? 'Malipo ya Faini ya Kikao' : 'Malipo ya Faini'),
+                                                amount: Number(fp.amount) || Number((fp as any).paidAmount) || 0,
+                                                paymentDate: fp.paymentDate,
+                                                paymentMethod: normalizePaymentMethod(fp.paymentMethod),
+                                                referenceNo: fp.referenceNo || 'KUTOKA MFUMONI',
+                                                receivedBy: fp.receivedBy || 'Eva Lema (Mweka Hazina)',
+                                                note: fp.notes || 'Malipo ya faini yamethibitishwa rasmi na mfumo wa UWALEMI.'
+                                              });
+                                              downloadPdfDocument(doc, `Risiti_Faini_${fp.receiptNo}_${viewingStatementMember.memberNo}.pdf`);
+                                            } catch (err) {
+                                              console.error(err);
+                                              alert('Hitilafu katika kupakua risiti ya faini.');
+                                            }
+                                          }}
+                                          className="inline-flex items-center gap-1 px-1.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-600/40 text-emerald-300 hover:text-white text-[10px] font-semibold transition-all cursor-pointer"
+                                          title="Pakua Risiti ya PDF ya Faini Hii"
+                                        >
+                                          <Download className="w-3 h-3" />
+                                          PDF
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteFinePayment(fp)}
+                                          className="p-1 rounded text-rose-400 hover:text-white hover:bg-rose-500/30 transition-colors cursor-pointer"
+                                          title="Futa / Ondoa rekodi hii ya malipo ya faini"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 ))}

@@ -105,8 +105,26 @@ export async function initDB() {
 
   console.log("[CloudSQL Initializer] Preparing Cloud SQL connection parameters...");
   try {
-    // 1. Ensure all PostgreSQL tables and columns exist
-    await ensureTablesExist();
+    // 1. Ensure all PostgreSQL tables and columns exist (with retry for cold-boot sockets)
+    let retries = 4;
+    let tablesOk = false;
+    let lastErr = null;
+    while (retries > 0 && !tablesOk) {
+      try {
+        await ensureTablesExist();
+        tablesOk = true;
+      } catch (err: any) {
+        lastErr = err;
+        retries--;
+        if (retries > 0) {
+          console.log(`[CloudSQL Initializer] Socket initializing, waiting to verify tables (${retries} attempts remaining)...`);
+          await new Promise(r => setTimeout(r, 1200));
+        }
+      }
+    }
+    if (!tablesOk && lastErr) {
+      throw lastErr;
+    }
 
     // 2. If SQL database is empty, seed it from existing database.json
     // We wrap this in a timeout-like behavior or ensure it doesn't block forever
@@ -116,6 +134,10 @@ export async function initDB() {
     // 3. Read full state from PostgreSQL
     console.log("[CloudSQL Initializer] Fetching full state from PostgreSQL...");
     const state = await fetchFullStateFromDB();
+    
+    // Load queueJobs from local file to prevent loss across cold boots
+    const localFallbackObj = getLocalDBFallback();
+    state.queueJobs = localFallbackObj?.queueJobs || [];
     
     // If PostgreSQL doesn't have uwalemiState yet, seed from local database.json and sync to PostgreSQL
     if (!state.uwalemiState && fs.existsSync(DB_PATH)) {
@@ -186,7 +208,9 @@ export async function readDBLatest() {
     let attempts = 2;
     while (attempts > 0) {
       try {
+        const existingQueueJobs = inMemoryDB?.queueJobs || getLocalDBFallback()?.queueJobs || [];
         const state = await fetchFullStateFromDB();
+        state.queueJobs = existingQueueJobs;
         if (!state.uwalemiState) {
           const local = getLocalDBFallback();
           if (local && typeof local === 'object' && local.uwalemiState) {

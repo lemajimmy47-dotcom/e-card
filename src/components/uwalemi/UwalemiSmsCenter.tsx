@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { UwalemiState, UwalemiSmsConfig, UwalemiMessageLog, UwalemiMember } from '../../types/uwalemi';
+import { UwalemiState, UwalemiSmsConfig, UwalemiMessageLog, UwalemiMember, UwalemiEmergencyFund } from '../../types/uwalemi';
 import { 
   sendUwalemiSms, 
   sortMembersByLeadership, 
@@ -7,8 +7,12 @@ import {
   calculateMemberFeeDebt,
   formatPersonalizedUwalemiSms,
   getSwahiliDayAndDate,
+  formatSwahiliDate,
   triggerMonthlyAutoRemindersApi,
-  UwalemiMemberFeeDebtInfo 
+  UwalemiMemberFeeDebtInfo,
+  buildOfficialBereavementSms,
+  getAmountInSwahiliWords,
+  UWALEMI_THREE_MONTHS_ALERT_TEMPLATE
 } from '../../services/uwalemiService';
 import { 
   Send, 
@@ -37,33 +41,72 @@ import {
   CreditCard,
   Layers,
   ShieldCheck,
-  Zap
+  Zap,
+  Eye,
+  Copy,
+  HeartHandshake,
+  MapPin,
+  Building2,
+  Info,
+  Lock,
+  Trash2
 } from 'lucide-react';
+import { FuneralScheduleBuilder } from './FuneralScheduleBuilder';
 
 interface Props {
   state: UwalemiState;
   onSaveState: (state: UwalemiState) => Promise<boolean>;
   initialRecipients?: { name: string; phone: string; memberNo: string; memberId?: string }[];
   initialTemplate?: string;
+  readOnly?: boolean;
 }
 
 export const UwalemiSmsCenter: React.FC<Props> = ({
   state,
   onSaveState,
   initialRecipients,
-  initialTemplate
+  initialTemplate,
+  readOnly = false
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'compose' | 'gateway' | 'logs'>('compose');
   
   // Default templates
+  const defaultBereavementTemplate = `Habari {name},
+
+Uongozi wa UWALEMI unasikitika kukutaarifu kuwa mwanachama mwenzetu [Jina la Mwanachama] amefiwa na mama mkwe wake [Jina la Marehemu], amefariki tarehe 20 Septemba 2026 katika Hospitali ya Muhimbili.
+
+MAHALI MSIBA ULIPO : Msiba upo [Eneo la Msiba].
+
+MCHANGO WA RAMBIRAMBI (KILA MWANACHAMA):
+Kulingana na Mwongozo wa kikundi chetu cha UWALEMI, kiwango cha mchango kinachopaswa kutolewa na kila mwanachama ni TZS 5,000 (Shilingi Elfu Tano Tu) kama rambirambi na mkono wa pole kwa familia.
+
+NJIA YA KUWASILISHA MCHANGO: M Koba au 0758219298 (Eva O. Lema).
+
+Mwisho wa kuwasilisha michango yote ni tarehe 24 Septemba 2026, tunaombwa kukamilisha kwa wakati.
+
+RATIBA YA MAZISHI: Kuaga kutafanyika nyumbani kuanzia saa 6:00 mchana, na mazishi yatafanyika saa 9:00 alasiri makaburini.
+Tunaombwa wanachama wote tushirikiane kwa sala, pole msibani na michango kumfariji mwenzetu.
+
+"Bwana alitoa, na Bwana ametwaa; jina la Bwana lihimidiwe." (Ayubu 1:21)
+
+Uongozi wa UWALEMI 
+
+Lema, Nguvu Moja!`;
+
   const defaultSmartTemplate = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada zako: unadaiwa ada {feeDebt} {periodSummary} ({unpaidMonths}). Faini: {fainiSummary}. Jumla unayopaswa kulipa: {jumlaKuu}. Kamilisha kupitia {lipaNamba}. Lema, Nguvu Moja!`;
   const defaultFinesOnlyTemplate = `Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini zako: {fainiSummary}. Jumla ya faini unayodaiwa ni {faini}. Tafadhali lipa kupitia {lipaNamba}. Ahsante, Lema, Nguvu Moja!`;
 
+  const defaultThreeMonthsAlertTemplate = UWALEMI_THREE_MONTHS_ALERT_TEMPLATE;
+
   // Compose State
-  const [recipientFilter, setRecipientFilter] = useState<'all' | 'all_debtors' | 'fines_only' | 'meeting_fines_only' | 'late_fee_fines_only' | 'unpaid_month' | 'custom'>(
-    initialTemplate && initialTemplate.toLowerCase().includes('faini')
-      ? (initialRecipients && initialRecipients.length > 0 ? 'custom' : 'fines_only')
-      : (initialRecipients && initialRecipients.length > 0 ? 'custom' : 'all_debtors')
+  const [recipientFilter, setRecipientFilter] = useState<'all' | 'all_debtors' | 'three_months_debt' | 'fee_debt_only' | 'fines_only' | 'meeting_fines_only' | 'late_fee_fines_only' | 'unpaid_month' | 'custom'>(
+    initialTemplate
+      ? (initialTemplate.toLowerCase().includes('miezi mitatu') || initialTemplate.toLowerCase().includes('zaidi ya miezi')
+          ? (initialRecipients && initialRecipients.length > 0 ? 'custom' : 'three_months_debt')
+          : (initialTemplate.toLowerCase().includes('faini')
+              ? (initialRecipients && initialRecipients.length > 0 ? 'custom' : 'fines_only')
+              : (initialRecipients && initialRecipients.length > 0 ? 'custom' : 'all')))
+      : 'all'
   );
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(
     initialRecipients && initialRecipients.length > 0
@@ -73,18 +116,32 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   const [memberSearchTerm, setMemberSearchTerm] = useState<string>('');
   
   const [messageText, setMessageText] = useState<string>(
-    initialTemplate || defaultSmartTemplate
+    initialTemplate || defaultBereavementTemplate
   );
-  const [messageType, setMessageType] = useState<'broadcast' | 'reminder' | 'emergency' | 'meeting' | 'receipt'>('reminder');
+  const [messageType, setMessageType] = useState<'broadcast' | 'reminder' | 'emergency' | 'meeting' | 'receipt'>(
+    initialTemplate ? 'reminder' : 'emergency'
+  );
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
   const [previewMemberIndex, setPreviewMemberIndex] = useState<number>(0);
+  const [resendingLogId, setResendingLogId] = useState<string | null>(null);
+  const [resendLogFeedback, setResendLogFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
+  const [selectedLogForModal, setSelectedLogForModal] = useState<UwalemiMessageLog | any | null>(null);
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
+  const [logSearchTerm, setLogSearchTerm] = useState<string>('');
 
   // Sync props when user triggers SMS from external tabs (like Fines report or Meetings)
   useEffect(() => {
     if (initialTemplate) {
       setMessageText(initialTemplate);
-      if (initialTemplate.toLowerCase().includes('faini')) {
+      if (initialTemplate.toLowerCase().includes('miezi mitatu') || initialTemplate.toLowerCase().includes('zaidi ya miezi')) {
+        if (initialRecipients && initialRecipients.length > 0) {
+          setRecipientFilter('custom');
+          setSelectedMemberIds(initialRecipients.map(r => r.memberId || '').filter(Boolean));
+        } else {
+          setRecipientFilter('three_months_debt');
+        }
+      } else if (initialTemplate.toLowerCase().includes('faini')) {
         if (initialRecipients && initialRecipients.length > 0) {
           setRecipientFilter('custom');
           setSelectedMemberIds(initialRecipients.map(r => r.memberId || '').filter(Boolean));
@@ -107,13 +164,13 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     if (existing && existing.provider) {
       return existing;
     }
-    // Default to eHub configuration if no configuration exists
+    // Default to Meseji configuration if no configuration exists
     return {
-      provider: 'ehub',
-      apiKey: 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD',
-      secretKey: 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf',
-      senderId: '19f41b59-19d0-4f98-b8c9-9d5b1ac31308',
-      baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send',
+      provider: 'meseji',
+      apiKey: '',
+      secretKey: '',
+      senderId: 'MESEJI',
+      baseUrl: 'https://meseji.co.tz/api/v1/sms/send',
       autoSendReceipts: true,
       autoSendMeetingAlerts: true,
       autoSendMonthlyReminder: true
@@ -147,13 +204,50 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     globalHasEhub?: boolean;
   } | null>(null);
 
+  // Quick Test SMS state in Gateway sub-tab
+  const [testSmsPhone, setTestSmsPhone] = useState('');
+  const [testSmsStatus, setTestSmsStatus] = useState<{ loading: boolean; success?: boolean; message?: string } | null>(null);
+
+  const handleSendQuickTestSms = async () => {
+    if (readOnly) return;
+    if (!testSmsPhone.trim()) {
+      alert('Tafadhali weka namba ya simu ya kupokea SMS ya majaribio (mf. 07XXXXXXXX au 2557XXXXXXXX).');
+      return;
+    }
+    setTestSmsStatus({ loading: true });
+    try {
+      const result = await sendUwalemiSms({
+        recipients: [
+          {
+            phone: testSmsPhone.trim(),
+            name: 'Majaribio ya SMS',
+            customMessage: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia Meseji (${gatewayConfig.senderId || 'MESEJI'}). Muunganisho uko salama na unafanya kazi kikamilifu.`
+          }
+        ],
+        message: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia Meseji.`,
+        messageType: 'receipt'
+      });
+      setTestSmsStatus({
+        loading: false,
+        success: result.success,
+        message: result.message || (result.success ? 'SMS ya majaribio imetumwa kikamilifu!' : 'Imeshindwa kutuma SMS ya majaribio.')
+      });
+    } catch (e: any) {
+      setTestSmsStatus({
+        loading: false,
+        success: false,
+        message: e.message || 'Hitilafu ya mtandao wakati wa kutuma SMS ya majaribio'
+      });
+    }
+  };
+
   const handleCheckBalance = async () => {
     setIsCheckingBalance(true);
     setBalanceInfo(null);
     try {
       const q = new URLSearchParams({
         source: 'uwalemi',
-        provider: gatewayConfig.provider || 'ehub',
+        provider: gatewayConfig.provider || 'meseji',
         apiKey: gatewayConfig.apiKey || '',
         secretKey: gatewayConfig.secretKey || '',
         senderId: gatewayConfig.senderId || ''
@@ -177,7 +271,37 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     }
   };
 
+  const handleSetMeseji = async (apiKey = '', senderId = 'MESEJI') => {
+    if (readOnly) return;
+    try {
+      const updatedConfig: UwalemiSmsConfig = {
+        ...gatewayConfig,
+        provider: 'meseji',
+        apiKey: apiKey || (gatewayConfig.provider === 'meseji' ? gatewayConfig.apiKey : ''),
+        secretKey: '',
+        senderId: senderId || (gatewayConfig.senderId?.includes('-') ? 'MESEJI' : (gatewayConfig.senderId || 'MESEJI')),
+        baseUrl: 'https://meseji.co.tz/api/v1/sms/send'
+      };
+      setGatewayConfig(updatedConfig);
+      const updatedSettings = {
+        ...state.groupSettings,
+        smsConfig: updatedConfig
+      };
+      const updatedState = { ...state, groupSettings: updatedSettings };
+      await onSaveState(updatedState);
+      setSendResult(null);
+      if (updatedConfig.apiKey) {
+        setTimeout(() => handleCheckBalance(), 300);
+      }
+      alert('Meseji.co.tz imechaguliwa kama mtoa huduma wa SMS kwa ajili ya UWALEMI!');
+      return updatedConfig;
+    } catch (e: any) {
+      console.warn("handleSetMeseji failed:", e);
+    }
+  };
+
   const handleSetEhub = async (targetSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308') => {
+    if (readOnly) return;
     try {
       const updatedConfig: UwalemiSmsConfig = {
         ...gatewayConfig,
@@ -203,6 +327,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   };
 
   const handleSyncGlobalEhub = async () => {
+    if (readOnly) return;
     try {
       const res = await fetch('/api/state');
       let apiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
@@ -244,6 +369,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   };
 
   const handleQuickFixSenderId = async (newSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308') => {
+    if (readOnly) return;
     const updatedConfig: UwalemiSmsConfig = {
       ...gatewayConfig,
       provider: 'ehub',
@@ -263,11 +389,12 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   };
 
   const handleSyncSwalaSms = async () => {
+    if (readOnly) return;
     const updatedConfig: UwalemiSmsConfig = {
       provider: 'swalasms',
       apiKey: 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3',
       secretKey: '',
-      senderId: 'EVENT CARD',
+      senderId: 'UWALEMI',
       baseUrl: 'https://swalasms.com/api/v1/sms/quick-message',
       autoSendReceipts: gatewayConfig.autoSendReceipts ?? true,
       autoSendMeetingAlerts: gatewayConfig.autoSendMeetingAlerts ?? true,
@@ -281,10 +408,11 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     const updatedState = { ...state, groupSettings: updatedSettings };
     await onSaveState(updatedState);
     setSendResult(null);
-    alert('SwalaSMS (Sender ID: EVENT CARD) imewekwa na kuunganishwa kikamilifu!');
+    alert('SwalaSMS (Sender ID: UWALEMI) imewekwa na kuunganishwa kikamilifu!');
   };
 
   const handleSwitchToSimulation = async () => {
+    if (readOnly) return;
     const updatedConfig: UwalemiSmsConfig = {
       ...gatewayConfig,
       provider: 'simulation'
@@ -380,6 +508,27 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
           startMonth: d.startMonthName,
           endMonth: d.endMonthName,
           unpaidMonths: d.unpaidMonthsText,
+          periodSummary: d.periodSummary,
+          monthsCount: d.unpaidCount
+        }));
+    }
+
+    if (recipientFilter === 'three_months_debt') {
+      return memberDebts
+        .filter(d => (d.unpaidCount || 0) >= 3 && d.status === 'active')
+        .map(d => ({
+          name: d.memberName,
+          phone: d.phone,
+          memberNo: d.memberNo,
+          memberId: d.memberId,
+          debtAmount: d.totalDebt,
+          feeDebt: d.feeDebt,
+          lateFeePenalty: d.lateFeePenalty,
+          otherFinesDebt: d.otherFinesDebt,
+          totalFinesDebt: d.totalFinesDebt,
+          startMonth: d.startMonthName,
+          endMonth: d.endMonthName,
+          unpaidMonths: (d.breakdown && d.breakdown.length > 0) ? d.breakdown.map(b => b.monthName).join(', ') : d.unpaidMonthsText,
           periodSummary: d.periodSummary,
           monthsCount: d.unpaidCount
         }));
@@ -518,7 +667,10 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   }, [recipientFilter, selectedMemberIds, initialRecipients, members, memberDebts, memberDebtsMap, currentMonthUnpaidIds]);
 
   const handleApplyTemplate = (type: string) => {
-    if (type === 'fee_debt_only_reminder') {
+    if (type === 'three_months_debt_alert') {
+      setMessageText(defaultThreeMonthsAlertTemplate);
+      setMessageType('reminder');
+    } else if (type === 'fee_debt_only_reminder') {
       setMessageText(`Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada yako ya miezi iliyopita: unadaiwa ada TZS {feeDebt} {periodSummary} ({unpaidMonths}). Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya kuchelewa kulipa ada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!`);
       setMessageType('reminder');
     } else if (type === 'smart_debt_reminder') {
@@ -531,13 +683,13 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
       setMessageText(`Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kuwa una faini ya ucheleweshaji wa ada ya miezi {fainiMiezi} (zaidi ya miezi 3 ya neema) kiasi cha {fainiAda}. Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
       setMessageType('reminder');
     } else if (type === 'meeting_fine_reminder') {
-      setMessageText(`Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya kutohudhuria/kuchelewa kikao kiasi cha {fainiVikao}. Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
+      setMessageText(`Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya kikao: {fainiVikao}. Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
       setMessageType('reminder');
     } else if (type === 'single_month_reminder') {
       setMessageText(`Habari {name}, hii ni taarifa ya kukumbusha ada yako ya kikundi cha UWALEMI ya mwezi huu ({monthlyFee}). Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
       setMessageType('reminder');
     } else if (type === 'emergency_alert') {
-      setMessageText(`TAARIFA YA MSIBA / DHARURA - UWALEMI\nHabari {name}, kikundi kinatangaza mchango wa dharura wa TZS 20,000 kusaidiana na mwanachama mwenzetu. Mwisho wa kuchanga ni siku 14 kuanzia leo. Lipa kupitia {lipaNamba}. Lema, Nguvu Moja!`);
+      setIsBereavementModalOpen(true);
       setMessageType('emergency');
     } else if (type === 'meeting_quick_reminder') {
       const upcomingMeeting = state.meetings?.find(m => m.status === 'upcoming') || state.meetings?.[0];
@@ -583,6 +735,256 @@ Lema, Nguvu Moja!`);
 
   const insertTag = (tag: string) => {
     setMessageText(prev => prev + ` ${tag} `);
+  };
+
+  // Bereavement SMS Announcement State (Kanuni: Elfu 10 / Elfu 5)
+  const [isBereavementModalOpen, setIsBereavementModalOpen] = useState(false);
+  const [editingBereavementFundId, setEditingBereavementFundId] = useState<string>('');
+  const [bereavementForm, setBereavementForm] = useState<{
+    memberId: string;
+    relationType: 'mwanachama' | 'mke' | 'mume' | 'mtoto' | 'mzazi_baba' | 'mzazi_mama' | 'mkwe_baba' | 'mkwe_mama' | 'nyingine';
+    deceasedName: string;
+    deathDate: string;
+    deathPlace: string;
+    location: string;
+    meetingLocation: string;
+    meetingDate: string;
+    meetingTime: string;
+    contributionAmount: number;
+    paymentDetails: string;
+    deadlineDate: string;
+    burialSchedule: string;
+    autoCreateFund: boolean;
+    includeGreeting: boolean;
+  }>(() => {
+    const defaultPayment = 'M Koba au 0758219298 (Eva O. Lema)';
+    const futureDate = '2026-09-24';
+    const hamphrey = members.find(m => m.fullName.toLowerCase().includes('hamphrey')) || members[0];
+
+    return {
+      memberId: '',
+      relationType: 'mkwe_mama',
+      deceasedName: '',
+      deathDate: '',
+      deathPlace: '',
+      location: '',
+      meetingLocation: '',
+      meetingDate: '',
+      meetingTime: '',
+      contributionAmount: 5000,
+      paymentDetails: defaultPayment,
+      deadlineDate: '',
+      burialSchedule: '',
+      autoCreateFund: true,
+      includeGreeting: true
+    };
+  });
+
+  // Automatically update payment details if group settings update
+  useEffect(() => {
+    if (state.groupSettings?.paymentMethods?.[0]) {
+      const pm = state.groupSettings.paymentMethods[0];
+      setBereavementForm(prev => ({
+        ...prev,
+        paymentDetails: prev.paymentDetails || `${pm.name}: ${pm.accountNumber} (${pm.accountName})`
+      }));
+    }
+  }, [state.groupSettings]);
+
+  // Open bereavement modal if triggered via external parameter
+  useEffect(() => {
+    if (initialTemplate === 'emergency_alert_open_modal') {
+      setIsBereavementModalOpen(true);
+    }
+  }, [initialTemplate]);
+
+  const getBereavementRelationInfo = (type: string) => {
+    switch (type) {
+      case 'mwanachama':
+        return {
+          label: 'Mwanachama Mwenyewe',
+          amount: 10000,
+          amountWords: 'Shilingi Elfu Kumi Tu',
+          category: 'mwanachama',
+          relationText: 'mwanachama mwenzetu'
+        };
+      case 'mke':
+        return {
+          label: 'Mke wa Mwanachama',
+          amount: 10000,
+          amountWords: 'Shilingi Elfu Kumi Tu',
+          category: 'mke',
+          relationText: 'mke wake mpendwa'
+        };
+      case 'mume':
+        return {
+          label: 'Mume wa Mwanachama',
+          amount: 10000,
+          amountWords: 'Shilingi Elfu Kumi Tu',
+          category: 'mume',
+          relationText: 'mume wake mpendwa'
+        };
+      case 'mtoto':
+        return {
+          label: 'Mtoto wa Mwanachama',
+          amount: 10000,
+          amountWords: 'Shilingi Elfu Kumi Tu',
+          category: 'mtoto',
+          relationText: 'mtoto wake mpendwa'
+        };
+      case 'mzazi_baba':
+        return {
+          label: 'Baba Mzazi wa Mwanachama',
+          amount: 10000,
+          amountWords: 'Shilingi Elfu Kumi Tu',
+          category: 'mzazi',
+          relationText: 'baba yake mzazi'
+        };
+      case 'mzazi_mama':
+        return {
+          label: 'Mama Mzazi wa Mwanachama',
+          amount: 10000,
+          amountWords: 'Shilingi Elfu Kumi Tu',
+          category: 'mzazi',
+          relationText: 'mama yake mzazi'
+        };
+      case 'mkwe_baba':
+        return {
+          label: 'Baba Mkwe wa Mwanachama',
+          amount: 5000,
+          amountWords: 'Shilingi Elfu Tano Tu',
+          category: 'mkwe',
+          relationText: 'baba yake mkwe'
+        };
+      case 'mkwe_mama':
+        return {
+          label: 'Mama Mkwe wa Mwanachama',
+          amount: 5000,
+          amountWords: 'Shilingi Elfu Tano Tu',
+          category: 'mkwe',
+          relationText: 'mama yake mkwe'
+        };
+      default:
+        return {
+          label: 'Uhusiano Mwingine / Maalum',
+          amount: 10000,
+          amountWords: 'Shilingi Elfu Kumi Tu',
+          category: 'nyingine',
+          relationText: 'ndugu wa karibu'
+        };
+    }
+  };
+
+  const generateLongBereavementMessage = (form: typeof bereavementForm) => {
+    const selectedMember = members.find(m => m.id === form.memberId);
+    const relInfo = getBereavementRelationInfo(form.relationType);
+    const memberName = selectedMember ? selectedMember.fullName : '[Jina la Mwanachama]';
+
+    return buildOfficialBereavementSms({
+      memberName,
+      relationType: form.relationType,
+      relationCustomLabel: relInfo.relationText || relInfo.label,
+      deceasedName: form.deceasedName,
+      deathDate: form.deathDate,
+      deathPlace: form.deathPlace,
+      location: form.location,
+      meetingLocation: form.meetingLocation,
+      meetingDate: form.meetingDate,
+      meetingTime: form.meetingTime,
+      contributionAmount: Number(form.contributionAmount) || 5000,
+      paymentMethod: form.paymentDetails || 'M Koba au 0758219298 (Eva O. Lema)',
+      deadlineDate: form.deadlineDate,
+      burialSchedule: form.burialSchedule,
+      includeGreeting: form.includeGreeting !== false
+    });
+  };
+
+  const handleApplyBereavementAnnouncement = async () => {
+    if (!bereavementForm.memberId) {
+      alert('Tafadhali chagua mwanachama aliyepatwa na msiba.');
+      return;
+    }
+
+    const selectedMember = members.find(m => m.id === bereavementForm.memberId);
+    const relInfo = getBereavementRelationInfo(bereavementForm.relationType);
+    const longMsg = generateLongBereavementMessage(bereavementForm);
+
+    setMessageText(longMsg);
+    setMessageType('emergency');
+    setRecipientFilter('all');
+
+    // If user was editing an existing fund, update it directly
+    if (editingBereavementFundId && !readOnly) {
+      const fundTitle = `Msiba: ${relInfo.label} (${selectedMember?.fullName || 'Mwanachama'})`;
+      const updatedFunds = (state.emergencyFunds || []).map(f => {
+        if (f.id === editingBereavementFundId) {
+          return {
+            ...f,
+            title: f.title || fundTitle,
+            perMemberTarget: Number(bereavementForm.contributionAmount),
+            targetAmount: Number(bereavementForm.contributionAmount) * (members.length || 1),
+            beneficiaryName: selectedMember?.fullName || f.beneficiaryName,
+            beneficiaryPhone: selectedMember?.phone || f.beneficiaryPhone,
+            beneficiaryRelation: relInfo.label,
+            deceasedName: bereavementForm.deceasedName,
+            deathDate: bereavementForm.deathDate,
+            deathPlace: bereavementForm.deathPlace,
+            location: bereavementForm.location,
+            meetingLocation: bereavementForm.meetingLocation,
+            meetingDate: bereavementForm.meetingDate,
+            meetingTime: bereavementForm.meetingTime,
+            burialSchedule: bereavementForm.burialSchedule,
+            deadline: bereavementForm.deadlineDate,
+            description: `Taarifa ya msiba wa ${bereavementForm.deceasedName || relInfo.label}. Eneo la msiba: ${bereavementForm.location || 'Haijawekwa'}. Kiwango cha mchango wa kila mwanachama ni TZS ${Number(bereavementForm.contributionAmount).toLocaleString()}. ${bereavementForm.burialSchedule ? 'Ratiba: ' + bereavementForm.burialSchedule : ''}`
+          };
+        }
+        return f;
+      });
+      await onSaveState({
+        ...state,
+        emergencyFunds: updatedFunds
+      });
+    } else if (bereavementForm.autoCreateFund && !readOnly) {
+      // Auto create emergency fund tracking if checked and not readOnly
+      const fundTitle = `Msiba: ${relInfo.label} (${selectedMember?.fullName || 'Mwanachama'})`;
+      const alreadyExists = (state.emergencyFunds || []).some(
+        f => f.title.toLowerCase() === fundTitle.toLowerCase() && f.status === 'active'
+      );
+
+      if (!alreadyExists) {
+        const newFund: UwalemiEmergencyFund = {
+          id: `emg-${Date.now()}`,
+          title: fundTitle,
+          type: 'msiba',
+          targetAmount: Number(bereavementForm.contributionAmount) * (members.length || 1),
+          perMemberTarget: Number(bereavementForm.contributionAmount),
+          beneficiaryName: selectedMember?.fullName || 'Mwanachama',
+          beneficiaryPhone: selectedMember?.phone || '',
+          beneficiaryRelation: relInfo.label,
+          deceasedName: bereavementForm.deceasedName,
+          deathDate: bereavementForm.deathDate,
+          deathPlace: bereavementForm.deathPlace,
+          location: bereavementForm.location,
+          meetingLocation: bereavementForm.meetingLocation,
+          meetingDate: bereavementForm.meetingDate,
+          meetingTime: bereavementForm.meetingTime,
+          burialSchedule: bereavementForm.burialSchedule,
+          startDate: new Date().toISOString().split('T')[0],
+          deadline: bereavementForm.deadlineDate,
+          status: 'active',
+          description: `Taarifa ya msiba wa ${bereavementForm.deceasedName || relInfo.label}. Eneo la msiba: ${bereavementForm.location || 'Haijawekwa'}. Kiwango cha mchango wa kila mwanachama ni TZS ${Number(bereavementForm.contributionAmount).toLocaleString()}.`,
+          payments: []
+        };
+
+        const updatedFunds = [newFund, ...(state.emergencyFunds || [])];
+        await onSaveState({
+          ...state,
+          emergencyFunds: updatedFunds
+        });
+      }
+    }
+
+    setIsBereavementModalOpen(false);
   };
 
   // Preview formatting
@@ -654,6 +1056,7 @@ Lema, Nguvu Moja!`);
   }, [messageText, previewDebtInfo]);
 
   const handleSendSms = async () => {
+    if (readOnly) return;
     if (targetRecipients.length === 0) {
       alert('Tafadhali chagua angalau mpokeaji mmoja mwenye namba ya simu.');
       return;
@@ -720,8 +1123,71 @@ Lema, Nguvu Moja!`);
     });
   };
 
+  const handleResendLog = async (log: any) => {
+    if (readOnly) return;
+    const phone = log.recipientPhone || '';
+    if (!phone) {
+      alert('Hakuna namba ya simu ya mpokeaji iliyopatikana kwenye kumbukumbu hii.');
+      return;
+    }
+    const textToSend = log.message || log.content || '';
+    if (!textToSend) {
+      alert('Hakuna ujumbe uliopatikana kwenye kumbukumbu hii.');
+      return;
+    }
+
+    setResendingLogId(log.id);
+    setResendLogFeedback(null);
+    try {
+      const result = await sendUwalemiSms({
+        recipients: [
+          {
+            memberId: log.memberId,
+            phone,
+            name: log.recipientName,
+            customMessage: textToSend
+          }
+        ],
+        message: textToSend,
+        messageType: log.type || 'receipt'
+      });
+
+      setResendLogFeedback({
+        id: log.id,
+        success: result.success,
+        message: result.success ? `✓ SMS imetumwa tena kwa mafanikio kwenda ${phone}!` : (result.message || 'Haikuweza kutuma SMS.')
+      });
+    } catch (e: any) {
+      setResendLogFeedback({
+        id: log.id,
+        success: false,
+        message: e.message || 'Hitilafu ya mtandao wakati wa kutuma SMS.'
+      });
+    } finally {
+      setResendingLogId(null);
+    }
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    if (readOnly) return;
+    if (!window.confirm('Je, una uhakika unataka kufuta kumbukumbu hii ya ujumbe uliotumwa?')) {
+      return;
+    }
+    const updatedLogs = messageLogs.filter(l => l.id !== logId);
+    await onSaveState({ ...state, messageLogs: updatedLogs });
+  };
+
+  const handleClearAllLogs = async () => {
+    if (readOnly) return;
+    if (!window.confirm(`Je, una uhakika unataka kufuta kumbukumbu zote ${messageLogs.length} za ujumbe? Hatua hii haiwezi kurudishwa.`)) {
+      return;
+    }
+    await onSaveState({ ...state, messageLogs: [] });
+  };
+
   const handleSaveGateway = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) return;
     const updatedSettings = {
       ...state.groupSettings,
       smsConfig: gatewayConfig
@@ -732,6 +1198,7 @@ Lema, Nguvu Moja!`);
   };
 
   const handleTriggerTestReminders = async () => {
+    if (readOnly) return;
     if (!confirm('Je, unataka kutuma/kujaribu vikumbusho vya ada ya mwezi huu sasa kwa wanachama wote ambao hawajalipa mwezi huu?')) {
       return;
     }
@@ -818,10 +1285,52 @@ Lema, Nguvu Moja!`);
               </span>
             </div>
 
+            {/* Dedicated Bereavement Announcement Banner */}
+            <div className="bg-gradient-to-r from-rose-950/40 via-purple-950/25 to-slate-950 p-3.5 rounded-xl border border-rose-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-rose-950/20">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                  <HeartHandshake className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs font-bold text-white">
+                      Taarifa ya Misiba & Michango ya Wanachama
+                    </h4>
+                    <span className="text-[10px] bg-rose-500/20 border border-rose-500/40 text-rose-300 px-2 py-0.5 rounded-full font-bold">
+                      Kanuni: Elfu 10 / Elfu 5
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Tuma ujumbe rasmi na mrefu wenye eneo la msiba, jina la marehemu, na kiwango rasmi cha mchango (TZS 10,000 / 5,000).
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBereavementModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md shadow-rose-900/40 cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+              >
+                <HeartHandshake className="w-4 h-4" />
+                🕊️ Tangaza Msiba & Michango
+              </button>
+            </div>
+
             {/* Quick Templates Pills */}
             <div>
               <span className="text-[11px] text-slate-400 block mb-1.5 font-semibold">Violezo vya Haraka (Templates):</span>
               <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecipientFilter('three_months_debt');
+                    handleApplyTemplate('three_months_debt_alert');
+                  }}
+                  className="px-3 py-1 rounded-lg bg-red-600/30 hover:bg-red-600/40 text-red-200 text-[11px] font-bold border border-red-500/50 cursor-pointer flex items-center gap-1.5 shadow-sm ring-1 ring-red-500/30"
+                  title="Weka ujumbe wa onyo la faini ya tarehe 1 na hatua za kikatiba kwa wenye madeni ya miezi 3+"
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                  🚨 Alert ya Katiba (Miezi 3+)
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -887,10 +1396,22 @@ Lema, Nguvu Moja!`);
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleApplyTemplate('emergency_alert')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold border border-slate-700 cursor-pointer"
+                  onClick={() => {
+                    setMessageText(defaultBereavementTemplate);
+                    setMessageType('emergency');
+                    setRecipientFilter('all');
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-rose-600/30 hover:bg-rose-600/40 text-rose-200 text-[11px] font-bold border border-rose-500/50 cursor-pointer flex items-center gap-1 shadow-sm"
+                  title="Weka mfano wa ujumbe rasmi wa msiba mara moja"
                 >
-                  🆘 Taarifa ya Msiba
+                  🕊️ Mfano wa Tangazo la Msiba
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBereavementModalOpen(true)}
+                  className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[11px] font-bold border border-rose-500/40 cursor-pointer flex items-center gap-1 shadow-sm"
+                >
+                  🕊️ Tangaza Msiba & Michango (10,000 / 5,000)
                 </button>
               </div>
             </div>
@@ -945,10 +1466,34 @@ Lema, Nguvu Moja!`);
                 <button
                   type="button"
                   onClick={() => insertTag('{fainiVikao}')}
-                  title="Faini za Kutohudhuria Vikao"
-                  className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[10.5px] font-mono border border-rose-500/40 cursor-pointer"
+                  title="Mchanganuo Kamili wa Faini za Vikao (Kutohudhuria/Kuchelewa, Jina la Kikao, Tarehe na Kiasi)"
+                  className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[10.5px] font-mono border border-rose-500/40 cursor-pointer font-bold"
                 >
                   {"{fainiVikao}"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertTag('{fainiVikaoTarehe}')}
+                  title="Tarehe ya Kikao Chenye Faini (mf. 15/05/2026)"
+                  className="px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-[10.5px] font-mono border border-rose-500/30 cursor-pointer"
+                >
+                  {"{fainiVikaoTarehe}"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertTag('{fainiVikaoJina}')}
+                  title="Jina la Kikao Chenye Faini (mf. Kikao cha Mei)"
+                  className="px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-[10.5px] font-mono border border-rose-500/30 cursor-pointer"
+                >
+                  {"{fainiVikaoJina}"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertTag('{fainiVikaoKiasi}')}
+                  title="Kiasi cha Pesa cha Faini ya Kikao Pekee (mf. TZS 10,000)"
+                  className="px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-[10.5px] font-mono border border-rose-500/30 cursor-pointer"
+                >
+                  {"{fainiVikaoKiasi}"}
                 </button>
                 <button
                   type="button"
@@ -965,6 +1510,14 @@ Lema, Nguvu Moja!`);
                   className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10.5px] font-mono border border-slate-700 cursor-pointer"
                 >
                   {"{fainiMiezi}"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertTag('{totalDebt}')}
+                  title="Jumla ya Kiasi Chote Anachodaiwa (Ada + Faini Zote)"
+                  className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10.5px] font-mono border border-emerald-500/40 cursor-pointer font-bold"
+                >
+                  {"{totalDebt}"}
                 </button>
                 <button
                   type="button"
@@ -1013,6 +1566,14 @@ Lema, Nguvu Moja!`);
                   className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10.5px] font-mono border border-slate-700 cursor-pointer"
                 >
                   {"{monthsCount}"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertTag('{unpaidMonthsCount}')}
+                  title="Idadi ya Miezi Inayodaiwa (mf. 3)"
+                  className="px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 text-red-300 text-[10.5px] font-mono border border-red-500/40 cursor-pointer font-bold"
+                >
+                  {"{unpaidMonthsCount}"}
                 </button>
                 <button
                   type="button"
@@ -1212,6 +1773,32 @@ Lema, Nguvu Moja!`);
             </div>
 
             <div className="space-y-2 text-xs">
+              <label className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                recipientFilter === 'three_months_debt' ? 'bg-red-500/15 border-red-500/50 ring-1 ring-red-500/40 shadow-sm' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+              }`}>
+                <input
+                  type="radio"
+                  name="recFilter"
+                  checked={recipientFilter === 'three_months_debt'}
+                  onChange={() => {
+                    setRecipientFilter('three_months_debt');
+                    handleApplyTemplate('three_months_debt_alert');
+                  }}
+                  className="text-red-500 mt-0.5"
+                />
+                <div>
+                  <span className="font-bold text-red-300 flex items-center gap-1.5">
+                    🚨 Madeni ya Miezi 3+ (Alert ya Tarehe 1 & Katiba)
+                    <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 text-[10px] font-mono">
+                      {memberDebts.filter(d => (d.unpaidCount || 0) >= 3 && d.status === 'active').length}
+                    </span>
+                  </span>
+                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                    Huchuja wanachama wote wanaodaiwa ada kuanzia miezi 3 na kuendelea kwa ajili ya kuwapa onyo la faini ya tarehe 1 na hatua za kikatiba.
+                  </span>
+                </div>
+              </label>
+
               <label className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
                 recipientFilter === 'fee_debt_only' ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
               }`}>
@@ -1469,57 +2056,115 @@ Lema, Nguvu Moja!`);
       {/* VIEW 2: GATEWAY CONFIG */}
       {activeSubTab === 'gateway' && (
         <div className="max-w-2xl bg-slate-900/70 border border-slate-800 rounded-2xl p-6 backdrop-blur-md space-y-6">
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Settings className="w-4 h-4 text-emerald-400" />
-              Mipangilio ya Mtoa Huduma wa SMS (SMS Gateway)
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Weka taarifa za API za Meseji.co.tz, Beem Africa, au NextSMS ili ujumbe wa kikundi cha UWALEMI uende moja kwa moja kwa simu za wajumbe kupitia mtandao wa simu.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Settings className="w-4 h-4 text-emerald-400" />
+                Mipangilio ya Mtoa Huduma wa SMS (SMS Gateway)
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Chagua mtoa huduma na uweke taarifa za API za Meseji.co.tz ili ujumbe wa kikundi cha UWALEMI uende moja kwa moja kwa simu za wajumbe.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Preset Selector Buttons */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2">
+            <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
+              <span>Chagua Mtoa Huduma kwa Haraka (Quick Switch):</span>
+              <span className="text-[10px] text-emerald-400 font-normal">Chaguo rasmi: Meseji.co.tz</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSetMeseji('', 'MESEJI')}
+                className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                  gatewayConfig.provider === 'meseji'
+                    ? 'bg-emerald-950/80 border-emerald-500 text-white ring-1 ring-emerald-500 shadow-md shadow-emerald-950/50'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="font-bold text-xs flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'meseji' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  Meseji.co.tz
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Tanzania SMS API</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSyncSwalaSms}
+                className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                  gatewayConfig.provider === 'swalasms'
+                    ? 'bg-emerald-950/80 border-emerald-500 text-white ring-1 ring-emerald-500 shadow-md shadow-emerald-950/50'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="font-bold text-xs flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'swalasms' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  SwalaSMS
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Sender: UWALEMI</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSyncGlobalEhub}
+                className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                  gatewayConfig.provider === 'ehub'
+                    ? 'bg-emerald-950/80 border-emerald-500 text-white ring-1 ring-emerald-500 shadow-md shadow-emerald-950/50'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="font-bold text-xs flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'ehub' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  eHub SMS
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Tanzania SMS</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSwitchToSimulation}
+                className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                  gatewayConfig.provider === 'simulation'
+                    ? 'bg-amber-950/80 border-amber-500 text-white ring-1 ring-amber-500 shadow-md shadow-amber-950/50'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="font-bold text-xs flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'simulation' ? 'bg-amber-400' : 'bg-slate-600'}`} />
+                  Simulation
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Majaribio (Free)</div>
+              </button>
+            </div>
           </div>
 
           {/* Status Banner */}
           <div className={`p-4 rounded-xl border flex items-start gap-3 ${
-            gatewayConfig.provider !== 'simulation' && gatewayConfig.apiKey
+            gatewayConfig.provider !== 'simulation' && (gatewayConfig.apiKey || gatewayConfig.provider === 'swalasms' || gatewayConfig.provider === 'ehub')
               ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
               : 'bg-amber-950/40 border-amber-800/60 text-amber-300'
           }`}>
             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
             <div className="text-xs space-y-1">
               <div className="font-bold flex items-center gap-2">
-                Hali ya Sasa: {gatewayConfig.provider !== 'simulation' && gatewayConfig.apiKey
-                  ? `Imeunganishwa na ${gatewayConfig.provider.toUpperCase()} (SMS Halisi Zitatumwa)`
+                Hali ya Sasa: {gatewayConfig.provider === 'meseji'
+                  ? (gatewayConfig.apiKey ? 'Imeunganishwa na Meseji.co.tz (SMS Halisi Zitatumwa)' : 'Meseji.co.tz Imechaguliwa (Inasubiri API Key)')
+                  : gatewayConfig.provider !== 'simulation'
+                  ? `Imeunganishwa na ${gatewayConfig.provider?.toUpperCase()} (SMS Halisi Zitatumwa)`
                   : 'Hali ya Majaribio (Simulation Mode)'}
               </div>
               <p className="text-slate-300 leading-relaxed">
-                {gatewayConfig.provider !== 'simulation' && gatewayConfig.apiKey
+                {gatewayConfig.provider === 'meseji'
+                  ? (gatewayConfig.apiKey 
+                      ? `Ujumbe na stakabadhi za kiotomatiki zitatumwa moja kwa moja kwenye simu za wajumbe kupitia Meseji.co.tz kwa kutumia jina la "${gatewayConfig.senderId || 'MESEJI'}".`
+                      : 'Weka API Key yako ya Meseji.co.tz hapa chini ili kuanza kutuma SMS halisi kwa wanachama wa UWALEMI.')
+                  : gatewayConfig.provider !== 'simulation'
                   ? `Ujumbe na stakabadhi za kiotomatiki zitatumwa moja kwa moja kwenye simu za wajumbe kwa kutumia jina la "${gatewayConfig.senderId || 'UWALEMI'}".`
-                  : 'Kwa sasa mfumo unarekodi stakabadhi na jumbe zote kwenye tab ya "Kumbukumbu za Ujumbe (Logs)" bila kukata salio. Ili ujumbe ufike halisi kwenye simu ya mwanachama, chagua Mtoa Huduma (Meseji, Beem, au NextSMS) na uweke API Key & Secret.'}
+                  : 'Kwa sasa mfumo unarekodi stakabadhi na jumbe zote kwenye tab ya "Kumbukumbu za Ujumbe (Logs)" bila kukata salio.'}
               </p>
-            </div>
-          </div>
-
-          {/* Quick sync suggestion banner if using Meseji with error or wanting eHub */}
-          <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/60 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-start gap-2.5 text-emerald-200">
-              <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold text-white">eHub SMS Tanzania (Ina salio na inafanya kazi)</span>
-                <p className="text-[11px] text-emerald-300/90 mt-0.5">
-                  Akaunti ya eHub SMS yenye Sender ID ya "UWALEMI" imethibitishwa na inatuma ujumbe moja kwa moja.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => handleSetEhub('19f41b59-19d0-4f98-b8c9-9d5b1ac31308')}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow shrink-0"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Weka eHub (UWALEMI)
-              </button>
             </div>
           </div>
 
@@ -1527,52 +2172,47 @@ Lema, Nguvu Moja!`);
             <div>
               <label className="block text-slate-300 font-semibold mb-1">Mtoa Huduma (Provider):</label>
               <select
-                value={gatewayConfig.provider}
+                value={gatewayConfig.provider || 'meseji'}
                 onChange={(e) => {
                   const val = e.target.value as any;
                   const newConfig = { ...gatewayConfig, provider: val };
-                  if (val === 'swalasms') {
-                    newConfig.apiKey = newConfig.apiKey || 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
-                    newConfig.senderId = 'EVENT CARD';
-                    newConfig.baseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
-                  } else if (val === 'meseji') {
+                  if (val === 'meseji') {
                     newConfig.baseUrl = 'https://meseji.co.tz/api/v1/sms/send';
                     if (!newConfig.senderId || newConfig.senderId.includes('-')) {
                       newConfig.senderId = 'MESEJI';
                     }
+                  } else if (val === 'swalasms') {
+                    newConfig.baseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
+                    newConfig.apiKey = 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
+                    newConfig.senderId = 'UWALEMI';
+                    newConfig.secretKey = '';
                   } else if (val === 'ehub') {
                     newConfig.baseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
-                    if (!newConfig.senderId || !newConfig.senderId.includes('-')) {
-                      newConfig.senderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
-                    }
-                  } else if (val === 'beem') {
-                    newConfig.baseUrl = 'https://api.beem.africa/v1/send';
-                    if (!newConfig.senderId) newConfig.senderId = 'INFO';
-                  } else if (val === 'nextsms') {
-                    newConfig.baseUrl = 'https://messaging-service.co.tz/api/sms/v1/text/single';
-                    if (!newConfig.senderId) newConfig.senderId = 'NEXTSMS';
+                    newConfig.apiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+                    newConfig.secretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+                    newConfig.senderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
                   }
                   setGatewayConfig(newConfig);
                 }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-emerald-500"
               >
-                <option value="swalasms">SwalaSMS (swalasms.com) - Salio 100 SMS (Inafanya Kazi)</option>
-                <option value="ehub">eHub SMS Tanzania (sms.ehub.co.tz) - Inapendekezwa</option>
                 <option value="meseji">Meseji API (Meseji.co.tz - Tanzania)</option>
-                <option value="beem">Beem Africa (apisms.beem.africa)</option>
-                <option value="nextsms">NextSMS Tanzania (messaging-service.co.tz)</option>
+                <option value="swalasms">SwalaSMS (UWALEMI / Free Backups)</option>
+                <option value="ehub">eHub SMS (Tanzania)</option>
                 <option value="simulation">Mwigizo wa Kujaribu (Simulation Mode)</option>
               </select>
             </div>
 
-            {gatewayConfig.provider === 'swalasms' && (
-              <div className="bg-emerald-950/40 border border-emerald-800/60 p-3 rounded-xl space-y-1 text-[11px] text-emerald-200">
-                <div className="font-bold flex items-center gap-1.5 text-emerald-300">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  SwalaSMS Live (Sender ID: EVENT CARD / Salio: 100 SMS)
+            {gatewayConfig.provider === 'meseji' && (
+              <div className="bg-indigo-950/40 border border-indigo-800/60 p-3 rounded-xl space-y-1.5 text-[11px] text-indigo-200">
+                <div className="font-bold flex items-center gap-1.5 text-indigo-300">
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                  Mwongozo wa Meseji.co.tz:
                 </div>
-                <p className="text-slate-300">
-                  Akaunti ya SwalaSMS imeunganishwa moja kwa moja kwa ajili ya kutuma risiti, vikumbusho vya vikao na michango ya UWALEMI.
+                <p className="text-slate-300 leading-relaxed">
+                  1. Ingia kwenye akaunti yako ya <a href="https://meseji.co.tz" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">Meseji.co.tz</a>.<br />
+                  2. Nenda sehemu ya <strong>API Settings / Developer</strong>, tengeneza au nakili <strong>API Token / Key</strong> yako.<br />
+                  3. Bandika Token hiyo kwenye kisanduku cha <em>Meseji API Token</em> hapa chini na uhifadhi.
                 </p>
               </div>
             )}
@@ -1581,7 +2221,24 @@ Lema, Nguvu Moja!`);
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-slate-300 font-semibold">Jina la Mtumaji (Sender ID):</label>
                 <div className="flex items-center gap-1.5">
-                  {gatewayConfig.provider === 'swalasms' ? (
+                  {gatewayConfig.provider === 'meseji' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'MESEJI' })}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors font-bold"
+                      >
+                        MESEJI (Default)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'UWALEMI' })}
+                        className="text-[10px] text-indigo-300 hover:text-white bg-indigo-950/60 border border-indigo-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      >
+                        UWALEMI
+                      </button>
+                    </>
+                  ) : gatewayConfig.provider === 'swalasms' ? (
                     <>
                       <button
                         type="button"
@@ -1636,17 +2293,12 @@ Lema, Nguvu Moja!`);
                 type="text"
                 value={gatewayConfig.senderId || ''}
                 onChange={(e) => setGatewayConfig({ ...gatewayConfig, senderId: e.target.value })}
-                placeholder={gatewayConfig.provider === 'ehub' ? 'Sender ID UUID ya eHub (19f41b59-19d0-4f98-b8c9-9d5b1ac31308)' : 'mf. UWALEMI'}
+                placeholder={gatewayConfig.provider === 'ehub' ? 'Sender ID UUID ya eHub (19f41b59-19d0-4f98-b8c9-9d5b1ac31308)' : 'mf. MESEJI au UWALEMI'}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
               />
-              {gatewayConfig.provider === 'ehub' && (
-                <p className="text-[11px] text-emerald-400/90 mt-1">
-                  ✓ <strong>Sender ID ya UWALEMI (eHub):</strong> <span className="font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 text-white">19f41b59-19d0-4f98-b8c9-9d5b1ac31308</span> (Imeidhinishwa rasmi na inafanya kazi).
-                </p>
-              )}
               {gatewayConfig.provider === 'meseji' && (
                 <p className="text-[11px] text-slate-400 mt-1">
-                  💡 <strong>Kidokezo cha Meseji.co.tz:</strong> Tumia Sender ID ya <span className="font-mono text-emerald-400 font-bold">MESEJI</span> isipokuwa uwe umeshasajili na kuidhinishiwa jina lingine (kama UWALEMI) kwenye dashboard ya Meseji.
+                  💡 <strong>Kidokezo:</strong> Tumia Sender ID ya <span className="font-mono text-emerald-400 font-bold">MESEJI</span> isipokuwa uwe umeshasajili na kuidhinishiwa jina maalum (kama UWALEMI) kwenye dashboard ya Meseji.co.tz.
                 </p>
               )}
             </div>
@@ -1659,12 +2311,12 @@ Lema, Nguvu Moja!`);
                 type="password"
                 value={gatewayConfig.apiKey || ''}
                 onChange={(e) => setGatewayConfig({ ...gatewayConfig, apiKey: e.target.value })}
-                placeholder={gatewayConfig.provider === 'meseji' ? 'Weka Token ya Meseji.co.tz (mf. zs_...)' : 'Weka API Key yako hapa'}
+                placeholder={gatewayConfig.provider === 'meseji' ? 'Weka API Token yako ya Meseji.co.tz (mf. zs_... au Token)' : 'Weka API Key yako hapa'}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
               />
               {gatewayConfig.provider === 'meseji' && (
-                <p className="text-[11px] text-amber-300/90 mt-1">
-                  ⚠️ <strong>Muhimu:</strong> Ikiwa unapata hitilafu ya "Invalid or expired token", ingia kwenye <a href="https://meseji.co.tz" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">Meseji.co.tz</a> &gt; API Settings, tengeneza Token mpya na uinakili hapa.
+                <p className="text-[11px] text-slate-400 mt-1">
+                  🔑 API Token inapatikana kwenye <a href="https://meseji.co.tz" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">Meseji.co.tz</a> &gt; Dashboard &gt; API Settings.
                 </p>
               )}
             </div>
@@ -1721,19 +2373,11 @@ Lema, Nguvu Moja!`);
                       <div className="pt-2 flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          onClick={handleSyncGlobalEhub}
-                          className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Tumia eHub SMS (Salio Lililothibitishwa)
-                        </button>
-                        <button
-                          type="button"
                           onClick={handleSwitchToSimulation}
                           className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors"
                         >
                           <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                          Badili kuwa Hali ya Majaribio (Simulation)
+                          Badili kuwa Simulation
                         </button>
                       </div>
                     </div>
@@ -1753,6 +2397,45 @@ Lema, Nguvu Moja!`);
                       )}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Test SMS Tool */}
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5">
+              <div className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
+                <Send className="w-3.5 h-3.5 text-emerald-400" />
+                Jaribu Kutuma SMS ya Majaribio (Test SMS)
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Weka namba ya simu ili kutuma ujumbe wa majaribio wa papo hapo na kuthibitisha kuwa Meseji inatuma ujumbe kikamilifu.
+              </p>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  type="tel"
+                  value={testSmsPhone}
+                  onChange={(e) => setTestSmsPhone(e.target.value)}
+                  placeholder="mf. 0712345678 au 255712345678"
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendQuickTestSms}
+                  disabled={testSmsStatus?.loading}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow disabled:opacity-50 shrink-0"
+                >
+                  <Send className={`w-3 h-3 ${testSmsStatus?.loading ? 'animate-spin' : ''}`} />
+                  {testSmsStatus?.loading ? 'Inatuma...' : 'Tuma SMS ya Jaribio'}
+                </button>
+              </div>
+
+              {testSmsStatus && !testSmsStatus.loading && (
+                <div className={`p-2.5 rounded-lg border text-xs ${
+                  testSmsStatus.success
+                    ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                    : 'bg-rose-950/60 border-rose-800 text-rose-300'
+                }`}>
+                  <div className="font-semibold">{testSmsStatus.message}</div>
                 </div>
               )}
             </div>
@@ -1842,13 +2525,64 @@ Lema, Nguvu Moja!`);
       {/* VIEW 3: MESSAGE LOGS */}
       {activeSubTab === 'logs' && (
         <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 backdrop-blur-md space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <History className="w-4 h-4 text-emerald-400" />
-              Kumbukumbu za Ujumbe Uliotumwa (Message Logs)
-            </h3>
-            <span className="text-xs text-slate-400">Jumla: {messageLogs.length} ujumbe</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <History className="w-4 h-4 text-emerald-400" />
+                Kumbukumbu za Ujumbe Uliotumwa (Message Logs)
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Huonesha tarehe, muda halisi, namba ya simu, na ujumbe kamili uliotumwa kwa kila mwanachama.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-mono">
+                Jumla: {messageLogs.length}
+              </span>
+              {!readOnly && messageLogs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllLogs}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-800/60 text-xs font-semibold transition-all cursor-pointer"
+                  title="Futa Kumbukumbu Zote za Ujumbe"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Futa Zote
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Search bar for logs */}
+          {messageLogs.length > 0 && (
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={logSearchTerm}
+                onChange={(e) => setLogSearchTerm(e.target.value)}
+                placeholder="Tafuta kumbukumbu kwa jina la mwanachama, namba ya simu, au maneno ya ujumbe..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+              {logSearchTerm && (
+                <button
+                  onClick={() => setLogSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+
+          {resendLogFeedback && (
+            <div className={`p-3 rounded-xl text-xs font-semibold flex items-center justify-between border ${
+              resendLogFeedback.success ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+            }`}>
+              <span>{resendLogFeedback.message}</span>
+              <button onClick={() => setResendLogFeedback(null)} className="text-slate-400 hover:text-white text-xs cursor-pointer ml-2">✕</button>
+            </div>
+          )}
 
           {messageLogs.length === 0 ? (
             <div className="py-12 text-center text-slate-500 text-xs">
@@ -1859,48 +2593,750 @@ Lema, Nguvu Moja!`);
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
                   <tr>
-                    <th className="py-2.5 px-3">Tarehe & Muda</th>
+                    <th className="py-2.5 px-3">Tarehe & Muda Halisi</th>
                     <th className="py-2.5 px-3">Aina</th>
                     <th className="py-2.5 px-3">Mpokeaji</th>
                     <th className="py-2.5 px-3">Simu</th>
                     <th className="py-2.5 px-3">Hali</th>
-                    <th className="py-2.5 px-3">Ujumbe</th>
+                    <th className="py-2.5 px-3 min-w-[240px]">Ujumbe Uliotumwa</th>
+                    <th className="py-2.5 px-3 text-right">Hatua</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {messageLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-800/40">
-                      <td className="py-2.5 px-3 font-mono text-slate-400">
-                        {new Date(log.sentAt).toLocaleString('sw-TZ')}
-                      </td>
-                      <td className="py-2.5 px-3 uppercase text-[10px] font-bold text-emerald-400">
-                        {log.type}
-                      </td>
-                      <td className="py-2.5 px-3 font-semibold text-white">
-                        {log.recipientName}
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-400">
-                        {log.recipientPhone}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          log.status === 'delivered' ? 'bg-emerald-500/15 text-emerald-400' :
-                          log.status === 'sent' ? 'bg-blue-500/15 text-blue-400' :
-                          log.status === 'simulated' ? 'bg-amber-500/15 text-amber-400' :
-                          'bg-rose-500/15 text-rose-400'
-                        }`}>
-                          {log.status}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-300 max-w-xs truncate" title={log.message}>
-                        {log.message}
-                      </td>
-                    </tr>
-                  ))}
+                  {messageLogs
+                    .filter((log) => {
+                      if (!logSearchTerm.trim()) return true;
+                      const q = logSearchTerm.toLowerCase();
+                      const name = (log.recipientName || '').toLowerCase();
+                      const phone = (log.recipientPhone || '').toLowerCase();
+                      const text = (log.content || log.message || log.text || '').toLowerCase();
+                      const type = (log.messageType || log.type || '').toLowerCase();
+                      return name.includes(q) || phone.includes(q) || text.includes(q) || type.includes(q);
+                    })
+                    .map((log) => {
+                      const rawDate = log.timestamp || log.sentAt || log.createdAt || (log as any).date;
+                      let formattedDate = '—';
+                      if (rawDate) {
+                        const d = new Date(rawDate);
+                        if (!isNaN(d.getTime())) {
+                          formattedDate = d.toLocaleString('sw-TZ', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: false
+                          });
+                        } else {
+                          formattedDate = String(rawDate);
+                        }
+                      }
+
+                      const rawType = (log.messageType || log.type || 'sms').toLowerCase();
+                      let typeLabel = 'SMS';
+                      if (rawType === 'receipt') typeLabel = 'Stakabadhi';
+                      else if (rawType === 'reminder') typeLabel = 'Kikumbusho';
+                      else if (rawType === 'emergency') typeLabel = 'Dharura';
+                      else if (rawType === 'meeting') typeLabel = 'Kikao';
+                      else if (rawType === 'broadcast') typeLabel = 'Matangazo';
+                      else if (rawType) typeLabel = rawType.toUpperCase();
+
+                      const messageText = log.content || log.message || log.text || '';
+                      const recipientPhone = log.recipientPhone || (log as any).phone || '';
+                      const recipientName = log.recipientName || (log as any).name || 'Mjumbe';
+
+                      return (
+                        <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="py-2.5 px-3 font-mono text-slate-300 text-[11px] whitespace-nowrap">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-500" />
+                              {formattedDate}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              {typeLabel}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-semibold text-white whitespace-nowrap">
+                            {recipientName}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-400 text-[11px] whitespace-nowrap">
+                            {recipientPhone}
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              log.status === 'delivered' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' :
+                              log.status === 'sent' ? 'bg-blue-500/15 text-blue-400 border-blue-500/20' :
+                              log.status === 'simulated' ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' :
+                              'bg-rose-500/15 text-rose-400 border-rose-500/20'
+                            }`}>
+                              {log.status === 'delivered' ? 'Imefika' :
+                               log.status === 'sent' ? 'Imetumwa' :
+                               log.status === 'simulated' ? 'Majaribio' :
+                               'Imeshindwa'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-200">
+                            <div className="flex items-start justify-between gap-2 max-w-md">
+                              <p className="line-clamp-2 text-xs leading-relaxed text-slate-300" title={messageText}>
+                                {messageText || <span className="text-slate-500 italic">Hakuna ujumbe</span>}
+                              </p>
+                              {messageText && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedLogForModal(log)}
+                                  className="text-emerald-400 hover:text-emerald-300 text-[10px] font-semibold whitespace-nowrap underline cursor-pointer shrink-0 mt-0.5"
+                                  title="Fungua na usome ujumbe mzima"
+                                >
+                                  Soma
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedLogForModal(log)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-medium transition-all cursor-pointer"
+                                title="Tazama maelezo yote ya kumbukumbu hii"
+                              >
+                                <Eye className="w-3 h-3" />
+                                Tazama
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleResendLog(log)}
+                                disabled={resendingLogId === log.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 border border-blue-500/40 text-blue-300 hover:text-white text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
+                                title="Tuma Tena Ujumbe Huu kwa SMS"
+                              >
+                                <Send className="w-3 h-3" />
+                                {resendingLogId === log.id ? '...' : 'Tuma Tena'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const text = messageText || '';
+                                  const rawPhone = (recipientPhone || '').replace(/\D/g, '');
+                                  const formattedPhone = rawPhone.startsWith('0') ? `255${rawPhone.slice(1)}` : rawPhone;
+                                  window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`, '_blank');
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-600/20 hover:bg-teal-600 border border-teal-500/40 text-teal-300 hover:text-white text-[11px] font-bold transition-all cursor-pointer"
+                                title="Tuma Ujumbe Huu kupitia WhatsApp"
+                              >
+                                <Share2 className="w-3 h-3" />
+                                WhatsApp
+                              </button>
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteLog(log.id)}
+                                  className="p-1 rounded-lg hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                                  title="Futa Kumbukumbu Hii"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL: TAZAMA UJUMBE KAMILI (FULL MESSAGE VIEWER) */}
+      {selectedLogForModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-fadeIn">
+            {/* Modal Header */}
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <h4 className="text-sm font-bold text-white">Maelezo ya Ujumbe Uliotumwa</h4>
+              </div>
+              <button
+                onClick={() => setSelectedLogForModal(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-xs">
+              {/* Meta Grid */}
+              <div className="grid grid-cols-2 gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Mpokeaji:</span>
+                  <span className="font-semibold text-white text-xs">{selectedLogForModal.recipientName || 'Mwanachama'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Namba ya Simu:</span>
+                  <span className="font-mono text-emerald-400 text-xs">{selectedLogForModal.recipientPhone || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Tarehe na Muda:</span>
+                  <span className="text-slate-300 font-mono text-[11px]">
+                    {(() => {
+                      const raw = selectedLogForModal.timestamp || selectedLogForModal.sentAt || selectedLogForModal.createdAt || selectedLogForModal.date;
+                      if (!raw) return '—';
+                      const d = new Date(raw);
+                      return !isNaN(d.getTime()) ? d.toLocaleString('sw-TZ') : String(raw);
+                    })()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold">Hali ya Kutumwa:</span>
+                  <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    selectedLogForModal.status === 'delivered' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' :
+                    selectedLogForModal.status === 'sent' ? 'bg-blue-500/15 text-blue-400 border-blue-500/20' :
+                    selectedLogForModal.status === 'simulated' ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' :
+                    'bg-rose-500/15 text-rose-400 border-rose-500/20'
+                  }`}>
+                    {selectedLogForModal.status === 'delivered' ? 'Imefika (Delivered)' :
+                     selectedLogForModal.status === 'sent' ? 'Imetumwa (Sent)' :
+                     selectedLogForModal.status === 'simulated' ? 'Majaribio (Simulated)' :
+                     `Imeshindwa (${selectedLogForModal.status})`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Message Box */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Maneno Kamili ya Ujumbe:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = selectedLogForModal.content || selectedLogForModal.message || selectedLogForModal.text || '';
+                      navigator.clipboard.writeText(text);
+                      setCopiedLogId(selectedLogForModal.id);
+                      setTimeout(() => setCopiedLogId(null), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
+                  >
+                    {copiedLogId === selectedLogForModal.id ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        Imenakiliwa!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        Nakili Ujumbe
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200 text-xs font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
+                  {selectedLogForModal.content || selectedLogForModal.message || selectedLogForModal.text || 'Hakuna ujumbe'}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedLogForModal(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Funga
+                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = selectedLogForModal.id;
+                      setSelectedLogForModal(null);
+                      handleDeleteLog(id);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-800/60 text-xs font-semibold transition-all cursor-pointer"
+                    title="Futa Kumbukumbu Hii"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Futa
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = selectedLogForModal.content || selectedLogForModal.message || selectedLogForModal.text || '';
+                    const rawPhone = (selectedLogForModal.recipientPhone || '').replace(/\D/g, '');
+                    const formattedPhone = rawPhone.startsWith('0') ? `255${rawPhone.slice(1)}` : rawPhone;
+                    window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`, '_blank');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  Tuma WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleResendLog(selectedLogForModal);
+                    setSelectedLogForModal(null);
+                  }}
+                  disabled={resendingLogId === selectedLogForModal.id}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Tuma Tena SMS
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TANGAZO LA MSIBA NA MICHANGO (BEREAVEMENT MODAL) */}
+      {isBereavementModalOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-fadeIn my-auto max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-4 bg-gradient-to-r from-rose-950/80 to-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+                  <HeartHandshake className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    Tangazo Rasmi la Msiba & Michango ya Wanachama
+                  </h4>
+                  <span className="text-[11px] text-slate-400">
+                    Kikundi cha UWALEMI - Michango ya Rambirambi
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBereavementModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto text-xs">
+              {/* Guidance Callout */}
+              <div className="bg-rose-950/30 border border-rose-500/30 rounded-xl p-3 text-slate-200">
+                <div className="flex items-center gap-2 text-rose-300 font-bold text-xs mb-1">
+                  <Info className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>Kanuni ya Michango ya Misiba kwa Mujibu wa Katiba ya UWALEMI:</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-[11px]">
+                  <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                    <span className="font-bold text-emerald-400 block">Kiwango: TZS 10,000</span>
+                    <span className="text-slate-300">
+                      Mwanachama, Mke, Mume, Mtoto, au Wazazi (Baba / Mama mzazi).
+                    </span>
+                  </div>
+                  <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                    <span className="font-bold text-amber-400 block">Kiwango: TZS 5,000</span>
+                    <span className="text-slate-300">
+                      Wakwe wa mwanachama (Baba Mkwe au Mama Mkwe).
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Existing Announcement / Resend Selector */}
+              {state.emergencyFunds && state.emergencyFunds.length > 0 && (
+                <div className="bg-purple-950/30 border border-purple-500/30 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-purple-300 font-bold text-xs flex items-center gap-1.5">
+                      <HeartHandshake className="w-4 h-4 text-purple-400" />
+                      Je, unataka kuhariri tangazo lililopo na kulituma tena?
+                    </label>
+                    {editingBereavementFundId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingBereavementFundId('');
+                          setBereavementForm(prev => ({
+                            ...prev,
+                            autoCreateFund: true
+                          }));
+                        }}
+                        className="text-[11px] text-purple-400 hover:text-white underline cursor-pointer"
+                      >
+                        Badilisha uandae tangazo jipya
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    value={editingBereavementFundId}
+                    onChange={(e) => {
+                      const fId = e.target.value;
+                      setEditingBereavementFundId(fId);
+                      if (fId) {
+                        const targetFund = state.emergencyFunds?.find(f => f.id === fId);
+                        if (targetFund) {
+                          const matchedMember = members.find(
+                            m => m.fullName.toLowerCase() === (targetFund.beneficiaryName || '').toLowerCase() || 
+                                 targetFund.title.toLowerCase().includes(m.fullName.toLowerCase()) || 
+                                 m.phone === targetFund.beneficiaryPhone
+                          );
+
+                          let guessedRel: any = 'mzazi_mama';
+                          const relLower = (targetFund.beneficiaryRelation || '').toLowerCase();
+                          if (relLower.includes('mama mkwe')) guessedRel = 'mkwe_mama';
+                          else if (relLower.includes('baba mkwe')) guessedRel = 'mkwe_baba';
+                          else if (relLower.includes('mama')) guessedRel = 'mzazi_mama';
+                          else if (relLower.includes('baba')) guessedRel = 'mzazi_baba';
+                          else if (relLower.includes('mke')) guessedRel = 'mke';
+                          else if (relLower.includes('mume')) guessedRel = 'mume';
+                          else if (relLower.includes('mtoto')) guessedRel = 'mtoto';
+                          else if (relLower.includes('mwanachama')) guessedRel = 'mwanachama';
+
+                          setBereavementForm(prev => ({
+                            ...prev,
+                            memberId: matchedMember?.id || prev.memberId,
+                            relationType: guessedRel,
+                            contributionAmount: targetFund.perMemberTarget || 10000,
+                            deadlineDate: targetFund.deadline || prev.deadlineDate,
+                            location: targetFund.description?.includes('Kimara') ? 'Kimara Temboni' : (targetFund.description?.split('.')[0] || ''),
+                            autoCreateFund: false
+                          }));
+                        }
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-purple-500/40 rounded-xl px-3 py-2 text-white text-xs focus:border-purple-400 focus:outline-none"
+                  >
+                    <option value="">-- Andaa Tangazo Jipya (Mpya Kabisa) --</option>
+                    {state.emergencyFunds.map(f => (
+                      <option key={f.id} value={f.id}>
+                        {f.title} ({f.status === 'active' ? 'Inaendelea' : f.status}) - TZS {(f.perMemberTarget || 0).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                  {editingBereavementFundId && (
+                    <p className="text-[11px] text-purple-300/90">
+                      Ukihariri na kubofya &quot;Weka Kwenye Kisanduku cha SMS&quot;, taarifa za mfuko huu zitahuishwa na ujumbe mpya utawekwa tayari kutumwa tena kwa wanachama wote!
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Form Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Member selection */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Mwanachama Aliyepatwa na Msiba *
+                  </label>
+                  <select
+                    value={bereavementForm.memberId || ''}
+                    onChange={(e) => {
+                      const mId = e.target.value;
+                      const selectedM = members.find(m => m.id === mId);
+                      setBereavementForm(prev => ({
+                        ...prev,
+                        memberId: mId,
+                        deceasedName: prev.relationType === 'mwanachama' && selectedM ? selectedM.fullName : prev.deceasedName
+                      }));
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  >
+                    <option value="">-- Chagua Mwanachama --</option>
+                    {members.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.memberNo} - {m.fullName} ({m.phone})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Relationship dropdown with auto-amount */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Aliyefariki ni Nani kwa Mwanachama? *
+                  </label>
+                  <select
+                    value={bereavementForm.relationType || 'mkwe_mama'}
+                    onChange={(e) => {
+                      const newType = e.target.value as any;
+                      const rel = getBereavementRelationInfo(newType);
+                      const selectedM = members.find(m => m.id === bereavementForm.memberId);
+                      setBereavementForm(prev => ({
+                        ...prev,
+                        relationType: newType,
+                        contributionAmount: rel.amount,
+                        deceasedName: newType === 'mwanachama' && selectedM ? selectedM.fullName : prev.deceasedName
+                      }));
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none font-semibold text-rose-300"
+                  >
+                    <optgroup label="Kiwango: TZS 10,000 (Elfu Kumi)">
+                      <option value="mwanachama">Mwanachama Mwenyewe (TZS 10,000)</option>
+                      <option value="mke">Mke wa Mwanachama (TZS 10,000)</option>
+                      <option value="mume">Mume wa Mwanachama (TZS 10,000)</option>
+                      <option value="mtoto">Mtoto wa Mwanachama (TZS 10,000)</option>
+                      <option value="mzazi_mama">Mama Mzazi wa Mwanachama (TZS 10,000)</option>
+                      <option value="mzazi_baba">Baba Mzazi wa Mwanachama (TZS 10,000)</option>
+                    </optgroup>
+                    <optgroup label="Kiwango: TZS 5,000 (Elfu Tano)">
+                      <option value="mkwe_mama">Mama Mkwe wa Mwanachama (TZS 5,000)</option>
+                      <option value="mkwe_baba">Baba Mkwe wa Mwanachama (TZS 5,000)</option>
+                    </optgroup>
+                    <optgroup label="Nyingine">
+                      <option value="nyingine">Uhusiano Mwingine / Maalum (TZS 10,000)</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                {/* Deceased name */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Jina la Marehemu (Aliyefariki)
+                  </label>
+                  <input
+                    type="text"
+                    value={bereavementForm.deceasedName || ''}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, deceasedName: e.target.value })}
+                    placeholder="Mfano: Mama Grace Fransic Masawe"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Tarehe Aliyofariki & Mahali Alipofia */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-rose-400" />
+                    Tarehe Aliyofariki (Hiari)
+                  </label>
+                  <input
+                    type="date"
+                    value={bereavementForm.deathDate || ''}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, deathDate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Mahali Alipofia (Amefia wapi?)
+                  </label>
+                  <input
+                    type="text"
+                    value={bereavementForm.deathPlace || ''}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, deathPlace: e.target.value })}
+                    placeholder="Mfano: Hospitali ya Muhimbili / Nyumbani Mbezi"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Location of Condolences */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-rose-400" />
+                    Eneo la Msiba Ulipo (Kufariji / Kutoa Pole) *
+                  </label>
+                  <input
+                    type="text"
+                    value={bereavementForm.location || ''}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, location: e.target.value })}
+                    placeholder="Mfano: Mbezi Makabe - Kwa Paulo"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Meeting Location & Schedule Section */}
+                <div className="sm:col-span-2 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+                    <Building2 className="w-4 h-4" />
+                    <span>Taarifa za Vikao vya Msiba (Hiari)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-slate-300 font-medium block mb-1 text-xs">
+                        Ukumbi / Eneo la Kikao
+                      </label>
+                      <input
+                        type="text"
+                        value={bereavementForm.meetingLocation || ''}
+                        onChange={(e) => setBereavementForm({ ...bereavementForm, meetingLocation: e.target.value })}
+                        placeholder="Mfano: Riverside Hall"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-slate-300 font-medium block mb-1 text-xs flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-amber-400" />
+                        Tarehe ya Kikao
+                      </label>
+                      <input
+                        type="date"
+                        value={bereavementForm.meetingDate || ''}
+                        onChange={(e) => setBereavementForm({ ...bereavementForm, meetingDate: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-slate-300 font-medium block mb-1 text-xs flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                        Muda wa Kikao
+                      </label>
+                      <input
+                        type="text"
+                        value={bereavementForm.meetingTime || ''}
+                        onChange={(e) => setBereavementForm({ ...bereavementForm, meetingTime: e.target.value })}
+                        placeholder="Mfano: Saa 11:00 Jioni"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amount to be contributed */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Kiwango Kinachopaswa Kuchangwa (TZS)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={bereavementForm.contributionAmount || 0}
+                      onChange={(e) => setBereavementForm({ ...bereavementForm, contributionAmount: Number(e.target.value) })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-bold font-mono focus:border-rose-500 focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-2 text-[10px] text-slate-500 font-bold uppercase">
+                      Kila Mjumbe
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    {bereavementForm.contributionAmount === 5000 
+                      ? '✓ Kiwango cha Wakwe (Elfu Tano)' 
+                      : (bereavementForm.contributionAmount === 10000 
+                          ? '✓ Kiwango cha Mwanachama/Mke/Mume/Mtoto/Mzazi (Elfu Kumi)' 
+                          : 'Kiwango Maalum')}
+                  </span>
+                </div>
+
+                {/* Deadline */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                    Tarehe ya Mwisho ya Michango (Deadline)
+                  </label>
+                  <input
+                    type="date"
+                    value={bereavementForm.deadlineDate || ''}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, deadlineDate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Payment info (Locked per UWALEMI policy) */}
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 font-bold flex items-center gap-1.5 text-xs">
+                      <CreditCard className="w-3.5 h-3.5 text-purple-400" />
+                      Njia ya Kuwasilisha Mchango (M-Koba / Mtunza Hazina)
+                    </label>
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-amber-400" /> Rasmi (Haiwezi Kubadilishwa)
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly
+                      disabled
+                      value="M Koba au 0758219298 (Eva O. Lema)"
+                      className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-2 text-slate-200 font-semibold cursor-not-allowed select-none opacity-90 shadow-inner"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    * Njia hii ya malipo imefungwa na imewekwa kama ya msingi kulingana na muongozo wa UWALEMI.
+                  </p>
+                </div>
+
+                {/* Burial / Funeral schedule builder with farewell venue, dates & any region */}
+                <div className="sm:col-span-2">
+                  <FuneralScheduleBuilder
+                    value={bereavementForm.burialSchedule || ''}
+                    onChange={(val) => setBereavementForm(prev => ({ ...prev, burialSchedule: val }))}
+                    defaultLocation={bereavementForm.location}
+                    themeColor="rose"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {/* Checkbox to auto create emergency fund */}
+                <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bereavementForm.autoCreateFund}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, autoCreateFund: e.target.checked })}
+                    className="rounded border-slate-700 text-rose-600 focus:ring-rose-500"
+                  />
+                  <span className="text-slate-300 text-xs">
+                    Fungua pia Daftari la Mchango huu kwenye orodha ya <strong>'Michango & Misiba'</strong> ili kufuatilia nani amelipa na nani hajalipa
+                  </span>
+                </label>
+
+                {/* Optional greeting toggle */}
+                <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bereavementForm.includeGreeting}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, includeGreeting: e.target.checked })}
+                    className="rounded border-slate-700 text-rose-600 focus:ring-rose-500"
+                  />
+                  <span className="text-slate-300 text-xs">
+                    Weka salamu ya jina mwanzoni mwa SMS (Mfano: <em>Habari [Jina],</em> bila namba ya uwanachama)
+                  </span>
+                </label>
+              </div>
+
+              {/* Real-time Preview of the long, formal message */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                  <Eye className="w-3.5 h-3.5 text-blue-400" />
+                  Mwonjo wa Ujumbe Mrefu Utakaowafikia Wanachama (Live Preview):
+                </span>
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs leading-relaxed whitespace-pre-wrap font-sans max-h-48 overflow-y-auto">
+                  {generateLongBereavementMessage(bereavementForm)}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-end gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsBereavementModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+              >
+                Ghairi
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyBereavementAnnouncement}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-900/30 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" />
+                🕊️ Weka Kwenye Kisanduku cha SMS & Andaa Kutuma
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

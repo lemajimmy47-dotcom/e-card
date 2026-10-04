@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { safeLocalStorage } from '../utils/storage';
+import { isStatusSent } from '../utils/statusHelper';
 import { EventDetails, Guest, TemplateSettings, UserAccount, CommitteeMember } from '../types';
 
 interface EventCardContextProps {
@@ -112,10 +113,50 @@ export function EventCardProvider({ children }: { children: ReactNode }) {
 
           const mergedFromData = filteredIncomingDataGuests.map((cg: any) => {
             const localG = prevGuests?.find((g) => g.id === cg.id);
-            if (localG && localG.cardImageUrl) {
-              return { ...cg, cardImageUrl: localG.cardImageUrl };
+            const cf = (cg.customFields && typeof cg.customFields === 'object') ? cg.customFields : {};
+            
+            if (!localG) {
+              return {
+                ...cg,
+                invitationSmsStatus: cg.invitationSmsStatus || cf.invitationSmsStatus || cg.smsStatus || "Sijatuma",
+                invitationWhatsappStatus: cg.invitationWhatsappStatus || cf.invitationWhatsappStatus || cg.whatsappStatus || "Sijatuma",
+                reminderSmsStatus: cg.reminderSmsStatus || cf.reminderSmsStatus || "Sijatuma",
+                reminderWhatsappStatus: cg.reminderWhatsappStatus || cf.reminderWhatsappStatus || "Sijatuma",
+                thankYouSmsStatus: cg.thankYouSmsStatus || cf.thankYouSmsStatus || "Sijatuma",
+                thankYouWhatsappStatus: cg.thankYouWhatsappStatus || cf.thankYouWhatsappStatus || "Sijatuma",
+              };
             }
-            return cg;
+
+            const localCf = (localG.customFields && typeof localG.customFields === 'object') ? localG.customFields : {};
+
+            const mergedSmsStatus = isStatusSent(cg.smsStatus) ? cg.smsStatus : (isStatusSent(localG.smsStatus) ? localG.smsStatus : cg.smsStatus);
+            const mergedWaStatus = isStatusSent(cg.whatsappStatus) ? cg.whatsappStatus : (isStatusSent(localG.whatsappStatus) ? localG.whatsappStatus : cg.whatsappStatus);
+
+            const mergedInvSms = isStatusSent(cg.invitationSmsStatus) ? cg.invitationSmsStatus : (isStatusSent(localG.invitationSmsStatus) ? localG.invitationSmsStatus : (cg.invitationSmsStatus || cf.invitationSmsStatus || localG.invitationSmsStatus || localCf.invitationSmsStatus || mergedSmsStatus));
+            const mergedInvWa = isStatusSent(cg.invitationWhatsappStatus) ? cg.invitationWhatsappStatus : (isStatusSent(localG.invitationWhatsappStatus) ? localG.invitationWhatsappStatus : (cg.invitationWhatsappStatus || cf.invitationWhatsappStatus || localG.invitationWhatsappStatus || localCf.invitationWhatsappStatus || mergedWaStatus));
+
+            const mergedRemSms = isStatusSent(cg.reminderSmsStatus) ? cg.reminderSmsStatus : (isStatusSent(localG.reminderSmsStatus) ? localG.reminderSmsStatus : (cg.reminderSmsStatus || cf.reminderSmsStatus || localG.reminderSmsStatus || localCf.reminderSmsStatus || 'Sijatuma'));
+            const mergedRemWa = isStatusSent(cg.reminderWhatsappStatus) ? cg.reminderWhatsappStatus : (isStatusSent(localG.reminderWhatsappStatus) ? localG.reminderWhatsappStatus : (cg.reminderWhatsappStatus || cf.reminderWhatsappStatus || localG.reminderWhatsappStatus || localCf.reminderWhatsappStatus || 'Sijatuma'));
+
+            const mergedThkSms = isStatusSent(cg.thankYouSmsStatus) ? cg.thankYouSmsStatus : (isStatusSent(localG.thankYouSmsStatus) ? localG.thankYouSmsStatus : (cg.thankYouSmsStatus || cf.thankYouSmsStatus || localG.thankYouSmsStatus || localCf.thankYouSmsStatus || 'Sijatuma'));
+            const mergedThkWa = isStatusSent(cg.thankYouWhatsappStatus) ? cg.thankYouWhatsappStatus : (isStatusSent(localG.thankYouWhatsappStatus) ? localG.thankYouWhatsappStatus : (cg.thankYouWhatsappStatus || cf.thankYouWhatsappStatus || localG.thankYouWhatsappStatus || localCf.thankYouWhatsappStatus || 'Sijatuma'));
+
+            return {
+              ...cg,
+              cardImageUrl: localG.cardImageUrl || cg.cardImageUrl,
+              smsStatus: mergedSmsStatus,
+              whatsappStatus: mergedWaStatus,
+              invitationSmsStatus: mergedInvSms,
+              invitationWhatsappStatus: mergedInvWa,
+              reminderSmsStatus: mergedRemSms,
+              reminderWhatsappStatus: mergedRemWa,
+              thankYouSmsStatus: mergedThkSms,
+              thankYouWhatsappStatus: mergedThkWa,
+              smsCount: Math.max(cg.smsCount || 0, localG.smsCount || 0),
+              whatsappCount: Math.max(cg.whatsappCount || 0, localG.whatsappCount || 0),
+              lastSentChannel: cg.lastSentChannel || localG.lastSentChannel,
+              lastSentLang: cg.lastSentLang || localG.lastSentLang,
+            };
           });
 
           return [...mergedFromData, ...unsavedLocalGuests];

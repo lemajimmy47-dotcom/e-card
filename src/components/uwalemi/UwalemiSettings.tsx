@@ -28,6 +28,7 @@ import {
 interface Props {
   state: UwalemiState;
   onSaveState: (state: UwalemiState) => Promise<boolean>;
+  readOnly?: boolean;
 }
 
 const LEADERSHIP_ROLES: { role: UwalemiMemberRole; label: string; badgeColor: string; description: string }[] = [
@@ -40,7 +41,7 @@ const LEADERSHIP_ROLES: { role: UwalemiMemberRole; label: string; badgeColor: st
   { role: 'Mlezi', label: 'Mlezi / Mshauri', badgeColor: 'bg-purple-500/10 text-purple-400 border-purple-500/20', description: 'Mshauri Mkuu na Mlezi wa Umoja' },
 ];
 
-export const UwalemiSettings: React.FC<Props> = ({ state, onSaveState }) => {
+export const UwalemiSettings: React.FC<Props> = ({ state, onSaveState, readOnly = false }) => {
   const [settings, setSettings] = useState<UwalemiGroupSettings>(state.groupSettings);
   const [members, setMembers] = useState<UwalemiMember[]>(state.members || []);
   const [isSaved, setIsSaved] = useState(false);
@@ -53,7 +54,7 @@ export const UwalemiSettings: React.FC<Props> = ({ state, onSaveState }) => {
   const handleAddPaymentMethod = () => {
     const newPm: UwalemiPaymentMethod = {
       id: `pm-${Date.now()}`,
-      provider: 'M-Pesa (Lipa Namba)',
+      provider: 'M Koba',
       type: 'Till',
       number: '',
       accountName: settings.groupName || 'UWALEMI GROUP'
@@ -189,12 +190,43 @@ export const UwalemiSettings: React.FC<Props> = ({ state, onSaveState }) => {
       </div>
 
       <form onSubmit={handleSaveSettings} className="space-y-6">
-        {/* Section 1: Profile Details */}
-        <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 backdrop-blur-md space-y-4">
+        {/* Section 1: Profile Details & Official Logo */}
+        <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 backdrop-blur-md space-y-6">
           <h3 className="text-sm font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
             <Building className="w-4 h-4 text-emerald-400" />
-            Taarifa za Msingi za Kikundi
+            Nembo Rasmi & Taarifa za Msingi za Kikundi
           </h3>
+
+          {/* Logo Showcase & Control */}
+          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row items-center gap-5">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full p-1 bg-gradient-to-tr from-emerald-500 via-blue-500 to-teal-400 shadow-xl shadow-emerald-950/60 flex-shrink-0">
+              <img 
+                src={settings.logoUrl || '/uwalemi_logo.png'} 
+                alt="UWALEMI Logo" 
+                className="w-full h-full object-cover rounded-full bg-slate-950 border border-slate-900"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="flex-1 text-center sm:text-left space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] font-bold border border-emerald-500/20">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Nembo Rasmi ya UWALEMI Imewashwa
+              </div>
+              <h4 className="text-sm font-bold text-white">Nembo ya Kikundi (UWALEMI • LEMA NGUVU MOJA)</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Nembo hii inatumika kwenye Dashibodi Kuu, Kadi za Kidijitali za Wanachama, Mfumo wa Kura (E-Voting), na Stakabadhi za PDF.
+              </p>
+              <div className="pt-1 flex flex-wrap gap-2 justify-center sm:justify-start">
+                <button
+                  type="button"
+                  onClick={() => setSettings({ ...settings, logoUrl: '/uwalemi_logo.png' })}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-all cursor-pointer"
+                >
+                  Tumia Nembo Rasmi ya UWALEMI
+                </button>
+              </div>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
@@ -214,6 +246,17 @@ export const UwalemiSettings: React.FC<Props> = ({ state, onSaveState }) => {
                 value={settings.slogan}
                 onChange={(e) => setSettings({ ...settings, slogan: e.target.value })}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="text-slate-300 font-semibold block mb-1">URL ya Nembo (Logo Link / Path)</label>
+              <input
+                type="text"
+                value={settings.logoUrl || '/uwalemi_logo.png'}
+                onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value })}
+                placeholder="/uwalemi_logo.png"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs"
               />
             </div>
 
@@ -295,9 +338,9 @@ export const UwalemiSettings: React.FC<Props> = ({ state, onSaveState }) => {
           <div className="p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-xl flex items-start gap-3">
             <Scale className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
             <div className="text-xs space-y-1">
-              <div className="font-bold text-amber-300">Kanuni ya Faini ya Kuchelewesha Ada (Kuanzia Mwezi 6 / Juni 2026):</div>
+              <div className="font-bold text-amber-300">Kanuni ya Faini ya Kuchelewesha Ada (Kuanzia Mwezi wa 6 / Juni 2026):</div>
               <p className="text-slate-300 leading-relaxed text-[11px]">
-                Faini ya kuchelewesha ada inaanza kuhesabiwa kuanzia <strong className="text-white">Mwezi wa 6 (Juni 2026)</strong>. Mwanachama anayedaiwa zaidi ya <strong className="text-white">miezi 3</strong> kuanzia mwezi huo hutozwa faini ya <strong className="text-amber-400 font-mono">TZS 5,000</strong> kwa kila mwezi unaozidi miezi 3 ya kwanza.
+                Faini ya kuchelewesha ada inaanza rasmi kuhesabiwa kuanzia <strong className="text-white">Mwezi wa 6 (Juni 2026)</strong>. Mwanachama anayedaiwa zaidi ya miezi 3 kuanzia mwezi huo hutozwa faini ya <strong className="text-amber-400 font-mono">TZS 5,000</strong> kwa kila mwezi unaozidi miezi 3 ya kwanza (kuanzia mwezi wa 4 wa kutolipwa kuanzia Juni 2026). Faini ikishatengenezwa inabaki kama deni thabiti hadi pale malipo ya faini yatakaporekodiwa.
               </p>
             </div>
           </div>
@@ -484,7 +527,7 @@ export const UwalemiSettings: React.FC<Props> = ({ state, onSaveState }) => {
                       updated[idx].provider = e.target.value;
                       setSettings({ ...settings, paymentMethods: updated });
                     }}
-                    placeholder="M-Pesa / CRDB / Tigo Pesa"
+                    placeholder="M Koba / CRDB / Tigo Pesa"
                     className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white font-medium"
                   />
                 </div>

@@ -12,7 +12,10 @@ import {
   getDefaultFeeForMonth, 
   calculateMemberFeeDebt, 
   calculateLateFeePenalty,
-  calculateMemberOtherFines 
+  calculateMemberOtherFines,
+  classifyFinePaymentType,
+  decomposeFinePaymentAmounts,
+  normalizePaymentMethod
 } from './uwalemiService';
 
 const MONTH_NAMES_SW = [
@@ -75,66 +78,220 @@ export const getPdfBlobUrl = (doc: jsPDF): string => {
   return URL.createObjectURL(blob);
 };
 
+// In-memory cache for official UWALEMI logo base64
+let cachedUwalemiLogoBase64: string | null = null;
+
+export const getCachedUwalemiLogo = (): string | null => cachedUwalemiLogoBase64;
+export const setCachedUwalemiLogo = (b64: string) => { cachedUwalemiLogoBase64 = b64; };
+
 /**
- * Draw UWALEMI Official Letterhead on jsPDF document
+ * Load official UWALEMI logo as base64 string
+ */
+export const loadUwalemiLogoAsBase64 = async (targetUrl?: string): Promise<string> => {
+  if (cachedUwalemiLogoBase64 && !targetUrl) return cachedUwalemiLogoBase64;
+  const url = targetUrl || '/uwalemi_logo.png';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = (reader.result as string) || '';
+        if (!targetUrl || targetUrl === '/uwalemi_logo.png') {
+          cachedUwalemiLogoBase64 = result;
+        }
+        resolve(result);
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.warn('[UWALEMI PDF Generator] Could not load logo as base64:', e);
+    return cachedUwalemiLogoBase64 || '';
+  }
+};
+
+// Immediate browser pre-load
+if (typeof window !== 'undefined') {
+  loadUwalemiLogoAsBase64().catch(() => {});
+}
+
+/**
+ * Add subtle background watermark of UWALEMI official logo across all pages of a report or receipt.
+ * Creates a quincunx 5-point security watermark on every page:
+ * - 1 large faint logo in the center ("kati kati, kubwa kidogo")
+ * - 2 smaller faint logos at the top corners/sides ("pembeni juu pande mbili")
+ * - 2 smaller faint logos at the bottom corners/sides ("pembeni chini pande mbili")
+ */
+export const addUwalemiReportWatermark = (doc: jsPDF, logoBase64?: string) => {
+  const logoB64 = logoBase64 || cachedUwalemiLogoBase64;
+  if (!logoB64) return;
+
+  const pageCount = typeof (doc as any).getNumberOfPages === 'function' 
+    ? (doc as any).getNumberOfPages() 
+    : (doc as any).internal?.pages?.length - 1 || 1;
+
+  const format = logoB64.includes('image/png') || logoB64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    if (typeof doc.saveGraphicsState === 'function') doc.saveGraphicsState();
+    if (typeof doc.setGState === 'function') {
+      try {
+        const GStateClass = (doc.constructor as any)?.GState || (doc as any)?.GState;
+        // Opacity set to exactly 12% (0.12) as requested
+        const stateObj = { opacity: 0.12, 'fill-opacity': 0.12, 'stroke-opacity': 0.12 };
+        if (GStateClass) {
+          doc.setGState(new GStateClass(stateObj));
+        } else {
+          doc.setGState(stateObj as any);
+        }
+      } catch (e) {}
+    }
+
+    try {
+      // 1. Katikati: Nembo kubwa kidogo (Center Watermark)
+      const centerSize = Math.min(92, Math.min(pageWidth, pageHeight) * 0.44);
+      const centerX = (pageWidth - centerSize) / 2;
+      const centerY = (pageHeight - centerSize) / 2;
+      doc.addImage(logoB64, format, centerX, centerY, centerSize, centerSize, 'UWALEMI_WM_CTR', 'FAST');
+
+      // 2, 3, 4, 5. Pembeni Juu na Chini (4 Corner / Side Watermarks - Ndogo kidogo)
+      const cornerSize = centerSize * 0.54; // around 45-50mm on A4, ~32-35mm on A5
+      const marginX = Math.max(12, pageWidth * 0.06);
+      const marginYTop = Math.max(28, pageHeight * 0.10);
+      const marginYBottom = Math.max(20, pageHeight * 0.08);
+
+      // (a) Juu Kushoto (Top-Left)
+      const tlX = marginX;
+      const tlY = marginYTop;
+      doc.addImage(logoB64, format, tlX, tlY, cornerSize, cornerSize, 'UWALEMI_WM_TL', 'FAST');
+
+      // (b) Juu Kulia (Top-Right)
+      const trX = pageWidth - cornerSize - marginX;
+      const trY = marginYTop;
+      doc.addImage(logoB64, format, trX, trY, cornerSize, cornerSize, 'UWALEMI_WM_TR', 'FAST');
+
+      // (c) Chini Kushoto (Bottom-Left)
+      const blX = marginX;
+      const blY = pageHeight - cornerSize - marginYBottom;
+      doc.addImage(logoB64, format, blX, blY, cornerSize, cornerSize, 'UWALEMI_WM_BL', 'FAST');
+
+      // (d) Chini Kulia (Bottom-Right)
+      const brX = pageWidth - cornerSize - marginX;
+      const brY = pageHeight - cornerSize - marginYBottom;
+      doc.addImage(logoB64, format, brX, brY, cornerSize, cornerSize, 'UWALEMI_WM_BR', 'FAST');
+    } catch (err) {
+      console.warn('Could not draw 5-logo watermark on page', i, err);
+    }
+
+    if (typeof doc.restoreGraphicsState === 'function') doc.restoreGraphicsState();
+  }
+};
+
+/**
+ * Draw UWALEMI Official Letterhead with Emblem Logo on jsPDF document
  */
 const drawOfficialHeader = (
   doc: jsPDF, 
   state: UwalemiState, 
   reportTitle: string, 
-  subTitle?: string
+  subTitle?: string,
+  logoBase64Override?: string
 ) => {
   const groupName = state.groupSettings?.groupName || 'UWALEMI';
   const slogan = state.groupSettings?.slogan && !state.groupSettings.slogan.includes('Shida na Raha')
     ? state.groupSettings.slogan
     : 'Lema, Nguvu Moja.';
   
+  const logoB64 = logoBase64Override || cachedUwalemiLogoBase64;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const centerX = pageWidth / 2;
+  const rightMargin = pageWidth - 14;
+
   // Top decorative emerald stripe
   doc.setFillColor(5, 150, 105); // emerald-600
-  doc.rect(0, 0, 210, 8, 'F');
+  doc.rect(0, 0, pageWidth, 6, 'F');
 
-  // Group Name Header
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(0, 0, 0); // slate-900 (black)
-  doc.text(groupName.toUpperCase(), 105, 18, { align: 'center' });
+  let textStartX = 14;
 
-  // Slogan / Motto
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(9);
-  doc.setTextColor(0, 0, 0); // slate-500 (black)
-  doc.text(slogan, 105, 23, { align: 'center' });
+  // Draw Emblem Logo if available
+  if (logoB64) {
+    try {
+      const format = logoB64.includes('image/png') || logoB64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+      doc.addImage(logoB64, format, 14, 9, 21, 21, 'UWALEMI_HEADER_LOGO', 'FAST');
+      textStartX = 39;
+    } catch (e) {
+      console.warn('Could not add logo to PDF header:', e);
+    }
+  }
+
+  if (logoB64) {
+    // Group Name Header
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(15, 23, 42); // slate-900
+    doc.text(groupName.toUpperCase(), textStartX, 17);
+
+    // Slogan / Motto
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105); // slate-600
+    doc.text(`"${slogan}"`, textStartX, 22.5);
+
+    // Subtitle
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(5, 150, 105); // emerald-600
+    doc.text('CHAMA CHA KIJAMII CHA KUSAIDIANA NA KUSTAWISHANA', textStartX, 27.5);
+  } else {
+    // Group Name Header (Centered fallback)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(0, 0, 0);
+    doc.text(groupName.toUpperCase(), centerX, 18, { align: 'center' });
+
+    // Slogan / Motto
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    doc.text(slogan, centerX, 23, { align: 'center' });
+  }
 
   // Divider Line
   doc.setDrawColor(203, 213, 225); // slate-300
   doc.setLineWidth(0.5);
-  doc.line(14, 26, 196, 26);
+  doc.line(14, 32, rightMargin, 32);
 
   // Report Title Badge
   doc.setFillColor(241, 245, 249); // slate-100
-  doc.roundedRect(14, 29, 182, 14, 2, 2, 'F');
+  doc.roundedRect(14, 35, pageWidth - 28, 14, 2, 2, 'F');
   
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setTextColor(5, 150, 105); // emerald-600
-  doc.text(reportTitle.toUpperCase(), 105, 36, { align: 'center' });
+  doc.text(reportTitle.toUpperCase(), centerX, 42, { align: 'center' });
 
   if (subTitle) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(0, 0, 0);
-    doc.text(subTitle, 105, 41, { align: 'center' });
+    doc.text(subTitle, centerX, 46.5, { align: 'center' });
   }
 
   // Meta info (Date generated)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.setTextColor(0, 0, 0);
+  doc.setTextColor(100, 116, 139);
   const nowStr = new Date().toLocaleString('sw-TZ', { dateStyle: 'medium', timeStyle: 'short' });
-  doc.text(`Tarehe ya Kuchapishwa: ${nowStr}`, 14, 48);
-  doc.text(`Mfumo: UWALEMI Management System`, 196, 48, { align: 'right' });
+  doc.text(`Tarehe ya Kuchapishwa: ${nowStr}`, 14, 53);
+  doc.text(`Mfumo Rasmi wa UWALEMI`, rightMargin, 53, { align: 'right' });
 
-  return 52; // Next Y coordinate
+  return 57; // Next Y coordinate
 };
 
 /**
@@ -752,19 +909,21 @@ export const generateFinancialReportPDF = (
   });
 
   let totalLateFeePaidInPeriod = 0;
-  let totalKikaoReceiptsInPeriod = 0;
+  let totalMeetingLateReceiptsInPeriod = 0;
+  let totalMeetingAbsentReceiptsInPeriod = 0;
+  let totalOtherFinesReceiptsInPeriod = 0;
+
   finePaymentsInPeriod.forEach(fp => {
-    const amt = Number(fp.amount) || 0;
-    if (fp.fineType === 'ada_late_fee') {
-      totalLateFeePaidInPeriod += amt;
-    } else {
-      totalKikaoReceiptsInPeriod += amt;
-    }
+    const decomp = decomposeFinePaymentAmounts(fp, state);
+    totalLateFeePaidInPeriod += decomp.adaLateFee;
+    totalMeetingLateReceiptsInPeriod += decomp.meetingLate;
+    totalMeetingAbsentReceiptsInPeriod += decomp.meetingAbsent;
+    totalOtherFinesReceiptsInPeriod += decomp.other;
   });
 
-  const totalMeetingLatePaid = Math.max(totalMeetingLateCollected, totalKikaoReceiptsInPeriod > totalMeetingAbsentCollected ? (totalKikaoReceiptsInPeriod - totalMeetingAbsentCollected) : totalMeetingLateCollected);
-  const totalMeetingAbsentPaid = totalMeetingAbsentCollected;
-  const totalMeetingFinesPaid = Math.max(totalMeetingLateCollected + totalMeetingAbsentCollected, totalKikaoReceiptsInPeriod);
+  const totalMeetingLatePaid = totalMeetingLateReceiptsInPeriod > 0 ? totalMeetingLateReceiptsInPeriod : totalMeetingLateCollected;
+  const totalMeetingAbsentPaid = totalMeetingAbsentReceiptsInPeriod > 0 ? totalMeetingAbsentReceiptsInPeriod : totalMeetingAbsentCollected;
+  const totalMeetingFinesPaid = totalMeetingLatePaid + totalMeetingAbsentPaid + totalOtherFinesReceiptsInPeriod;
   const totalMeetingFinesUnpaid = totalMeetingLateUnpaid + totalMeetingAbsentUnpaid;
   const totalFinesCollected = totalLateFeePaidInPeriod + totalMeetingFinesPaid;
 
@@ -833,9 +992,9 @@ export const generateFinancialReportPDF = (
   }
   debtRows.push(
     [
-      'Madeni ya Faini za Ada (>Miezi 3 ya Kuchelewa - Kikundi)',
+      'Madeni ya Faini za Ada (>Miezi 3 kuanzia Juni 2026)',
       formatTZS(totalLateFeePenalty),
-      'Faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni (Jumla ya wanachama wote wenye malimbikizo)'
+      'Faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya kwanza kuanzia Mwezi wa 6 (Juni 2026)'
     ],
     [
       'Madeni ya Faini ya Kuchelewa Kwenye Vikao',
@@ -1244,7 +1403,7 @@ export const generateFinancialReportPDF = (
     currentY += 3;
 
     const pmRows = pMethods.map(pm => [
-      pm.provider,
+      normalizePaymentMethod(pm.provider),
       pm.type,
       pm.number,
       pm.accountName
@@ -1265,11 +1424,13 @@ export const generateFinancialReportPDF = (
   }
 
   drawSignatures(doc, currentY, state.members || []);
+  addUwalemiReportWatermark(doc);
   return doc;
 };
 
 /**
  * 2. RIPOTI YA HALI YA WANACHAMA NA ADA (Members Ledger & Debts PDF)
+
  */
 export const generateMembersLedgerPDF = (
   state: UwalemiState,
@@ -1576,11 +1737,13 @@ export const generateMembersLedgerPDF = (
   currentY = doc.lastAutoTable.finalY + 10;
   drawSignatures(doc, currentY, state.members || []);
 
+  addUwalemiReportWatermark(doc);
   return doc;
 };
 
 /**
  * 3. RIPOTI YA MCHANGO WA DHARURA & MISIBA (Emergency Fund PDF)
+
  */
 export const generateEmergencyFundReportPDF = (
   state: UwalemiState,
@@ -1645,7 +1808,7 @@ export const generateEmergencyFundReportPDF = (
     p.memberNo,
     p.memberName,
     p.paymentDate,
-    p.paymentMethod,
+    normalizePaymentMethod(p.paymentMethod),
     p.referenceNo || p.receiptNo || '-',
     formatTZS(p.amount)
   ]);
@@ -1720,11 +1883,13 @@ export const generateEmergencyFundReportPDF = (
   }
 
   drawSignatures(doc, currentY, state.members || []);
+  addUwalemiReportWatermark(doc);
   return doc;
 };
 
 /**
  * 4. RIPOTI MAALUM YA FAINI NA ADHABU ZA WANACHAMA (Official Fines & Penalties PDF Report)
+
  */
 export const generateFinesReportPDF = (
   state: UwalemiState,
@@ -1822,32 +1987,36 @@ export const generateFinesReportPDF = (
     });
 
     let lateFeePaid = 0;
-    let receiptsKikaoPaid = 0;
+    let receiptsMeetingLatePaid = 0;
+    let receiptsMeetingAbsentPaid = 0;
+    let receiptsOtherPaid = 0;
+
     memberFinePayments.forEach(fp => {
-      const amt = Number(fp.amount) || 0;
-      if (fp.fineType === 'ada_late_fee') {
-        lateFeePaid += amt;
-      } else {
-        receiptsKikaoPaid += amt;
-      }
+      const decomp = decomposeFinePaymentAmounts(fp, state);
+      lateFeePaid += decomp.adaLateFee;
+      receiptsMeetingLatePaid += decomp.meetingLate;
+      receiptsMeetingAbsentPaid += decomp.meetingAbsent;
+      receiptsOtherPaid += decomp.other;
     });
 
-    // Reconcile meeting payments from receipts if attendee finePaid flag was not toggled
-    if (receiptsKikaoPaid > (meetingLatePaid + meetingAbsentPaid)) {
-      meetingLatePaid = receiptsKikaoPaid;
-      if (meetingLateDebt > 0) {
-        meetingLateDebt = Math.max(0, meetingLateDebt - receiptsKikaoPaid);
-      }
+    meetingLatePaid = Math.max(meetingLatePaid, receiptsMeetingLatePaid);
+    meetingAbsentPaid = Math.max(meetingAbsentPaid, receiptsMeetingAbsentPaid);
+
+    if (meetingLatePaid > 0 && meetingLateDebt > 0) {
+      meetingLateDebt = Math.max(0, meetingLateDebt - receiptsMeetingLatePaid);
+    }
+    if (meetingAbsentPaid > 0 && meetingAbsentDebt > 0) {
+      meetingAbsentDebt = Math.max(0, meetingAbsentDebt - receiptsMeetingAbsentPaid);
     }
 
     const totalMemberFineDebt = lateFee + meetingLateDebt + meetingAbsentDebt;
-    const totalMemberFinePaid = lateFeePaid + meetingLatePaid + meetingAbsentPaid;
+    const totalMemberFinePaid = lateFeePaid + meetingLatePaid + meetingAbsentPaid + receiptsOtherPaid;
     const totalMemberFines = totalMemberFineDebt + totalMemberFinePaid;
 
     if (totalMemberFineDebt > 0) {
       totalMembersWithFineDebt++;
     }
-    if (totalMemberFinePaid > 0) {
+    if (totalMemberFinePaid > 0 && totalMemberFineDebt === 0) {
       totalMembersWithFinePaid++;
     }
 
@@ -1863,7 +2032,7 @@ export const generateFinesReportPDF = (
       if (penaltyMonths > 0) {
         feeDebtNote = `${unpaidMonthsCount}M (${penaltyMonths} ya faini Mz 6+)`;
       } else {
-        feeDebtNote = `${unpaidMonthsCount}M (msamaha <=3M Mz 6+)`;
+        feeDebtNote = `${unpaidMonthsCount}M (Ada)`;
       }
     }
 
@@ -1901,12 +2070,12 @@ export const generateFinesReportPDF = (
       [
         'Wanachama Wenye Deni la Faini',
         `${totalMembersWithFineDebt} kati ya ${members.length}`,
-        `Wenye madeni ya faini bado hawajalipa (${totalMembersWithFinePaid} wameshalipa faini zao). Wakilipa ada au faini idadi inapungua`
+        `Wanachama ${totalMembersWithFineDebt} wana madeni ya faini (${totalMembersWithFinePaid} wamekamilisha kulipa faini zote, na ${members.length - totalMembersWithFineDebt - totalMembersWithFinePaid} hawana faini yoyote).`
       ],
       [
-        '1. Faini ya Kuchelewesha Ada (>Miezi 3, Mz 6+)',
+        '1. Faini ya Kuchelewesha Ada (Kuanzia Mwezi wa 6 / Juni 2026)',
         `Deni: ${formatTZS(totalLateFeeDebt)} | Imelipwa: ${formatTZS(totalLateFeePaid)}`,
-        'TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya deni la ada kuanzia Mwezi wa 6 (Juni 2026)'
+        'TZS 5,000 kwa kila mwezi unaodaiwa ada kuanzia Mwezi wa 6 (Juni 2026)'
       ],
       [
         '2. Faini ya Kuchelewa Kwenye Kikao',
@@ -2095,7 +2264,7 @@ export const generateFinesReportPDF = (
     currentY = 20;
   }
   drawSignatures(doc, currentY, state.members || []);
-
+  addUwalemiReportWatermark(doc);
   return doc;
 };
 
@@ -2106,6 +2275,8 @@ export const generatePaymentReceiptPDF = (receiptData: {
   receiptNo: string;
   groupName: string;
   slogan?: string;
+  logoUrl?: string;
+  logoDataUrl?: string;
   memberNo: string;
   memberName: string;
   memberPhone?: string;
@@ -2123,43 +2294,79 @@ export const generatePaymentReceiptPDF = (receiptData: {
 }): jsPDF => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [148, 210] }); // A5 size portrait
   const isPartial = receiptData.statusType === 'partial';
+  const logoB64 = receiptData.logoDataUrl || receiptData.logoUrl || cachedUwalemiLogoBase64;
+  const cleanSlogan = receiptData.slogan && !receiptData.slogan.includes('Shida na Raha')
+    ? receiptData.slogan
+    : 'Lema, Nguvu Moja.';
 
   // Border Frame
   doc.setDrawColor(isPartial ? 217 : 5, isPartial ? 119 : 150, isPartial ? 6 : 105);
   doc.setLineWidth(1);
   doc.roundedRect(6, 6, 136, 198, 4, 4, 'S');
 
-  // Top header block
+  // Top header block (Emerald or Amber if partial)
   doc.setFillColor(isPartial ? 180 : 5, isPartial ? 83 : 150, isPartial ? 9 : 105);
-  doc.rect(6, 6, 136, 24, 'F');
+  doc.rect(6, 6, 136, 28, 'F');
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.text(receiptData.groupName.toUpperCase(), 74, 15, { align: 'center' });
+  // Draw Logo Emblem if available
+  if (logoB64) {
+    try {
+      const format = logoB64.includes('image/png') || logoB64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+      doc.addImage(logoB64, format, 10, 8, 24, 24, 'UWALEMI_RECEIPT_LOGO', 'FAST');
 
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7.5);
-  doc.text(receiptData.slogan || 'Umoja wa Wana-Lema Mikocheni • Shida na Raha', 74, 21, { align: 'center' });
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(255, 255, 255);
+      doc.text(receiptData.groupName.toUpperCase(), 38, 16);
+
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.setTextColor(230, 255, 240);
+      doc.text(`"${cleanSlogan}"`, 38, 22);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(200, 245, 225);
+      doc.text('Kikundi Rasmi cha Kijamii • Mfumo wa Fedha na Stakabadhi', 38, 27);
+    } catch (e) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(255, 255, 255);
+      doc.text(receiptData.groupName.toUpperCase(), 74, 15, { align: 'center' });
+
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7.5);
+      doc.text(cleanSlogan, 74, 21, { align: 'center' });
+    }
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text(receiptData.groupName.toUpperCase(), 74, 15, { align: 'center' });
+
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.text(cleanSlogan, 74, 21, { align: 'center' });
+  }
 
   // Receipt Badge
   doc.setFillColor(241, 245, 249);
-  doc.roundedRect(12, 34, 124, 10, 2, 2, 'F');
+  doc.roundedRect(12, 38, 124, 10, 2, 2, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(0, 0, 0);
-  doc.text(isPartial ? 'RISITI YA MALIPO YA NUSU / SEHEMU' : 'RISITI RASMI YA MALIPO (PAYMENT RECEIPT)', 74, 40.5, { align: 'center' });
+  doc.text(isPartial ? 'RISITI YA MALIPO YA NUSU / SEHEMU' : 'RISITI RASMI YA MALIPO (PAYMENT RECEIPT)', 74, 44.5, { align: 'center' });
 
   // Receipt Meta
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(isPartial ? 180 : 5, isPartial ? 83 : 150, isPartial ? 9 : 105);
-  doc.text(`Na. ya Risiti: ${receiptData.receiptNo}`, 14, 50);
+  doc.text(`Na. ya Risiti: ${receiptData.receiptNo}`, 14, 54);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(0, 0, 0);
-  doc.text(`Tarehe: ${receiptData.paymentDate}`, 134, 50, { align: 'right' });
+  doc.text(`Tarehe: ${receiptData.paymentDate}`, 134, 54, { align: 'right' });
 
   const tableBody: any[] = [
     ['Namba ya Mjumbe', receiptData.memberNo],
@@ -2167,7 +2374,7 @@ export const generatePaymentReceiptPDF = (receiptData: {
     ['Simu ya Mjumbe', receiptData.memberPhone || '-'],
     ['Aina ya Malipo', receiptData.paymentType],
     ['Madhumuni / Kipindi', receiptData.periodOrTitle],
-    ['Njia ya Malipo', receiptData.paymentMethod],
+    ['Njia ya Malipo', normalizePaymentMethod(receiptData.paymentMethod)],
     ['Namba ya Kumbukumbu', receiptData.referenceNo || 'KUTOKA MFUMONI'],
     ['Kiasi Kilicholipwa', formatTZS(receiptData.amount)]
   ];
@@ -2180,7 +2387,7 @@ export const generatePaymentReceiptPDF = (receiptData: {
 
   // Details Table
   autoTable(doc, {
-    startY: 54,
+    startY: 58,
     head: [['MAELEZO YA MALIPO', 'TAARIFA KAMILI']],
     body: tableBody,
     theme: 'grid',
@@ -2222,7 +2429,7 @@ export const generatePaymentReceiptPDF = (receiptData: {
   }
 
   // Stamp Badge (PAID / NUSU)
-  const stampY = currentY + 4;
+  const stampY = currentY + 3;
   doc.setDrawColor(isPartial ? 217 : 5, isPartial ? 119 : 150, isPartial ? 6 : 105);
   doc.setLineWidth(1.5);
   doc.roundedRect(44, stampY, 60, 16, 3, 3, 'S');
@@ -2252,5 +2459,6 @@ export const generatePaymentReceiptPDF = (receiptData: {
   doc.setTextColor(0, 0, 0);
   doc.text('Risiti hii imetolewa kielektroniki kupitia Mfumo wa UWALEMI.', 74, 198, { align: 'center' });
 
+  addUwalemiReportWatermark(doc, logoB64);
   return doc;
 };

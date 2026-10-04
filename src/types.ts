@@ -2,10 +2,13 @@ export interface EventDetails {
   id: string;
   senderId: string;
   name: string;
+  title?: string;
+  eventType?: string;
   date: string;
   time: string;
   period: 'Asubuhi' | 'Mchana' | 'Jioni' | 'Usiku';
   eventHallName: string;
+  venueLocation?: string;
   coordinates: string;
   hostName: string;
   dressCode: string;
@@ -40,6 +43,8 @@ export interface EventDetails {
     contributionEn?: string;
     generalThanksSw?: string;
     generalThanksEn?: string;
+    reminderTemplateSw?: string;
+    reminderTemplateEn?: string;
   } | null;
 
   paymentMethods?: {
@@ -187,6 +192,13 @@ export interface Guest {
   rsvpSeen?: boolean;
 
   // Track module-specific delivery statuses to avoid badge cross-contamination
+  invitationSmsStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
+  invitationWhatsappStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
+  reminderSmsStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
+  reminderWhatsappStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
+  thankYouSmsStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
+  thankYouWhatsappStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
+
   stdSent?: boolean;
   stdSentChannel?: string;
   stdSentLang?: string;

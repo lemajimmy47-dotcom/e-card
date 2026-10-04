@@ -75,6 +75,7 @@ export async function ensureTablesExist(): Promise<void> {
         "time" text,
         "period" text,
         "event_hall_name" text,
+        "venue_location" text,
         "coordinates" text,
         "host_name" text,
         "dress_code" text,
@@ -122,6 +123,14 @@ export async function ensureTablesExist(): Promise<void> {
         "payments" jsonb,
         "rsvp_updated_at" text,
         "rsvp_seen" boolean DEFAULT true,
+        "invitation_sms_status" text DEFAULT 'Sijatuma',
+        "invitation_whatsapp_status" text DEFAULT 'Sijatuma',
+        "reminder_sms_status" text DEFAULT 'Sijatuma',
+        "reminder_whatsapp_status" text DEFAULT 'Sijatuma',
+        "thank_you_sms_status" text DEFAULT 'Sijatuma',
+        "thank_you_whatsapp_status" text DEFAULT 'Sijatuma',
+        "last_sent_channel" text,
+        "last_sent_lang" text,
         "custom_fields" jsonb,
         "tags" jsonb
       );
@@ -226,6 +235,15 @@ export async function ensureTablesExist(): Promise<void> {
         ALTER TABLE "template_settings" ADD COLUMN IF NOT EXISTS "orientation" text DEFAULT 'portrait';
         ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "custom_fields" jsonb;
         ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "tags" jsonb;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "invitation_sms_status" text DEFAULT 'Sijatuma';
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "invitation_whatsapp_status" text DEFAULT 'Sijatuma';
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "reminder_sms_status" text DEFAULT 'Sijatuma';
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "reminder_whatsapp_status" text DEFAULT 'Sijatuma';
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "thank_you_sms_status" text DEFAULT 'Sijatuma';
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "thank_you_whatsapp_status" text DEFAULT 'Sijatuma';
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "last_sent_channel" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "last_sent_lang" text;
+        ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "venue_location" text;
         ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "admin_alert_whatsapp_phone" text;
         ALTER TABLE "sms_gateway_settings" ADD COLUMN IF NOT EXISTS "admin_alert_whatsapp_phone" text;
         ALTER TABLE "sms_gateway_settings" ADD COLUMN IF NOT EXISTS "admin_whatsapp_phone" text;
@@ -277,6 +295,7 @@ export async function seedFromBackupFile(): Promise<boolean> {
           time: ev.time ? String(ev.time) : null,
           period: ev.period ? String(ev.period) : null,
           eventHallName: ev.eventHallName ? String(ev.eventHallName) : null,
+          venueLocation: ev.venueLocation ? String(ev.venueLocation) : null,
           coordinates: ev.coordinates ? String(ev.coordinates) : null,
           hostName: ev.hostName ? String(ev.hostName) : null,
           dressCode: ev.dressCode ? String(ev.dressCode) : null,
@@ -311,6 +330,7 @@ export async function seedFromBackupFile(): Promise<boolean> {
         time: ed.time ? String(ed.time) : null,
         period: ed.period ? String(ed.period) : null,
         eventHallName: ed.eventHallName ? String(ed.eventHallName) : null,
+        venueLocation: ed.venueLocation ? String(ed.venueLocation) : null,
         coordinates: ed.coordinates ? String(ed.coordinates) : null,
         hostName: ed.hostName ? String(ed.hostName) : null,
         dressCode: ed.dressCode ? String(ed.dressCode) : null,
@@ -572,6 +592,7 @@ export async function fetchFullStateFromDB(): Promise<any> {
       time: e.time || "",
       period: e.period || "Jioni",
       eventHallName: e.eventHallName || "",
+      venueLocation: e.venueLocation || "",
       coordinates: e.coordinates || "",
       hostName: e.hostName || "",
       dressCode: e.dressCode || "",
@@ -599,35 +620,55 @@ export async function fetchFullStateFromDB(): Promise<any> {
                             eventsList.find(e => e.id !== "event-starter") ||
                             eventsList[0] || {};
 
-    const guests = sqlGuests.map(g => ({
-      id: g.id,
-      eventId: g.eventId || "",
-      code: g.code,
-      name: g.name,
-      phone: g.phone,
-      cardType: g.cardType,
-      smsStatus: g.smsStatus || "Sijatuma",
-      whatsappStatus: g.whatsappStatus || "Sijatuma",
-      rsvpStatus: g.rsvpStatus || "Bado",
-      maxGuests: g.maxGuests || 1,
-      rsvpGuestsCount: g.rsvpGuestsCount || 0,
-      rsvpComment: g.rsvpComment || "",
-      checkedIn: g.checkedIn || false,
-      checkedInTime: g.checkedInTime || "",
-      photoUrl: g.photoUrl || "",
-      cardImageUrl: g.cardImageUrl || "",
-      smsCount: g.smsCount || 0,
-      whatsappCount: g.whatsappCount || 0,
-      category: g.category || "",
-      pledgeAmount: g.pledgeAmount || 0,
-      paidAmount: g.paidAmount || 0,
-      pledgeStatus: g.pledgeStatus || "No Pledge",
-      payments: g.payments || [],
-      rsvpUpdatedAt: g.rsvpUpdatedAt || "",
-      rsvpSeen: g.rsvpSeen !== false,
-      customFields: (g as any).customFields || {},
-      tags: (g as any).tags || [],
-    }));
+    const guests = sqlGuests.map(g => {
+      const cf = ((g as any).customFields && typeof (g as any).customFields === 'object') ? (g as any).customFields : {};
+      const invSms = (g as any).invitationSmsStatus || cf.invitationSmsStatus || g.smsStatus || "Sijatuma";
+      const invWa = (g as any).invitationWhatsappStatus || cf.invitationWhatsappStatus || g.whatsappStatus || "Sijatuma";
+      const remSms = (g as any).reminderSmsStatus || cf.reminderSmsStatus || "Sijatuma";
+      const remWa = (g as any).reminderWhatsappStatus || cf.reminderWhatsappStatus || "Sijatuma";
+      const thkSms = (g as any).thankYouSmsStatus || cf.thankYouSmsStatus || "Sijatuma";
+      const thkWa = (g as any).thankYouWhatsappStatus || cf.thankYouWhatsappStatus || "Sijatuma";
+      const lastChannel = (g as any).lastSentChannel || cf.lastSentChannel || null;
+      const lastLang = (g as any).lastSentLang || cf.lastSentLang || null;
+
+      return {
+        id: g.id,
+        eventId: g.eventId || "",
+        code: g.code,
+        name: g.name,
+        phone: g.phone,
+        cardType: g.cardType,
+        smsStatus: g.smsStatus || "Sijatuma",
+        whatsappStatus: g.whatsappStatus || "Sijatuma",
+        invitationSmsStatus: invSms,
+        invitationWhatsappStatus: invWa,
+        reminderSmsStatus: remSms,
+        reminderWhatsappStatus: remWa,
+        thankYouSmsStatus: thkSms,
+        thankYouWhatsappStatus: thkWa,
+        lastSentChannel: lastChannel,
+        lastSentLang: lastLang,
+        rsvpStatus: g.rsvpStatus || "Bado",
+        maxGuests: g.maxGuests || 1,
+        rsvpGuestsCount: g.rsvpGuestsCount || 0,
+        rsvpComment: g.rsvpComment || "",
+        checkedIn: g.checkedIn || false,
+        checkedInTime: g.checkedInTime || "",
+        photoUrl: g.photoUrl || "",
+        cardImageUrl: g.cardImageUrl || "",
+        smsCount: g.smsCount || 0,
+        whatsappCount: g.whatsappCount || 0,
+        category: g.category || "",
+        pledgeAmount: g.pledgeAmount || 0,
+        paidAmount: g.paidAmount || 0,
+        pledgeStatus: g.pledgeStatus || "No Pledge",
+        payments: g.payments || [],
+        rsvpUpdatedAt: g.rsvpUpdatedAt || "",
+        rsvpSeen: g.rsvpSeen !== false,
+        customFields: cf,
+        tags: (g as any).tags || [],
+      };
+    });
 
     const saveTheDates = sqlSaveTheDates.map(s => ({
       id: s.id,
@@ -835,6 +876,7 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
           time: ev.time ? String(ev.time) : null,
           period: ev.period ? String(ev.period) : null,
           eventHallName: ev.eventHallName ? String(ev.eventHallName) : null,
+          venueLocation: ev.venueLocation ? String(ev.venueLocation) : null,
           coordinates: ev.coordinates ? String(ev.coordinates) : null,
           hostName: ev.hostName ? String(ev.hostName) : null,
           dressCode: ev.dressCode ? String(ev.dressCode) : null,
@@ -863,6 +905,7 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
             time: sql`EXCLUDED.time`,
             period: sql`EXCLUDED.period`,
             eventHallName: sql`EXCLUDED.event_hall_name`,
+            venueLocation: sql`EXCLUDED.venue_location`,
             coordinates: sql`EXCLUDED.coordinates`,
             hostName: sql`EXCLUDED.host_name`,
             dressCode: sql`EXCLUDED.dress_code`,
@@ -924,7 +967,25 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
             payments: g.payments || null,
             rsvpUpdatedAt: g.rsvpUpdatedAt ? String(g.rsvpUpdatedAt) : null,
             rsvpSeen: g.rsvpSeen !== false,
-            customFields: g.customFields || null,
+            invitationSmsStatus: String(g.invitationSmsStatus || g.smsStatus || "Sijatuma"),
+            invitationWhatsappStatus: String(g.invitationWhatsappStatus || g.whatsappStatus || "Sijatuma"),
+            reminderSmsStatus: String(g.reminderSmsStatus || "Sijatuma"),
+            reminderWhatsappStatus: String(g.reminderWhatsappStatus || "Sijatuma"),
+            thankYouSmsStatus: String(g.thankYouSmsStatus || "Sijatuma"),
+            thankYouWhatsappStatus: String(g.thankYouWhatsappStatus || "Sijatuma"),
+            lastSentChannel: g.lastSentChannel ? String(g.lastSentChannel) : null,
+            lastSentLang: g.lastSentLang ? String(g.lastSentLang) : null,
+            customFields: {
+              ...(g.customFields || {}),
+              invitationSmsStatus: g.invitationSmsStatus || g.smsStatus || "Sijatuma",
+              invitationWhatsappStatus: g.invitationWhatsappStatus || g.whatsappStatus || "Sijatuma",
+              reminderSmsStatus: g.reminderSmsStatus || "Sijatuma",
+              reminderWhatsappStatus: g.reminderWhatsappStatus || "Sijatuma",
+              thankYouSmsStatus: g.thankYouSmsStatus || "Sijatuma",
+              thankYouWhatsappStatus: g.thankYouWhatsappStatus || "Sijatuma",
+              lastSentChannel: g.lastSentChannel || null,
+              lastSentLang: g.lastSentLang || null,
+            },
             tags: g.tags || null,
           }));
 
@@ -939,6 +1000,14 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
               cardType: sql`EXCLUDED.card_type`,
               smsStatus: sql`EXCLUDED.sms_status`,
               whatsappStatus: sql`EXCLUDED.whatsapp_status`,
+              invitationSmsStatus: sql`EXCLUDED.invitation_sms_status`,
+              invitationWhatsappStatus: sql`EXCLUDED.invitation_whatsapp_status`,
+              reminderSmsStatus: sql`EXCLUDED.reminder_sms_status`,
+              reminderWhatsappStatus: sql`EXCLUDED.reminder_whatsapp_status`,
+              thankYouSmsStatus: sql`EXCLUDED.thank_you_sms_status`,
+              thankYouWhatsappStatus: sql`EXCLUDED.thank_you_whatsapp_status`,
+              lastSentChannel: sql`EXCLUDED.last_sent_channel`,
+              lastSentLang: sql`EXCLUDED.last_sent_lang`,
               rsvpStatus: sql`EXCLUDED.rsvp_status`,
               maxGuests: sql`EXCLUDED.max_guests`,
               rsvpGuestsCount: sql`EXCLUDED.rsvp_guests_count`,

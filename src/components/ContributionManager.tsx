@@ -20,6 +20,7 @@ import { addPdfWatermarks } from '../utils/pdfWatermark';
 import { ReportWatermark } from './ReportWatermark';
 import { convertWebPToJpeg } from '../utils/imageUtils';
 import { parseUniversalGuestTable, parseFileToGuestMatrix } from '../utils/excelParser';
+import { isEligibleWhatsAppNumber } from '../utils/phoneUtils';
 
 const qrCache = new Map<string, HTMLImageElement>();
 
@@ -2286,9 +2287,19 @@ export default function ContributionManager({
     if (!g) return;
 
     setIsDispatching(true);
-    const mainText = getContributionMessageText(g, type, channel);
+    let targetChannel: 'sms' | 'whatsapp' = channel;
+    if (channel === 'whatsapp' && !isEligibleWhatsAppNumber(g.phone, g)) {
+      alert(
+        isEn
+          ? `Notice: ${g.name}'s phone (${g.phone}) is not on WhatsApp (SMS-Only). Switched to SMS delivery.`
+          : `Angalizo: Namba ya ${g.name} (${g.phone}) haiko WhatsApp (SMS Tu). Mfumo umeizuia WhatsApp na kutuma kwa SMS ya kawaida.`
+      );
+      targetChannel = 'sms';
+    }
 
-    if (channel === 'sms' || (channel === 'whatsapp' && isMetaWhatsApp)) {
+    const mainText = getContributionMessageText(g, type, targetChannel);
+
+    if (targetChannel === 'sms' || (targetChannel === 'whatsapp' && isMetaWhatsApp)) {
       try {
         let pledgeText = '';
         if (type === 'Pledge') {
@@ -2308,7 +2319,7 @@ export default function ContributionManager({
             eventId: event.id,
             phone: g.phone,
             text: mainText,
-            channel: channel, // Passes 'sms' or 'whatsapp' appropriately to server
+            channel: targetChannel, // Passes 'sms' or 'whatsapp' appropriately to server
             lang: isEn ? 'en' : 'sw',
             templateName: type === 'Pledge' ? (metaTemplateName || 'kadi_mchango') : (type === 'Reminder' ? 'ukumbusho' : 'shukrani'),
             templateParams: (() => {

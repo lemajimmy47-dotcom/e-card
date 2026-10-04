@@ -20,9 +20,10 @@ import * as XLSX from 'xlsx';
 interface Props {
   state: UwalemiState;
   onSaveState: (state: UwalemiState) => Promise<boolean>;
+  readOnly?: boolean;
 }
 
-export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState }) => {
+export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState, readOnly }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [isNewExpenseModalOpen, setIsNewExpenseModalOpen] = useState(false);
@@ -47,7 +48,7 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
     date: new Date().toISOString().split('T')[0],
     paidTo: '',
     approvedBy: 'Jimson Lema (Mwenyekiti)',
-    paymentMethod: 'M-Pesa (Lipa Namba)',
+    paymentMethod: 'M Koba',
     description: ''
   });
 
@@ -101,6 +102,10 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
 
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) {
+      alert('Hali ya Kutazama Tu: Hauruhusiwi kurekodi matumizi.');
+      return;
+    }
     if (!expenseForm.title || !expenseForm.paidTo || !expenseForm.amount) {
       alert('Tafadhali jaza taarifa zote muhimu.');
       return;
@@ -124,6 +129,7 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
   };
 
   const handleDeleteExpense = (id: string, title: string) => {
+    if (readOnly) return;
     setExpenseToDelete({ id, title });
     setDeleteConfirmOpen(true);
   };
@@ -169,25 +175,31 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
             <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
             Pakua Ripoti ya Fedha
           </button>
-          <button
-            onClick={() => {
-              setExpenseForm({
-                title: '',
-                category: 'kikao',
-                amount: 50000,
-                date: new Date().toISOString().split('T')[0],
-                paidTo: '',
-                approvedBy: 'Jimson Lema (Mwenyekiti)',
-                paymentMethod: 'M-Pesa (Lipa Namba)',
-                description: ''
-              });
-              setIsNewExpenseModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-900/30 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Rekodi Matumizi ya Hazina
-          </button>
+          {!readOnly ? (
+            <button
+              onClick={() => {
+                setExpenseForm({
+                  title: '',
+                  category: 'kikao',
+                  amount: 50000,
+                  date: new Date().toISOString().split('T')[0],
+                  paidTo: '',
+                  approvedBy: 'Jimson Lema (Mwenyekiti)',
+                  paymentMethod: 'M Koba',
+                  description: ''
+                });
+                setIsNewExpenseModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-900/30 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Rekodi Matumizi ya Hazina
+            </button>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+              <span>👁️ Hali ya Kutazama Tu</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -333,13 +345,17 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
                     <td className="py-3.5 px-4 text-slate-300">{exp.paidTo}</td>
                     <td className="py-3.5 px-4 text-slate-400 text-[11px]">{exp.approvedBy}</td>
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => handleDeleteExpense(exp.id, exp.title)}
-                        title="Futa Rekodi ya Matumizi"
-                        className="p-1 rounded-lg bg-slate-800 hover:bg-rose-900/40 text-rose-400 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {!readOnly ? (
+                        <button
+                          onClick={() => handleDeleteExpense(exp.id, exp.title)}
+                          title="Futa Rekodi ya Matumizi"
+                          className="p-1 rounded-lg bg-slate-800 hover:bg-rose-900/40 text-rose-400 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 italic">-</span>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -448,7 +464,7 @@ export const UwalemiExpensesTreasury: React.FC<Props> = ({ state, onSaveState })
                     onChange={(e) => setExpenseForm({ ...expenseForm, paymentMethod: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
                   >
-                    <option value="M-Pesa (Lipa Namba)">M-Pesa (Lipa Namba)</option>
+                    <option value="M Koba">M Koba</option>
                     <option value="Tigo Pesa">Tigo Pesa</option>
                     <option value="Airtel Money">Airtel Money</option>
                     <option value="Benki (CRDB/NMB)">Benki (CRDB/NMB)</option>

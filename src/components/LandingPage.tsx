@@ -6,9 +6,10 @@ import { useLanguage } from '../context/LanguageContext';
 interface LandingPageProps {
   onStart: () => void;
   onLoginClick: () => void;
+  onOpenUwalemi?: () => void;
 }
 
-export default function LandingPage({ onStart, onLoginClick }: LandingPageProps) {
+export default function LandingPage({ onStart, onLoginClick, onOpenUwalemi }: LandingPageProps) {
   const { language, setLanguage, t } = useLanguage();
   const [activePolicyTab, setActivePolicyTab] = useState<'privacy' | 'terms' | 'delete' | null>(null);
 
