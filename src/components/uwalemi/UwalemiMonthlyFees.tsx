@@ -53,6 +53,7 @@ interface Props {
   state: UwalemiState;
   onSaveState: (state: UwalemiState) => Promise<boolean>;
   onOpenSmsWithTemplate?: (recipients: { name: string; phone: string; memberNo: string }[], templateText: string) => void;
+  onNavigateTab?: (tab: any) => void;
   autoOpenRecordModal?: boolean;
   onResetAutoOpen?: () => void;
   readOnly?: boolean;
@@ -62,6 +63,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
   state, 
   onSaveState, 
   onOpenSmsWithTemplate,
+  onNavigateTab,
   autoOpenRecordModal,
   onResetAutoOpen,
   readOnly
@@ -456,7 +458,6 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
 
       smartAllocation.months.forEach(alloc => {
         const pStatus: 'paid' | 'partial' | 'unpaid' = alloc.newTotalPaid >= alloc.expected ? 'paid' : alloc.newTotalPaid > 0 ? 'partial' : 'unpaid';
-        const singleReceiptNo = `UWL-REC-${alloc.year}${String(alloc.month).padStart(2, '0')}-${member.memberNo.replace('UWL-', '')}`;
         
         const newP: UwalemiMonthlyPayment = {
           id: `uwl-fee-${member.id}-${alloc.year}-${alloc.month}`,
@@ -471,7 +472,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
           paymentMethod: paymentForm.paymentMethod,
           referenceNo: paymentForm.referenceNo,
           status: pStatus,
-          receiptNo: singleReceiptNo,
+          receiptNo: masterReceiptNo,
           note: paymentForm.note || `Malipo ya ada (${alloc.monthName} ${alloc.year})`
         };
 
@@ -853,7 +854,6 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       if (feeAmt > 0 && smartAllocation.months.length > 0) {
         smartAllocation.months.forEach(alloc => {
           const pStatus: 'paid' | 'partial' | 'unpaid' = alloc.newTotalPaid >= alloc.expected ? 'paid' : alloc.newTotalPaid > 0 ? 'partial' : 'unpaid';
-          const singleReceiptNo = `UWL-REC-${alloc.year}${String(alloc.month).padStart(2, '0')}-${member.memberNo.replace('UWL-', '')}`;
           
           const newP: UwalemiMonthlyPayment = {
             id: `uwl-fee-${member.id}-${alloc.year}-${alloc.month}`,
@@ -868,7 +868,7 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
             paymentMethod: paymentForm.paymentMethod,
             referenceNo: paymentForm.referenceNo,
             status: pStatus,
-            receiptNo: singleReceiptNo,
+            receiptNo: masterReceiptNo,
             note: paymentForm.note || `Malipo ya ada (${alloc.monthName} ${alloc.year}) [Malipo ya Pamoja]`
           };
 
@@ -1055,6 +1055,55 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
         paymentDate: newPayment.paymentDate,
         paymentMethod: newPayment.paymentMethod
       }).catch(err => console.warn('[Auto Receipt SMS Error]:', err));
+    }
+  };
+
+  // Open the EXACT batch receipt (multi-month or single) that was issued for this payment
+  const handleOpenReceiptForPayment = (p: UwalemiMonthlyPayment) => {
+    if (!p) return;
+    const sameBatch = p.receiptNo
+      ? (monthlyPayments || []).filter(item => item.receiptNo === p.receiptNo && Number(item.paidAmount) > 0)
+      : [p];
+
+    const member = members.find(m => m.id === p.memberId || m.memberNo === p.memberNo);
+    if (!member) {
+      setViewingReceipt(p);
+      return;
+    }
+
+    if (sameBatch.length > 1) {
+      const totalBatchAmt = sameBatch.reduce((sum, item) => sum + Number(item.paidAmount), 0);
+      const monthsData = sameBatch.map(item => {
+        const exp = item.expectedAmount || member.monthlyFeeAmount || 10000;
+        return {
+          year: item.year,
+          month: item.month,
+          monthName: monthNamesSw[item.month - 1] || `Mwezi ${item.month}`,
+          paid: item.paidAmount,
+          expected: exp,
+          isPartial: item.status === 'partial' || item.paidAmount < exp,
+          balance: Math.max(0, exp - item.paidAmount)
+        };
+      });
+      const feeDebtRemaining = Math.max(0, (calculateMemberFeeDebt(member, state).feeDebt || 0));
+      const finesDebtRemaining = calculateMemberOtherFines(member.id, state).finesDebt || 0;
+
+      setViewingMultiReceipt({
+        member,
+        amount: totalBatchAmt,
+        paymentDate: p.paymentDate || new Date().toISOString().split('T')[0],
+        paymentMethod: p.paymentMethod || 'M Koba',
+        referenceNo: p.referenceNo,
+        receiptNo: p.receiptNo || `UWL-REC-${p.year}${String(p.month).padStart(2, '0')}-${(member.memberNo || '000').replace('UWL-', '')}`,
+        receiptTitle: `STAKABADHI YA MALIPO YA ADA (MIEZI ${sameBatch.length})`,
+        receiptCategory: 'ada',
+        months: monthsData,
+        remainingFeeDebt: feeDebtRemaining,
+        remainingFineDebt: finesDebtRemaining,
+        totalDebtAfter: feeDebtRemaining + finesDebtRemaining
+      });
+    } else {
+      setViewingReceipt(p);
     }
   };
 
@@ -1671,10 +1720,32 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                     </button>
                   </>
                 )}
+
+                {onNavigateTab && (
+                  <button
+                    onClick={() => onNavigateTab('receipts')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold text-xs transition-all cursor-pointer shadow-sm"
+                    title="Fungua Daftari Kuu la Risiti Zote"
+                  >
+                    <Receipt className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Daftari la Risiti Zote</span>
+                  </button>
+                )}
               </>
             ) : (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
-                <span>👁️ Hali ya Kutazama Tu</span>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+                  <span>👁️ Hali ya Kutazama Tu</span>
+                </div>
+                {onNavigateTab && (
+                  <button
+                    onClick={() => onNavigateTab('receipts')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold text-xs transition-all cursor-pointer"
+                  >
+                    <Receipt className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Risiti Zote</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -1894,11 +1965,11 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                               </button>
                             ) : (
                               <button
-                                onClick={() => payment && setViewingReceipt(payment)}
-                                title="Tazama Stakabadhi ya Malipo"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-semibold transition-all cursor-pointer"
+                                onClick={() => payment && handleOpenReceiptForPayment(payment)}
+                                title="Tazama / Pakua Stakabadhi ya Malipo (PDF & WhatsApp)"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-600 border border-emerald-500/30 text-emerald-300 hover:text-white text-[11px] font-bold transition-all cursor-pointer shadow-sm"
                               >
-                                <Printer className="w-3 h-3" />
+                                <Printer className="w-3 h-3 text-emerald-400" />
                                 Stakabadhi
                               </button>
                             )}
@@ -3010,6 +3081,22 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                   try {
                     await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
                     const member = state.members.find(m => m.id === viewingReceipt.memberId);
+
+                    const sameReceiptPayments = viewingReceipt.receiptNo
+                      ? (monthlyPayments || []).filter(p => p.receiptNo === viewingReceipt.receiptNo && p.paidAmount > 0)
+                      : [viewingReceipt];
+
+                    const isMulti = sameReceiptPayments.length > 1;
+                    const totalBatchAmt = sameReceiptPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+
+                    const breakdownList: { label: string; amount: string; status: string }[] = isMulti
+                      ? sameReceiptPayments.map(p => ({
+                          label: `Ada: ${monthNamesSw[p.month - 1] || `Mwezi ${p.month}`} ${p.year}`,
+                          amount: `TZS ${p.paidAmount.toLocaleString()}`,
+                          status: p.status === 'partial' ? 'Nusu' : 'Kamili'
+                        }))
+                      : [];
+
                     const doc = generatePaymentReceiptPDF({
                       receiptNo: viewingReceipt.receiptNo || `REC-${viewingReceipt.id.slice(-6)}`,
                       groupName: state.groupSettings?.groupName || 'UWALEMI',
@@ -3018,17 +3105,22 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                       memberNo: viewingReceipt.memberNo,
                       memberName: viewingReceipt.memberName,
                       memberPhone: member?.phone,
-                      paymentType: 'Ada ya Kila Mwezi',
-                      periodOrTitle: `${monthNamesSw[viewingReceipt.month - 1]} ${viewingReceipt.year}`,
-                      amount: viewingReceipt.paidAmount,
+                      paymentType: isMulti
+                        ? `STAKABADHI YA MALIPO YA ADA (MIEZI ${sameReceiptPayments.length})`
+                        : 'Ada ya Kila Mwezi',
+                      periodOrTitle: isMulti
+                        ? `Miezi ${sameReceiptPayments.length} (${sameReceiptPayments.map(p => `${monthNamesSw[p.month - 1]?.slice(0, 3) || p.month} ${p.year}`).join(', ')})`
+                        : `${monthNamesSw[viewingReceipt.month - 1]} ${viewingReceipt.year}`,
+                      amount: totalBatchAmt,
                       paymentDate: viewingReceipt.paymentDate || new Date().toISOString().split('T')[0],
                       paymentMethod: normalizePaymentMethod(viewingReceipt.paymentMethod),
                       referenceNo: viewingReceipt.referenceNo,
                       receivedBy: 'Mweka Hazina wa UWALEMI',
                       statusType: viewingReceipt.status === 'partial' ? 'partial' : 'paid',
-                      balanceRemaining: Math.max(0, viewingReceipt.expectedAmount - viewingReceipt.paidAmount)
+                      balanceRemaining: Math.max(0, viewingReceipt.expectedAmount - viewingReceipt.paidAmount),
+                      breakdownItems: breakdownList.length > 0 ? breakdownList : undefined
                     });
-                    doc.save(`Risiti_${viewingReceipt.receiptNo || viewingReceipt.memberNo}_${viewingReceipt.month}_${viewingReceipt.year}.pdf`);
+                    doc.save(`Risiti_${viewingReceipt.receiptNo || viewingReceipt.memberNo}_${isMulti ? 'Batch' : `${viewingReceipt.month}_${viewingReceipt.year}`}.pdf`);
                   } catch (err) {
                     console.error(err);
                     alert('Hitilafu katika kutengeneza PDF ya risiti.');

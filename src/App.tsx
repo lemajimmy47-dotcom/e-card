@@ -313,6 +313,7 @@ export default function App() {
   const [deviceViewMode, setDeviceViewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [searchQuery, setSearchQuery] = useState('');
   const [guestListSearch, setGuestListSearch] = useState('');
+  const [guestDirectoryFilter, setGuestDirectoryFilter] = useState<'ALL' | 'ATTENDING' | 'DECLINED' | 'PENDING'>('ALL');
   const [sentListSearch, setSentListSearch] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showLanding, setShowLanding] = useState(() => {
@@ -1465,12 +1466,29 @@ export default function App() {
             (typeof g.smsCount === 'number' && g.smsCount > 0)
           ).length;
 
-          // Filtered list states based on live search
-          const filteredGuests = activeGuests.filter(g => 
-            g.name.toLowerCase().includes(guestListSearch.toLowerCase()) ||
-            g.phone.toLowerCase().includes(guestListSearch.toLowerCase()) ||
-            `P-${g.id.substring(0, 6).toUpperCase()}`.toLowerCase().includes(guestListSearch.toLowerCase())
-          );
+          const countAttending = activeGuests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Atahudhuria').length;
+          const countDeclined = activeGuests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Hatahudhuria').length;
+          const countPending = activeGuests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Bado' || normalizeRsvpStatus(g.rsvpStatus) === 'Labda').length;
+
+          // Filtered list states based on live search and status filter
+          const filteredGuests = activeGuests.filter(g => {
+            const q = guestListSearch.trim().toLowerCase();
+            const matchesSearch = !q ||
+              (g.name && g.name.toLowerCase().includes(q)) ||
+              (g.phone && g.phone.toLowerCase().includes(q)) ||
+              (g.code && g.code.toLowerCase().includes(q)) ||
+              `P-${g.id.substring(0, 6).toUpperCase()}`.toLowerCase().includes(q) ||
+              (g.cardType && g.cardType.toLowerCase().includes(q));
+
+            if (!matchesSearch) return false;
+
+            const norm = normalizeRsvpStatus(g.rsvpStatus);
+            if (guestDirectoryFilter === 'ATTENDING') return norm === 'Atahudhuria';
+            if (guestDirectoryFilter === 'DECLINED') return norm === 'Hatahudhuria';
+            if (guestDirectoryFilter === 'PENDING') return norm === 'Bado' || norm === 'Labda';
+
+            return true;
+          });
 
           const sentGuestsList = activeGuests.filter(g => 
             isStatusSent(g.whatsappStatus) || 
@@ -1919,50 +1937,100 @@ export default function App() {
                 
                 {/* Column 1: Guest Directory list with live search */}
                 <div className="bg-[#0b1328]/60 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 space-y-4 flex flex-col justify-between" id="guest-directory-container">
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
                           <Users className="w-4 h-4" />
                         </div>
-                        <h3 className="font-extrabold text-white text-sm">
-                          {language === 'sw' ? 'Orodha ya Wageni' : 'Guest Directory'}
-                        </h3>
+                        <div>
+                          <h3 className="font-extrabold text-white text-sm">
+                            {language === 'sw' ? 'Orodha ya Wageni' : 'Guest Directory'}
+                          </h3>
+                          <p className="text-slate-400 text-[11px]">
+                            {language === 'sw' ? 'Tafuta na uangalie hali ya wageni wako' : 'Search and view your guests'}
+                          </p>
+                        </div>
                       </div>
-                      <span className="text-xs bg-purple-500/10 text-purple-400 font-bold px-2.5 py-1 rounded-full font-mono">
-                        {totalGuests} {language === 'sw' ? 'Wageni' : 'Guests'}
+                      <span className="text-xs bg-purple-500/15 text-purple-300 border border-purple-500/30 font-bold px-2.5 py-1 rounded-full font-mono">
+                        {filteredGuests.length}/{totalGuests} {language === 'sw' ? 'Wageni' : 'Guests'}
                       </span>
                     </div>
-                    <p className="text-slate-405 text-[11px] leading-relaxed text-left">
-                      {language === 'sw'
-                        ? 'Orodha ya wageni wote walioandikishwa kwenye sherehe hii pamoja na hali ya majibu yao.'
-                        : 'List of all registered guests for this session, showing their personal invitation details.'}
-                    </p>
-                  </div>
 
-                  {/* Live Search Input */}
-                  {activeGuests.length > 0 && (
+                    {/* Highly Visible, Fast Search Box */}
                     <div className="relative">
-                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                        <Search className="w-3.5 h-3.5 text-slate-400" />
-                      </span>
+                      <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input 
                         type="text"
                         value={guestListSearch}
                         onChange={(e) => setGuestListSearch(e.target.value)}
-                        placeholder={language === 'sw' ? 'Tafuta mgeni kwa jina au simu...' : 'Search guest by name or phone...'}
-                        className="w-full bg-[#070d1e] border border-white/5 py-2 pl-9 pr-4 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-purple-500 transition-colors text-left"
+                        placeholder={language === 'sw' ? '🔍 Andika jina la mgeni, namba ya simu au kadi...' : '🔍 Search guest by name, phone or card code...'}
+                        className="w-full bg-[#070d1e] border border-purple-500/30 focus:border-purple-400 py-2.5 pl-9 pr-9 rounded-xl text-xs text-white placeholder-slate-400 outline-none transition-all shadow-inner focus:ring-1 focus:ring-purple-400/40 text-left font-medium"
                       />
                       {guestListSearch && (
                         <button 
                           onClick={() => setGuestListSearch('')}
-                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-[10px] text-slate-400 hover:text-white"
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-white cursor-pointer"
+                          title="Futa utafutaji"
                         >
                           ✕
                         </button>
                       )}
                     </div>
-                  )}
+
+                    {/* Quick RSVP Status Filters */}
+                    {activeGuests.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setGuestDirectoryFilter('ALL')}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                            guestDirectoryFilter === 'ALL'
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'bg-[#070d1e] text-slate-400 hover:text-slate-200 border border-white/5'
+                          }`}
+                        >
+                          {language === 'sw' ? 'Wote' : 'All'} ({totalGuests})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setGuestDirectoryFilter('ATTENDING')}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                            guestDirectoryFilter === 'ATTENDING'
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'bg-[#070d1e] text-emerald-400 hover:bg-emerald-950/40 border border-white/5'
+                          }`}
+                        >
+                          {language === 'sw' ? 'Atahudhuria' : 'Attending'} ({countAttending})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setGuestDirectoryFilter('DECLINED')}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                            guestDirectoryFilter === 'DECLINED'
+                              ? 'bg-rose-600 text-white shadow-sm'
+                              : 'bg-[#070d1e] text-rose-400 hover:bg-rose-950/40 border border-white/5'
+                          }`}
+                        >
+                          {language === 'sw' ? 'Hatahudhuria' : 'Declined'} ({countDeclined})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setGuestDirectoryFilter('PENDING')}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                            guestDirectoryFilter === 'PENDING'
+                              ? 'bg-amber-600 text-white shadow-sm'
+                              : 'bg-[#070d1e] text-amber-400 hover:bg-amber-950/40 border border-white/5'
+                          }`}
+                        >
+                          {language === 'sw' ? 'Bado/Labda' : 'Pending'} ({countPending})
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Scrolling List container */}
                   {activeGuests.length === 0 ? (
@@ -1979,10 +2047,25 @@ export default function App() {
                       </button>
                     </div>
                   ) : filteredGuests.length === 0 ? (
-                    <div className="text-center py-10 border border-dashed border-white/5 rounded-2xl">
-                      <p className="text-slate-500 text-xs">
-                        {language === 'sw' ? 'Hakuna mgeni aliyepatikana.' : 'No matched guests found.'}
+                    <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl space-y-2">
+                      <Search className="w-6 h-6 text-slate-500 mx-auto opacity-60" />
+                      <p className="text-slate-400 text-xs">
+                        {language === 'sw' 
+                          ? `Hakuna mgeni aliyepatikana kwa '${guestListSearch}'.` 
+                          : `No matched guests found for '${guestListSearch}'.`}
                       </p>
+                      {(guestListSearch || guestDirectoryFilter !== 'ALL') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGuestListSearch('');
+                            setGuestDirectoryFilter('ALL');
+                          }}
+                          className="text-xs text-purple-400 hover:underline font-semibold cursor-pointer"
+                        >
+                          {language === 'sw' ? 'Ondoa vichujio (Reset filters)' : 'Clear search & filters'}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-1.5 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
@@ -2000,7 +2083,7 @@ export default function App() {
                             <div className="flex flex-col text-left min-w-0">
                               <span className="text-white font-bold text-xs truncate max-w-[170px]">{guest.name}</span>
                               <div className="flex items-center space-x-1.5 text-slate-450 text-[10px] font-mono mt-0.5 flex-wrap">
-                                <span className="text-amber-500 font-bold">P-{guest.id.substring(0, 6).toUpperCase()}</span>
+                                <span className="text-amber-500 font-bold">{guest.code ? guest.code : `P-${guest.id.substring(0, 6).toUpperCase()}`}</span>
                                 <span>•</span>
                                 <span>{guest.phone || (language === 'sw' ? 'Hakuna Simu' : 'No Phone')}</span>
                                 {(isStatusSent(guest.smsStatus) || isStatusSent(guest.whatsappStatus)) && (
@@ -2038,7 +2121,7 @@ export default function App() {
                   <div className="pt-2">
                     <button
                       onClick={() => setActiveTab('guests')}
-                      className="w-full text-center py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-xl text-xs font-bold text-purple-300 transition"
+                      className="w-full text-center py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-xl text-xs font-bold text-purple-300 transition cursor-pointer"
                       id="manage-guests-link-btn"
                     >
                       {language === 'sw' ? 'Simamia Orodha Kamili / Ongeza Mgeni' : 'Manage Guests & Register Profiles'}

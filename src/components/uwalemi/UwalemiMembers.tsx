@@ -1594,6 +1594,23 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                                   onClick={async () => {
                                     try {
                                       await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
+
+                                      // Check if this payment was part of a multi-month batch payment
+                                      const sameReceiptFees = f.receiptNo 
+                                        ? (state.monthlyFees || []).filter(x => (x.memberId === viewingStatementMember.id || x.memberNo === viewingStatementMember.memberNo) && x.receiptNo === f.receiptNo && x.paidAmount > 0)
+                                        : [f];
+
+                                      const isMultiMonth = sameReceiptFees.length > 1;
+                                      const totalBatchAmount = sameReceiptFees.reduce((sum, x) => sum + x.paidAmount, 0);
+
+                                      const breakdownList: { label: string; amount: string; status: string }[] = isMultiMonth
+                                        ? sameReceiptFees.map(x => ({
+                                            label: `Ada: ${MONTH_NAMES_SW[x.month - 1] || `Mwezi ${x.month}`} ${x.year}`,
+                                            amount: `TZS ${x.paidAmount.toLocaleString()}`,
+                                            status: x.status === 'partial' ? 'Nusu' : 'Kamili'
+                                          }))
+                                        : [];
+
                                       const doc = generatePaymentReceiptPDF({
                                         receiptNo: f.receiptNo || `REC-${f.id.slice(-6)}`,
                                         groupName: state.groupSettings?.groupName || 'UWALEMI',
@@ -1602,17 +1619,22 @@ export const UwalemiMembers: React.FC<Props> = ({ state, onSaveState, onOpenSmsF
                                         memberNo: viewingStatementMember.memberNo,
                                         memberName: viewingStatementMember.fullName,
                                         memberPhone: viewingStatementMember.phone,
-                                        paymentType: 'Ada ya Kila Mwezi',
-                                        periodOrTitle: `${MONTH_NAMES_SW[f.month - 1] || `Mwezi ${f.month}`} ${f.year}`,
-                                        amount: f.paidAmount,
+                                        paymentType: isMultiMonth 
+                                          ? `STAKABADHI YA MALIPO YA ADA (MIEZI ${sameReceiptFees.length})`
+                                          : 'Ada ya Kila Mwezi',
+                                        periodOrTitle: isMultiMonth
+                                          ? `Miezi ${sameReceiptFees.length} (${sameReceiptFees.map(x => `${MONTH_NAMES_SW[x.month - 1]?.slice(0, 3) || x.month} ${x.year}`).join(', ')})`
+                                          : `${MONTH_NAMES_SW[f.month - 1] || `Mwezi ${f.month}`} ${f.year}`,
+                                        amount: totalBatchAmount,
                                         paymentDate: f.paymentDate || new Date().toISOString().split('T')[0],
                                         paymentMethod: normalizePaymentMethod(f.paymentMethod),
                                         referenceNo: f.referenceNo,
                                         receivedBy: 'Mweka Hazina wa UWALEMI',
                                         statusType: f.status === 'partial' ? 'partial' : 'paid',
-                                        balanceRemaining: Math.max(0, (f.expectedAmount || 10000) - f.paidAmount)
+                                        balanceRemaining: Math.max(0, (f.expectedAmount || 10000) - f.paidAmount),
+                                        breakdownItems: breakdownList.length > 0 ? breakdownList : undefined
                                       });
-                                      downloadPdfDocument(doc, `Risiti_${f.receiptNo || viewingStatementMember.memberNo}_${f.month}_${f.year}.pdf`);
+                                      downloadPdfDocument(doc, `Risiti_${f.receiptNo || viewingStatementMember.memberNo}_${isMultiMonth ? 'Batch' : `${f.month}_${f.year}`}.pdf`);
                                     } catch (err) {
                                       console.error(err);
                                       alert('Hitilafu katika kupakua risiti ya PDF.');

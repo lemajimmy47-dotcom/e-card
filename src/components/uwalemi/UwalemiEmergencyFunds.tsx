@@ -19,7 +19,9 @@ import {
   Award,
   Trash2,
   Edit3,
-  Building2
+  Building2,
+  Search,
+  Filter
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { sortMembersByLeadership, triggerAutoReceiptSms, normalizePaymentMethod, formatSwahiliDate, buildOfficialBereavementSms } from '../../services/uwalemiService';
@@ -124,6 +126,9 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
     disbursementNote: 'Msaada umekabidhiwa kwa mfaidikaji mbele ya uongozi wa UWALEMI.'
   });
 
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [memberStatusFilter, setMemberStatusFilter] = useState<'ALL' | 'PAID' | 'PARTIAL' | 'UNPAID'>('ALL');
+
   const members = sortMembersByLeadership(state.members || []);
   const emergencyFunds = state.emergencyFunds || [];
   const selectedFund = emergencyFunds.find(f => f.id === selectedFundId) || emergencyFunds[0];
@@ -133,6 +138,45 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const target = selectedFund?.targetAmount || 1;
   const progressPercent = Math.min(100, Math.round((totalPaid / target) * 100));
+
+  // Member search & filter computations
+  const targetAmt = selectedFund?.perMemberTarget || 20000;
+  const countPaidFull = members.filter(m => {
+    const p = payments.find(pay => pay.memberId === m.id || pay.memberNo === m.memberNo);
+    return p && p.amount >= targetAmt;
+  }).length;
+
+  const countPartial = members.filter(m => {
+    const p = payments.find(pay => pay.memberId === m.id || pay.memberNo === m.memberNo);
+    return p && p.amount > 0 && p.amount < targetAmt;
+  }).length;
+
+  const countUnpaid = members.filter(m => {
+    const p = payments.find(pay => pay.memberId === m.id || pay.memberNo === m.memberNo);
+    return !p || p.amount === 0;
+  }).length;
+
+  const filteredMembers = members.filter(m => {
+    const q = memberSearchQuery.trim().toLowerCase();
+    const matchesSearch = !q || 
+      (m.fullName && m.fullName.toLowerCase().includes(q)) || 
+      (m.memberNo && m.memberNo.toLowerCase().includes(q)) || 
+      (m.phone && m.phone.includes(q));
+
+    if (!matchesSearch) return false;
+
+    if (memberStatusFilter === 'ALL') return true;
+
+    const payment = payments.find(p => p.memberId === m.id || p.memberNo === m.memberNo);
+    const paidAmt = payment ? payment.amount : 0;
+    const hasPaidFull = paidAmt >= targetAmt;
+
+    if (memberStatusFilter === 'PAID') return hasPaidFull;
+    if (memberStatusFilter === 'PARTIAL') return paidAmt > 0 && !hasPaidFull;
+    if (memberStatusFilter === 'UNPAID') return paidAmt === 0;
+
+    return true;
+  });
 
   const handleCreateFund = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -691,11 +735,92 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
           </div>
 
           {/* Members Contribution Checklist */}
-          <div>
-            <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4 text-emerald-400" />
-              Orodha ya Wajumbe na Hali ya Michango Yao
-            </h4>
+          <div className="space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-emerald-400" />
+                Orodha ya Wajumbe na Hali ya Michango Yao
+                <span className="text-xs font-normal text-slate-400">
+                  ({filteredMembers.length} kati ya {members.length})
+                </span>
+              </h4>
+
+              {/* Search Input */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={memberSearchQuery}
+                  onChange={(e) => setMemberSearchQuery(e.target.value)}
+                  placeholder="Tafuta jina la mwanachama, namba au simu..."
+                  className="w-full pl-9 pr-8 py-2 bg-slate-950/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                {memberSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setMemberSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+                    title="Futa utafutaji"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Status Filter Tabs */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setMemberStatusFilter('ALL')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  memberStatusFilter === 'ALL'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                    : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                Wote ({members.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMemberStatusFilter('PAID')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  memberStatusFilter === 'PAID'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                    : 'bg-slate-900 text-emerald-400 hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                Wamekamilisha ({countPaidFull})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMemberStatusFilter('PARTIAL')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  memberStatusFilter === 'PARTIAL'
+                    ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                    : 'bg-slate-900 text-amber-400 hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                Wamelipa Kiasi ({countPartial})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMemberStatusFilter('UNPAID')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  memberStatusFilter === 'UNPAID'
+                    ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+                    : 'bg-slate-900 text-rose-400 hover:bg-slate-800 border border-slate-800'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                Hawajachanga ({countUnpaid})
+              </button>
+            </div>
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
               <table className="w-full text-left text-xs text-slate-300">
@@ -711,74 +836,97 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {members.map(m => {
-                    const payment = (selectedFund.payments || []).find(p => p.memberId === m.id || p.memberNo === m.memberNo);
-                    const targetAmt = selectedFund.perMemberTarget || 20000;
-                    const paidAmt = payment ? payment.amount : 0;
-                    const hasPaidFull = paidAmt >= targetAmt;
-
-                    return (
-                      <tr key={m.id} className="hover:bg-slate-800/30">
-                        <td className="p-3 font-mono font-bold text-emerald-400">{m.memberNo}</td>
-                        <td className="p-3 font-semibold text-white">
-                          <div>{m.fullName}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{m.phone}</div>
-                        </td>
-                        <td className="p-3 font-mono text-slate-400">TZS {targetAmt.toLocaleString()}</td>
-                        <td className="p-3 font-mono font-bold">
-                          <span className={hasPaidFull ? 'text-emerald-400' : paidAmt > 0 ? 'text-amber-400' : 'text-slate-600'}>
-                            TZS {paidAmt.toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                            hasPaidFull ? 'bg-emerald-500/10 text-emerald-400' :
-                            paidAmt > 0 ? 'bg-amber-500/10 text-amber-400' :
-                            'bg-rose-500/10 text-rose-400'
-                          }`}>
-                            {hasPaidFull ? 'Amekamilisha' : paidAmt > 0 ? 'Amelipa Kiasi' : 'Hajachanga'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-[11px] text-slate-400">
-                          {payment ? `${payment.paymentDate} (${payment.paymentMethod})` : '-'}
-                        </td>
-                        <td className="p-3 text-right">
-                          {!readOnly ? (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => {
-                                  setPaymentForm({
-                                    memberId: m.id,
-                                    amount: payment ? payment.amount : targetAmt,
-                                    paymentDate: payment?.paymentDate || new Date().toISOString().split('T')[0],
-                                    paymentMethod: normalizePaymentMethod(payment?.paymentMethod),
-                                    note: payment?.note || ''
-                                  });
-                                  setIsRecordPaymentModalOpen(true);
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-semibold cursor-pointer"
-                              >
-                                {payment ? 'Hariri' : '+ Rekodi'}
-                              </button>
-
-                              {payment && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeletePayment(m.id, m.fullName)}
-                                  title="Futa Malipo Haya"
-                                  className="p-1 rounded-lg hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-slate-500 italic">-</span>
+                  {filteredMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Search className="w-6 h-6 text-slate-600" />
+                          <p className="text-sm font-medium">Hakuna mwanachama aliyepatikana.</p>
+                          {(memberSearchQuery || memberStatusFilter !== 'ALL') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMemberSearchQuery('');
+                                setMemberStatusFilter('ALL');
+                              }}
+                              className="text-xs text-emerald-400 hover:underline cursor-pointer"
+                            >
+                              Ondoa vichujio (Reset filters)
+                            </button>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredMembers.map(m => {
+                      const payment = (selectedFund.payments || []).find(p => p.memberId === m.id || p.memberNo === m.memberNo);
+                      const targetAmt = selectedFund.perMemberTarget || 20000;
+                      const paidAmt = payment ? payment.amount : 0;
+                      const hasPaidFull = paidAmt >= targetAmt;
+
+                      return (
+                        <tr key={m.id} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="p-3 font-mono font-bold text-emerald-400">{m.memberNo}</td>
+                          <td className="p-3 font-semibold text-white">
+                            <div>{m.fullName}</div>
+                            <div className="text-[10px] text-slate-400 font-normal">{m.phone}</div>
+                          </td>
+                          <td className="p-3 font-mono text-slate-400">TZS {targetAmt.toLocaleString()}</td>
+                          <td className="p-3 font-mono font-bold">
+                            <span className={hasPaidFull ? 'text-emerald-400' : paidAmt > 0 ? 'text-amber-400' : 'text-slate-600'}>
+                              TZS {paidAmt.toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              hasPaidFull ? 'bg-emerald-500/10 text-emerald-400' :
+                              paidAmt > 0 ? 'bg-amber-500/10 text-amber-400' :
+                              'bg-rose-500/10 text-rose-400'
+                            }`}>
+                              {hasPaidFull ? 'Amekamilisha' : paidAmt > 0 ? 'Amelipa Kiasi' : 'Hajachanga'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-[11px] text-slate-400">
+                            {payment ? `${payment.paymentDate} (${payment.paymentMethod})` : '-'}
+                          </td>
+                          <td className="p-3 text-right">
+                            {!readOnly ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setPaymentForm({
+                                      memberId: m.id,
+                                      amount: payment ? payment.amount : targetAmt,
+                                      paymentDate: payment?.paymentDate || new Date().toISOString().split('T')[0],
+                                      paymentMethod: normalizePaymentMethod(payment?.paymentMethod),
+                                      note: payment?.note || ''
+                                    });
+                                    setIsRecordPaymentModalOpen(true);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[11px] font-semibold cursor-pointer"
+                                >
+                                  {payment ? 'Hariri' : '+ Rekodi'}
+                                </button>
+
+                                {payment && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePayment(m.id, m.fullName)}
+                                    title="Futa Malipo Haya"
+                                    className="p-1 rounded-lg hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-500 italic">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

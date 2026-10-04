@@ -13,6 +13,7 @@ import { UwalemiReports } from './UwalemiReports';
 import { UwalemiMemberPortal } from './UwalemiMemberPortal';
 import { UwalemiElections } from './UwalemiElections';
 import { UwalemiVotingPage } from './UwalemiVotingPage';
+import { UwalemiReceiptsCenter } from './UwalemiReceiptsCenter';
 
 import { 
   Users, 
@@ -34,7 +35,8 @@ import {
   Check,
   Eye,
   KeyRound,
-  X
+  X,
+  Receipt
 } from 'lucide-react';
 
 interface Props {
@@ -136,6 +138,7 @@ export const UwalemiModule: React.FC<Props> = ({ onBackToMainApp, initialReadOnl
     { key: 'overview', label: 'Dashibodi Kuu', icon: LayoutDashboard },
     { key: 'members', label: 'Wanachama', icon: Users, badge: `${state.members?.length || 0}` },
     { key: 'monthly_fees', label: 'Ada za Kila Mwezi', icon: CreditCard },
+    { key: 'receipts', label: 'Kituo cha Risiti', icon: Receipt, badge: 'PDF' },
     { key: 'emergency_funds', label: 'Michango & Misiba', icon: HeartHandshake, badge: `${state.emergencyFunds?.filter(f => f.status === 'active').length || ''}` },
     { key: 'expenses', label: 'Hazina & Matumizi', icon: Wallet },
     { key: 'meetings', label: 'Vikao & Mahudhurio', icon: Calendar },
@@ -371,8 +374,17 @@ export const UwalemiModule: React.FC<Props> = ({ onBackToMainApp, initialReadOnl
                 state={state}
                 onSaveState={handleSaveState}
                 onOpenSmsWithTemplate={handleOpenSmsWithTemplate}
+                onNavigateTab={(tab) => setActiveTab(tab)}
                 autoOpenRecordModal={!isReadOnly && autoOpenNewFee}
                 onResetAutoOpen={() => setAutoOpenNewFee(false)}
+                readOnly={isReadOnly}
+              />
+            )}
+
+            {activeTab === 'receipts' && (
+              <UwalemiReceiptsCenter
+                state={state}
+                onSaveState={handleSaveState}
                 readOnly={isReadOnly}
               />
             )}

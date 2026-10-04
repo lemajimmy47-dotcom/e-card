@@ -297,6 +297,7 @@ export type UwalemiTab =
   | 'overview' 
   | 'members' 
   | 'monthly_fees' 
+  | 'receipts'
   | 'emergency_funds' 
   | 'expenses' 
   | 'meetings' 
