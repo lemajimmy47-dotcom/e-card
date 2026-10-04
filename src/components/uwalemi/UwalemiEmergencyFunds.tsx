@@ -21,10 +21,26 @@ import {
   Edit3,
   Building2,
   Search,
-  Filter
+  Filter,
+  Eye,
+  Share2,
+  Copy,
+  Check,
+  Lock,
+  Sparkles,
+  RefreshCw,
+  MessageSquare
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { sortMembersByLeadership, triggerAutoReceiptSms, normalizePaymentMethod, formatSwahiliDate, buildOfficialBereavementSms } from '../../services/uwalemiService';
+import { 
+  sortMembersByLeadership, 
+  triggerAutoReceiptSms, 
+  normalizePaymentMethod, 
+  formatSwahiliDate, 
+  buildOfficialBereavementSms,
+  sendUwalemiSms,
+  getSwahiliDayAndDate
+} from '../../services/uwalemiService';
 import { FuneralScheduleBuilder } from './FuneralScheduleBuilder';
 
 interface Props {
@@ -66,6 +82,53 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
   const [fundToDelete, setFundToDelete] = useState<UwalemiEmergencyFund | null>(null);
   const [paymentToDelete, setPaymentToDelete] = useState<{ memberId: string; memberName: string; amount: number } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Bereavement SMS Announcement State (Kanuni: Elfu 10 / Elfu 5)
+  const [isBereavementModalOpen, setIsBereavementModalOpen] = useState(false);
+  const [editingBereavementFundId, setEditingBereavementFundId] = useState<string>('');
+  const [bereavementForm, setBereavementForm] = useState<{
+    memberId: string;
+    relationType: 'mwanachama' | 'mke' | 'mume' | 'mtoto' | 'mzazi_baba' | 'mzazi_mama' | 'mkwe_baba' | 'mkwe_mama' | 'nyingine';
+    deceasedName: string;
+    deathDate: string;
+    deathPlace: string;
+    location: string;
+    meetingLocation: string;
+    meetingDate: string;
+    meetingTime: string;
+    contributionAmount: number;
+    paymentDetails: string;
+    deadlineDate: string;
+    burialSchedule: string;
+    autoCreateFund: boolean;
+    includeGreeting: boolean;
+  }>({
+    memberId: '',
+    relationType: 'mkwe_mama',
+    deceasedName: '',
+    deathDate: new Date().toISOString().split('T')[0],
+    deathPlace: '',
+    location: 'Mbezi Makabe - Kwa Paulo',
+    meetingLocation: '',
+    meetingDate: '',
+    meetingTime: '',
+    contributionAmount: 5000,
+    paymentDetails: 'M Koba au 0758219298 (Eva O. Lema)',
+    deadlineDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    burialSchedule: 'Ratiba rasmi ya mazishi na kuaga itatolewa mara baada ya taratibu za kifamilia kukamilika.',
+    autoCreateFund: true,
+    includeGreeting: true
+  });
+
+  const [isSendingSms, setIsSendingSms] = useState(false);
+  const [smsFeedback, setSmsFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [copiedBereavementSms, setCopiedBereavementSms] = useState(false);
+
+  // Unpaid Members Reminder SMS State
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
+  const [reminderMessageText, setReminderMessageText] = useState('');
+  const [reminderRecipients, setReminderRecipients] = useState<{ name: string; phone: string; memberNo: string; memberId?: string }[]>([]);
+  const [copiedReminderSms, setCopiedReminderSms] = useState(false);
 
   // New Fund Form State
   const [fundForm, setFundForm] = useState<{
@@ -356,41 +419,318 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
     setIsEditFundModalOpen(false);
   };
 
-  const handleResendBereavementAnnouncement = (fund: UwalemiEmergencyFund) => {
-    if (!fund) return;
-    const perMember = fund.perMemberTarget || 5000;
-    const beneficiary = fund.beneficiaryName || '[Jina la Mwanachama]';
-    const relation = fund.beneficiaryRelation || 'mama mkwe';
+  const getBereavementRelationInfo = (type: string) => {
+    switch (type) {
+      case 'mwanachama':
+        return { label: 'Mwanachama Mwenyewe', amount: 10000, relationText: 'mwanachama mwenzetu' };
+      case 'mke':
+        return { label: 'Mke wa Mwanachama', amount: 10000, relationText: 'mke wake mpendwa' };
+      case 'mume':
+        return { label: 'Mume wa Mwanachama', amount: 10000, relationText: 'mume wake mpendwa' };
+      case 'mtoto':
+        return { label: 'Mtoto wa Mwanachama', amount: 10000, relationText: 'mtoto wake mpendwa' };
+      case 'mzazi_baba':
+        return { label: 'Baba Mzazi wa Mwanachama', amount: 10000, relationText: 'baba yake mzazi' };
+      case 'mzazi_mama':
+        return { label: 'Mama Mzazi wa Mwanachama', amount: 10000, relationText: 'mama yake mzazi' };
+      case 'mkwe_baba':
+        return { label: 'Baba Mkwe wa Mwanachama', amount: 5000, relationText: 'baba yake mkwe' };
+      case 'mkwe_mama':
+        return { label: 'Mama Mkwe wa Mwanachama', amount: 5000, relationText: 'mama yake mkwe' };
+      default:
+        return { label: 'Uhusiano Mwingine / Maalum', amount: 10000, relationText: 'ndugu wa karibu' };
+    }
+  };
 
-    const officialSms = buildOfficialBereavementSms({
-      memberName: beneficiary,
-      relationType: relation.toLowerCase().includes('mwenyewe') || relation.toLowerCase() === 'mwanachama' ? 'mwanachama' : 'custom',
-      relationCustomLabel: relation,
-      deceasedName: fund.deceasedName,
-      deathDate: fund.deathDate,
-      deathPlace: fund.deathPlace,
-      location: fund.location || fund.description,
-      meetingLocation: fund.meetingLocation,
-      meetingDate: fund.meetingDate,
-      meetingTime: fund.meetingTime,
-      contributionAmount: perMember,
-      paymentMethod: 'M Koba au 0758219298 (Eva O. Lema)',
-      deadlineDate: fund.deadline,
-      burialSchedule: fund.burialSchedule,
+  const generateLongBereavementMessage = (form: typeof bereavementForm) => {
+    const selectedMember = members.find(m => m.id === form.memberId);
+    const relInfo = getBereavementRelationInfo(form.relationType);
+    const memberName = selectedMember ? selectedMember.fullName : '[Jina la Mwanachama]';
+
+    return buildOfficialBereavementSms({
+      memberName,
+      relationType: form.relationType,
+      relationCustomLabel: relInfo.relationText || relInfo.label,
+      deceasedName: form.deceasedName,
+      deathDate: form.deathDate,
+      deathPlace: form.deathPlace,
+      location: form.location,
+      meetingLocation: form.meetingLocation,
+      meetingDate: form.meetingDate,
+      meetingTime: form.meetingTime,
+      contributionAmount: Number(form.contributionAmount) || 5000,
+      paymentMethod: form.paymentDetails || 'M Koba au 0758219298 (Eva O. Lema)',
+      deadlineDate: form.deadlineDate,
+      burialSchedule: form.burialSchedule,
+      includeGreeting: form.includeGreeting !== false
+    });
+  };
+
+  const handleOpenNewBereavementAnnouncement = () => {
+    setEditingBereavementFundId('');
+    setBereavementForm({
+      memberId: members[0]?.id || '',
+      relationType: 'mkwe_mama',
+      deceasedName: '',
+      deathDate: new Date().toISOString().split('T')[0],
+      deathPlace: '',
+      location: 'Mbezi Makabe - Kwa Paulo',
+      meetingLocation: '',
+      meetingDate: '',
+      meetingTime: '',
+      contributionAmount: 5000,
+      paymentDetails: 'M Koba au 0758219298 (Eva O. Lema)',
+      deadlineDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      burialSchedule: 'Ratiba rasmi ya mazishi na kuaga itatolewa mara baada ya taratibu za kifamilia kukamilika.',
+      autoCreateFund: true,
       includeGreeting: true
     });
+    setSmsFeedback(null);
+    setIsBereavementModalOpen(true);
+  };
 
-    if (onOpenSmsWithTemplate) {
-      const allRecipients = members.map(m => ({
+  const handleResendBereavementAnnouncement = (fund: UwalemiEmergencyFund) => {
+    if (!fund) return;
+    const member = members.find(m => 
+      (fund.beneficiaryName && m.fullName.toLowerCase().includes(fund.beneficiaryName.toLowerCase())) ||
+      (fund.beneficiaryPhone && m.phone === fund.beneficiaryPhone)
+    ) || members[0];
+
+    const rawRel = (fund.beneficiaryRelation || '').toLowerCase();
+    let relType: any = 'mkwe_mama';
+    if (rawRel.includes('mwanachama') || rawRel.includes('mwenyewe')) relType = 'mwanachama';
+    else if (rawRel.includes('mke')) relType = 'mke';
+    else if (rawRel.includes('mume')) relType = 'mume';
+    else if (rawRel.includes('mtoto')) relType = 'mtoto';
+    else if (rawRel.includes('baba') && !rawRel.includes('mkwe')) relType = 'mzazi_baba';
+    else if (rawRel.includes('mama') && !rawRel.includes('mkwe')) relType = 'mzazi_mama';
+    else if (rawRel.includes('baba') && rawRel.includes('mkwe')) relType = 'mkwe_baba';
+    else if (rawRel.includes('mama') && rawRel.includes('mkwe')) relType = 'mkwe_mama';
+
+    setEditingBereavementFundId(fund.id);
+    setBereavementForm({
+      memberId: member?.id || '',
+      relationType: relType,
+      deceasedName: fund.deceasedName || '',
+      deathDate: fund.deathDate || '',
+      deathPlace: fund.deathPlace || '',
+      location: fund.location || 'Mbezi Makabe - Kwa Paulo',
+      meetingLocation: fund.meetingLocation || '',
+      meetingDate: fund.meetingDate || '',
+      meetingTime: fund.meetingTime || '',
+      contributionAmount: fund.perMemberTarget || (relType.startsWith('mkwe') ? 5000 : 10000),
+      paymentDetails: 'M Koba au 0758219298 (Eva O. Lema)',
+      deadlineDate: fund.deadline || '',
+      burialSchedule: fund.burialSchedule || '',
+      autoCreateFund: false,
+      includeGreeting: true
+    });
+    setSmsFeedback(null);
+    setIsBereavementModalOpen(true);
+  };
+
+  const handleSendBereavementSmsNow = async () => {
+    if (!bereavementForm.memberId) {
+      alert('Tafadhali chagua mwanachama aliyepatwa na msiba.');
+      return;
+    }
+    const selectedMember = members.find(m => m.id === bereavementForm.memberId);
+    const relInfo = getBereavementRelationInfo(bereavementForm.relationType);
+    const longMsg = generateLongBereavementMessage(bereavementForm);
+
+    const activeRecipients = members
+      .filter(m => m.status === 'active' && m.phone && m.phone.trim().length > 5)
+      .map(m => ({
         name: m.fullName,
         phone: m.phone,
-        memberNo: m.memberNo
+        memberNo: m.memberNo,
+        memberId: m.id
       }));
-      onOpenSmsWithTemplate(allRecipients, officialSms);
-    } else {
-      navigator.clipboard.writeText(officialSms);
-      alert('Ujumbe rasmi wa tangazo la msiba umenakiliwa! Unaweza kuutuma sasa kwa wanachama kupitia Kituo cha SMS au WhatsApp.');
+
+    if (activeRecipients.length === 0) {
+      alert('Hakuna wanachama wenye namba za simu za kutuma SMS!');
+      return;
     }
+
+    if (!confirm(`Je, una uhakika unataka kutuma SMS ya tangazo la msiba kwa wanachama wote ${activeRecipients.length}?`)) {
+      return;
+    }
+
+    setIsSendingSms(true);
+    setSmsFeedback(null);
+
+    try {
+      const res = await sendUwalemiSms({
+        recipients: activeRecipients,
+        messageTemplate: longMsg,
+        messageType: 'emergency',
+        config: state.groupSettings?.smsConfig
+      });
+
+      // Also create or update fund if requested
+      let updatedFunds = [...(state.emergencyFunds || [])];
+      if (editingBereavementFundId && !readOnly) {
+        const fundTitle = `Msiba: ${relInfo.label} (${selectedMember?.fullName || 'Mwanachama'})`;
+        updatedFunds = updatedFunds.map(f => {
+          if (f.id === editingBereavementFundId) {
+            return {
+              ...f,
+              title: f.title || fundTitle,
+              perMemberTarget: Number(bereavementForm.contributionAmount),
+              targetAmount: Number(bereavementForm.contributionAmount) * (members.length || 1),
+              beneficiaryName: selectedMember?.fullName || f.beneficiaryName,
+              beneficiaryPhone: selectedMember?.phone || f.beneficiaryPhone,
+              beneficiaryRelation: relInfo.label,
+              deceasedName: bereavementForm.deceasedName,
+              deathDate: bereavementForm.deathDate,
+              deathPlace: bereavementForm.deathPlace,
+              location: bereavementForm.location,
+              meetingLocation: bereavementForm.meetingLocation,
+              meetingDate: bereavementForm.meetingDate,
+              meetingTime: bereavementForm.meetingTime,
+              burialSchedule: bereavementForm.burialSchedule,
+              deadline: bereavementForm.deadlineDate,
+              description: `Taarifa ya msiba wa ${bereavementForm.deceasedName || relInfo.label}. Eneo: ${bereavementForm.location || 'Mbezi'}. Kiwango: TZS ${Number(bereavementForm.contributionAmount).toLocaleString()}.`
+            };
+          }
+          return f;
+        });
+      } else if (bereavementForm.autoCreateFund && !readOnly) {
+        const fundTitle = `Msiba: ${relInfo.label} (${selectedMember?.fullName || 'Mwanachama'})`;
+        const alreadyExists = updatedFunds.some(
+          f => f.title.toLowerCase() === fundTitle.toLowerCase() && f.status === 'active'
+        );
+        if (!alreadyExists) {
+          const newFund: UwalemiEmergencyFund = {
+            id: `emg-${Date.now()}`,
+            title: fundTitle,
+            type: 'msiba',
+            targetAmount: Number(bereavementForm.contributionAmount) * (members.length || 1),
+            perMemberTarget: Number(bereavementForm.contributionAmount),
+            beneficiaryName: selectedMember?.fullName || 'Mwanachama',
+            beneficiaryPhone: selectedMember?.phone || '',
+            beneficiaryRelation: relInfo.label,
+            deceasedName: bereavementForm.deceasedName,
+            deathDate: bereavementForm.deathDate,
+            deathPlace: bereavementForm.deathPlace,
+            location: bereavementForm.location,
+            meetingLocation: bereavementForm.meetingLocation,
+            meetingDate: bereavementForm.meetingDate,
+            meetingTime: bereavementForm.meetingTime,
+            burialSchedule: bereavementForm.burialSchedule,
+            startDate: new Date().toISOString().split('T')[0],
+            deadline: bereavementForm.deadlineDate,
+            status: 'active',
+            description: `Taarifa ya msiba wa ${bereavementForm.deceasedName || relInfo.label}. Eneo la msiba: ${bereavementForm.location || 'Mbezi Makabe'}. Kiwango cha mchango: TZS ${Number(bereavementForm.contributionAmount).toLocaleString()}.`,
+            payments: []
+          };
+          updatedFunds = [newFund, ...updatedFunds];
+          setSelectedFundId(newFund.id);
+        }
+      }
+
+      await onSaveState({
+        ...state,
+        emergencyFunds: updatedFunds,
+        messageLogs: [
+          ...(state.messageLogs || []),
+          ...(res.logs || [])
+        ]
+      });
+
+      setSmsFeedback({
+        type: res.success ? 'success' : 'error',
+        message: res.success 
+          ? `✅ SMS za tangazo la msiba zimetumwa kikamilifu kwa wanachama wote (${res.sentCount} zimefanikiwa)!`
+          : `⚠️ Matokeo ya SMS: ${res.sentCount} zimetumwa, ${res.failedCount} zimekwama. ${res.error || ''}`
+      });
+
+      setTimeout(() => {
+        setIsBereavementModalOpen(false);
+        setSmsFeedback(null);
+      }, 3500);
+
+    } catch (err: any) {
+      console.error('Error sending bereavement SMS:', err);
+      setSmsFeedback({
+        type: 'error',
+        message: `Hitilafu wakati wa kutuma SMS: ${err.message || 'Jaribu tena au wasiliana na msimamizi.'}`
+      });
+    } finally {
+      setIsSendingSms(false);
+    }
+  };
+
+  const handleSaveBereavementFundOnly = async () => {
+    if (!bereavementForm.memberId) {
+      alert('Tafadhali chagua mwanachama aliyepatwa na msiba.');
+      return;
+    }
+    const selectedMember = members.find(m => m.id === bereavementForm.memberId);
+    const relInfo = getBereavementRelationInfo(bereavementForm.relationType);
+
+    let updatedFunds = [...(state.emergencyFunds || [])];
+    if (editingBereavementFundId && !readOnly) {
+      const fundTitle = `Msiba: ${relInfo.label} (${selectedMember?.fullName || 'Mwanachama'})`;
+      updatedFunds = updatedFunds.map(f => {
+        if (f.id === editingBereavementFundId) {
+          return {
+            ...f,
+            title: f.title || fundTitle,
+            perMemberTarget: Number(bereavementForm.contributionAmount),
+            targetAmount: Number(bereavementForm.contributionAmount) * (members.length || 1),
+            beneficiaryName: selectedMember?.fullName || f.beneficiaryName,
+            beneficiaryPhone: selectedMember?.phone || f.beneficiaryPhone,
+            beneficiaryRelation: relInfo.label,
+            deceasedName: bereavementForm.deceasedName,
+            deathDate: bereavementForm.deathDate,
+            deathPlace: bereavementForm.deathPlace,
+            location: bereavementForm.location,
+            meetingLocation: bereavementForm.meetingLocation,
+            meetingDate: bereavementForm.meetingDate,
+            meetingTime: bereavementForm.meetingTime,
+            burialSchedule: bereavementForm.burialSchedule,
+            deadline: bereavementForm.deadlineDate,
+            description: `Taarifa ya msiba wa ${bereavementForm.deceasedName || relInfo.label}. Eneo: ${bereavementForm.location || 'Mbezi'}. Kiwango: TZS ${Number(bereavementForm.contributionAmount).toLocaleString()}.`
+          };
+        }
+        return f;
+      });
+    } else if (!readOnly) {
+      const fundTitle = `Msiba: ${relInfo.label} (${selectedMember?.fullName || 'Mwanachama'})`;
+      const newFund: UwalemiEmergencyFund = {
+        id: `emg-${Date.now()}`,
+        title: fundTitle,
+        type: 'msiba',
+        targetAmount: Number(bereavementForm.contributionAmount) * (members.length || 1),
+        perMemberTarget: Number(bereavementForm.contributionAmount),
+        beneficiaryName: selectedMember?.fullName || 'Mwanachama',
+        beneficiaryPhone: selectedMember?.phone || '',
+        beneficiaryRelation: relInfo.label,
+        deceasedName: bereavementForm.deceasedName,
+        deathDate: bereavementForm.deathDate,
+        deathPlace: bereavementForm.deathPlace,
+        location: bereavementForm.location,
+        meetingLocation: bereavementForm.meetingLocation,
+        meetingDate: bereavementForm.meetingDate,
+        meetingTime: bereavementForm.meetingTime,
+        burialSchedule: bereavementForm.burialSchedule,
+        startDate: new Date().toISOString().split('T')[0],
+        deadline: bereavementForm.deadlineDate,
+        status: 'active',
+        description: `Taarifa ya msiba wa ${bereavementForm.deceasedName || relInfo.label}. Eneo la msiba: ${bereavementForm.location || 'Mbezi Makabe'}. Kiwango cha mchango: TZS ${Number(bereavementForm.contributionAmount).toLocaleString()}.`,
+        payments: []
+      };
+      updatedFunds = [newFund, ...updatedFunds];
+      setSelectedFundId(newFund.id);
+    }
+
+    await onSaveState({
+      ...state,
+      emergencyFunds: updatedFunds
+    });
+
+    setIsBereavementModalOpen(false);
   };
 
   const handleSaveAndResendAnnouncement = async (fund: UwalemiEmergencyFund) => {
@@ -448,11 +788,12 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
 
     const paidMemberIds = new Set((selectedFund.payments || []).map(p => p.memberId));
     const unpaidList = members
-      .filter(m => m.status === 'active' && !paidMemberIds.has(m.id))
+      .filter(m => m.status === 'active' && !paidMemberIds.has(m.id) && m.phone)
       .map(m => ({
         name: m.fullName,
         phone: m.phone,
-        memberNo: m.memberNo
+        memberNo: m.memberNo,
+        memberId: m.id
       }));
 
     if (unpaidList.length === 0) {
@@ -460,10 +801,58 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
       return;
     }
 
-    const templateText = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kushiriki mchango wa dharura wa "${selectedFund.title}" (TZS ${(selectedFund.perMemberTarget || 20000).toLocaleString()}). Mwisho wa kuchanga ni ${selectedFund.deadline}. Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
+    const templateText = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kushiriki mchango wa dharura wa "${selectedFund.title}" (TZS ${(selectedFund.perMemberTarget || 20000).toLocaleString()}). Mwisho wa kuchanga ni ${selectedFund.deadline || 'karibuni'}. Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
 
-    if (onOpenSmsWithTemplate) {
-      onOpenSmsWithTemplate(unpaidList, templateText);
+    setReminderRecipients(unpaidList);
+    setReminderMessageText(templateText);
+    setSmsFeedback(null);
+    setIsReminderModalOpen(true);
+  };
+
+  const handleExecuteSendReminderSms = async () => {
+    if (reminderRecipients.length === 0) return;
+    if (!confirm(`Je, una uhakika unataka kutuma SMS ya ukumbusho kwa wanachama ${reminderRecipients.length} ambao hawajachanga?`)) {
+      return;
+    }
+
+    setIsSendingSms(true);
+    setSmsFeedback(null);
+
+    try {
+      const res = await sendUwalemiSms({
+        recipients: reminderRecipients,
+        messageTemplate: reminderMessageText,
+        messageType: 'reminder',
+        config: state.groupSettings?.smsConfig
+      });
+
+      await onSaveState({
+        ...state,
+        messageLogs: [
+          ...(state.messageLogs || []),
+          ...(res.logs || [])
+        ]
+      });
+
+      setSmsFeedback({
+        type: res.success ? 'success' : 'error',
+        message: res.success 
+          ? `✅ SMS za ukumbusho zimetumwa kwa wanachama ${res.sentCount} kikamilifu!`
+          : `⚠️ Matokeo ya SMS: ${res.sentCount} zimetumwa, ${res.failedCount} zimekwama. ${res.error || ''}`
+      });
+
+      setTimeout(() => {
+        setIsReminderModalOpen(false);
+        setSmsFeedback(null);
+      }, 3500);
+    } catch (err: any) {
+      console.error('Error sending reminder SMS:', err);
+      setSmsFeedback({
+        type: 'error',
+        message: `Hitilafu ya kutuma SMS: ${err.message || 'Jaribu tena'}`
+      });
+    } finally {
+      setIsSendingSms(false);
     }
   };
 
@@ -484,14 +873,7 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
         {!readOnly ? (
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => {
-                if (onOpenSmsWithTemplate) {
-                  onOpenSmsWithTemplate(
-                    members.map(m => ({ name: m.fullName, phone: m.phone, memberNo: m.memberNo })),
-                    'emergency_alert_open_modal'
-                  );
-                }
-              }}
+              onClick={handleOpenNewBereavementAnnouncement}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-lg shadow-purple-900/30 transition-all cursor-pointer"
             >
               <Send className="w-4 h-4" />
@@ -1814,6 +2196,473 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
                 <Trash2 className="w-3.5 h-3.5" />
                 {isDeleting ? 'Inafuta...' : 'Ndio, Futa'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bereavement SMS Announcement & Fund Modal */}
+      {isBereavementModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-rose-900/50 rounded-2xl w-full max-w-3xl shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-950/60 via-slate-900 to-purple-950/40 border-b border-rose-900/40 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    🕊️ {editingBereavementFundId ? 'Tuma Tangazo la Msiba Tena' : 'Tangaza Msiba & Tuma SMS kwa Wanachama'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Tuma ujumbe rasmi wa msiba moja kwa moja kwa wanachama wote kwa mujibu wa Kanuni za UWALEMI.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBereavementModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs">
+              {smsFeedback && (
+                <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 font-medium animate-fadeIn ${
+                  smsFeedback.type === 'success' 
+                    ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200' 
+                    : 'bg-rose-950/40 border-rose-500/40 text-rose-200'
+                }`}>
+                  {smsFeedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
+                  <span>{smsFeedback.message}</span>
+                </div>
+              )}
+
+              {/* Form Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Member selection */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Mwanachama Aliyefiwa *
+                  </label>
+                  <select
+                    value={bereavementForm.memberId}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, memberId: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  >
+                    <option value="">-- Chagua Mwanachama --</option>
+                    {members.filter(m => m.status === 'active').map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.memberNo ? `(${m.memberNo}) ` : ''}{m.fullName} - {m.phone || 'Hana namba'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Relation with Auto-amounts */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Uhusiano na Aliyefariki (Kanuni ya Mchango) *
+                  </label>
+                  <select
+                    value={bereavementForm.relationType}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      const relInfo = getBereavementRelationInfo(val);
+                      setBereavementForm({
+                        ...bereavementForm,
+                        relationType: val,
+                        contributionAmount: relInfo.amount
+                      });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  >
+                    <optgroup label="Kundi la Kwanza: TZS 10,000 (Mwanachama, Mke, Mume, Mtoto, Mzazi)">
+                      <option value="mwanachama">Mwanachama Mwenyewe (TZS 10,000)</option>
+                      <option value="mke">Mke wa Mwanachama (TZS 10,000)</option>
+                      <option value="mume">Mume wa Mwanachama (TZS 10,000)</option>
+                      <option value="mtoto">Mtoto wa Mwanachama (TZS 10,000)</option>
+                      <option value="mzazi_mama">Mama Mzazi wa Mwanachama (TZS 10,000)</option>
+                      <option value="mzazi_baba">Baba Mzazi wa Mwanachama (TZS 10,000)</option>
+                    </optgroup>
+                    <optgroup label="Kundi la Pili: TZS 5,000 (Wakwe)">
+                      <option value="mkwe_mama">Mama Mkwe wa Mwanachama (TZS 5,000)</option>
+                      <option value="mkwe_baba">Baba Mkwe wa Mwanachama (TZS 5,000)</option>
+                    </optgroup>
+                    <optgroup label="Mengineyo">
+                      <option value="nyingine">Uhusiano Mwingine / Maalum (TZS 10,000)</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                {/* Deceased Name */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Jina Kamili la Marehemu *
+                  </label>
+                  <input
+                    type="text"
+                    value={bereavementForm.deceasedName}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, deceasedName: e.target.value })}
+                    placeholder="Mfano: Mama Grace Fransic Masawe"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Location */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Mahali Msiba Ulipo (Msiba Upo) *
+                  </label>
+                  <input
+                    type="text"
+                    value={bereavementForm.location}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, location: e.target.value })}
+                    placeholder="Mfano: Mbezi Makabe - Kwa Paulo"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Death Date */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Tarehe Aliyofariki
+                  </label>
+                  <input
+                    type="date"
+                    value={bereavementForm.deathDate}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, deathDate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Death Place */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Mahali Alipofia (Hospitali au Nyumbani)
+                  </label>
+                  <input
+                    type="text"
+                    value={bereavementForm.deathPlace}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, deathPlace: e.target.value })}
+                    placeholder="Mfano: Hospitali ya Muhimbili"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* TAARIFA ZA VIKAO VYA MSIBA */}
+                <div className="sm:col-span-2 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+                    <Building2 className="w-4 h-4" />
+                    <span>Taarifa za Vikao vya Msiba (Hiari)</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="text-slate-300 font-medium block mb-1 text-[11px]">
+                        Ukumbi / Eneo la Kikao
+                      </label>
+                      <input
+                        type="text"
+                        value={bereavementForm.meetingLocation || ''}
+                        onChange={(e) => setBereavementForm({ ...bereavementForm, meetingLocation: e.target.value })}
+                        placeholder="Mfano: Msibani / Riverside"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-medium block mb-1 text-[11px]">
+                        Tarehe ya Kikao
+                      </label>
+                      <input
+                        type="date"
+                        value={bereavementForm.meetingDate || ''}
+                        onChange={(e) => setBereavementForm({ ...bereavementForm, meetingDate: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-medium block mb-1 text-[11px]">
+                        Muda wa Kikao
+                      </label>
+                      <input
+                        type="text"
+                        value={bereavementForm.meetingTime || ''}
+                        onChange={(e) => setBereavementForm({ ...bereavementForm, meetingTime: e.target.value })}
+                        placeholder="Mfano: Saa 11:00 Jioni"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amount to be contributed */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">
+                    Kiwango Kinachopaswa Kuchangwa (TZS) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={bereavementForm.contributionAmount || 0}
+                      onChange={(e) => setBereavementForm({ ...bereavementForm, contributionAmount: Number(e.target.value) })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-bold font-mono focus:border-rose-500 focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-2 text-[10px] text-slate-500 font-bold uppercase">
+                      Kila Mjumbe
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    {bereavementForm.contributionAmount === 5000 
+                      ? '✓ Kiwango cha Wakwe (Elfu Tano)' 
+                      : (bereavementForm.contributionAmount === 10000 
+                          ? '✓ Kiwango cha Mwanachama/Mke/Mume/Mtoto/Mzazi (Elfu Kumi)' 
+                          : 'Kiwango Maalum')}
+                  </span>
+                </div>
+
+                {/* Deadline */}
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                    Tarehe ya Mwisho ya Michango (Deadline) *
+                  </label>
+                  <input
+                    type="date"
+                    value={bereavementForm.deadlineDate || ''}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, deadlineDate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Payment info (Locked per UWALEMI policy) */}
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 font-bold flex items-center gap-1.5 text-xs">
+                      <CreditCard className="w-3.5 h-3.5 text-purple-400" />
+                      Njia ya Kuwasilisha Mchango (M-Koba / Mtunza Hazina)
+                    </label>
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-amber-400" /> Rasmi (UWALEMI)
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    readOnly
+                    disabled
+                    value="M Koba au 0758219298 (Eva O. Lema)"
+                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-2 text-slate-200 font-semibold cursor-not-allowed select-none opacity-90 shadow-inner"
+                  />
+                </div>
+
+                {/* Burial / Funeral schedule builder */}
+                <div className="sm:col-span-2">
+                  <FuneralScheduleBuilder
+                    value={bereavementForm.burialSchedule || ''}
+                    onChange={(val) => setBereavementForm(prev => ({ ...prev, burialSchedule: val }))}
+                    defaultLocation={bereavementForm.location}
+                    themeColor="rose"
+                  />
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-2 pt-1">
+                <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bereavementForm.autoCreateFund}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, autoCreateFund: e.target.checked })}
+                    className="rounded border-slate-700 text-rose-600 focus:ring-rose-500"
+                  />
+                  <span className="text-slate-300 text-xs">
+                    Fungua pia daftari la mchango huu hapa kwenye <strong>'Michango & Misiba'</strong> ili kufuatilia nani amelipa na nani hajalipa
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bereavementForm.includeGreeting}
+                    onChange={(e) => setBereavementForm({ ...bereavementForm, includeGreeting: e.target.checked })}
+                    className="rounded border-slate-700 text-rose-600 focus:ring-rose-500"
+                  />
+                  <span className="text-slate-300 text-xs">
+                    Weka salamu ya jina mwanzoni mwa SMS (Mfano: <em>Habari [Jina],</em>)
+                  </span>
+                </label>
+              </div>
+
+              {/* Real-time Preview */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5 text-blue-400" />
+                    Mwonjo wa Ujumbe Rasmi Utakaowafikia Wanachama ({members.filter(m => m.status === 'active' && m.phone).length} wajumbe):
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const msg = generateLongBereavementMessage(bereavementForm);
+                        navigator.clipboard.writeText(msg);
+                        setCopiedBereavementSms(true);
+                        setTimeout(() => setCopiedBereavementSms(false), 2500);
+                      }}
+                      className="text-[11px] text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedBereavementSms ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      {copiedBereavementSms ? 'Imenakiliwa!' : 'Nakili Ujumbe'}
+                    </button>
+                    <a
+                      href={`https://api.whatsapp.com/send?text=${encodeURIComponent(generateLongBereavementMessage(bereavementForm))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300 px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-500/30 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Share2 className="w-3 h-3" />
+                      WhatsApp
+                    </a>
+                  </div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs leading-relaxed whitespace-pre-wrap font-sans max-h-44 overflow-y-auto select-all">
+                  {generateLongBereavementMessage(bereavementForm)}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsBereavementModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+              >
+                Ghairi
+              </button>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveBereavementFundOnly}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold cursor-pointer"
+                >
+                  Hifadhi Tu (Bila Kutuma SMS)
+                </button>
+                <button
+                  type="button"
+                  disabled={isSendingSms || !bereavementForm.memberId}
+                  onClick={handleSendBereavementSmsNow}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-900/30 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSendingSms ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  {isSendingSms ? 'Inatuma SMS...' : `🚀 Tuma SMS kwa Wanachama Wote (${members.filter(m => m.status === 'active' && m.phone).length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reminder SMS for Unpaid Members Modal */}
+      {isReminderModalOpen && selectedFund && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-amber-900/50 rounded-2xl w-full max-w-xl shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-950 border-b border-amber-900/40 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    📢 Kumbusha Wasiochanga kwa SMS
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Mfuko: <strong>{selectedFund.title}</strong> (Lengo: TZS {(selectedFund.perMemberTarget || 5000).toLocaleString()})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsReminderModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 text-xs">
+              {smsFeedback && (
+                <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 font-medium animate-fadeIn ${
+                  smsFeedback.type === 'success' 
+                    ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200' 
+                    : 'bg-rose-950/40 border-rose-500/40 text-rose-200'
+                }`}>
+                  {smsFeedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
+                  <span>{smsFeedback.message}</span>
+                </div>
+              )}
+
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between">
+                <span className="text-slate-400">Walengwa wa SMS:</span>
+                <span className="font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+                  {reminderRecipients.length} wanachama hawajachanga
+                </span>
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-bold block mb-1">
+                  Ujumbe wa SMS (Unaweza kuuhariri):
+                </label>
+                <textarea
+                  rows={4}
+                  value={reminderMessageText}
+                  onChange={(e) => setReminderMessageText(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-xs leading-relaxed focus:border-amber-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  * Tumia <code>{'{name}'}</code> kuweka jina la kila mwanachama kiotomatiki.
+                </p>
+              </div>
+
+              {/* Preview */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs">
+                <span className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Mwonjo:</span>
+                <div className="italic">
+                  {reminderMessageText.replace(/{name}/g, reminderRecipients[0]?.name || 'Mwanachama')}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsReminderModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+              >
+                Ghairi
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(reminderMessageText.replace(/{name}/g, 'Mwanachama'));
+                    setCopiedReminderSms(true);
+                    setTimeout(() => setCopiedReminderSms(false), 2000);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer flex items-center gap-1"
+                >
+                  {copiedReminderSms ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedReminderSms ? 'Imenakiliwa' : 'Nakili'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSendingSms || reminderRecipients.length === 0}
+                  onClick={handleExecuteSendReminderSms}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-lg shadow-amber-900/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSendingSms ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  {isSendingSms ? 'Inatuma...' : `Tuma SMS kwa Wasiochanga (${reminderRecipients.length})`}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -2076,7 +2076,14 @@ export const UwalemiReports: React.FC<Props> = ({ state, onSaveState, onOpenSmsW
                   {onOpenSmsWithTemplate && recipientsWithFeeDebt.length > 0 && (
                     <button
                       onClick={() => {
-                        const templateText = "Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada yako ya miezi iliyopita: unadaiwa ada TZS {feeDebt} {periodSummary} ({unpaidMonths}). Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya kuchelewa kulipa ada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!";
+                        const templateText = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada na madeni yako ya nyuma:
+
+Mchanganuo wa Madeni Yako:
+- Ada ({periodSummary}): {mchanganuo} (Jumla ya Ada: {feeDebt})
+- Faini Zilizopo: {fainiSummary}
+JUMLA KUU UNAYODAIWA: {jumlaKuu}.
+
+Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya ziada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!`;
                         onOpenSmsWithTemplate(recipientsWithFeeDebt, templateText);
                       }}
                       className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30 text-xs font-bold transition-all cursor-pointer shadow-sm"

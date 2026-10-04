@@ -1074,6 +1074,15 @@ Uongozi wa UWALEMI
 
 Lema, Nguvu Moja!`;
 
+export const UWALEMI_DEFAULT_DEBT_REMINDER_TEMPLATE = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada na madeni yako ya nyuma:
+
+Mchanganuo wa Madeni Yako:
+- Ada ({periodSummary}): {mchanganuo} (Jumla ya Ada: {feeDebt})
+- Faini Zilizopo: {fainiSummary}
+JUMLA KUU UNAYODAIWA: {jumlaKuu}.
+
+Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya ziada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!`;
+
 /**
  * Replaces dynamic variables in a template message for a specific member.
  */
@@ -1088,11 +1097,30 @@ export function formatPersonalizedUwalemiSms(
   const formattedTotalDebt = `TZS ${debtInfo.totalDebt.toLocaleString()}`;
   const penaltyMonths = debtInfo.penaltyMonthsCount ?? 0;
 
-  const breakdownText = debtInfo.breakdown && debtInfo.breakdown.length > 0
-    ? debtInfo.breakdown.map(item => `${item.monthName}: TZS ${item.debt.toLocaleString()}`).join(', ')
-    : debtInfo.unpaidMonthsText;
+  // Month-by-month breakdown with exact amounts for each month
+  const breakdownItemsList = debtInfo.breakdown && debtInfo.breakdown.length > 0
+    ? debtInfo.breakdown.map(item => {
+        if (item.paid > 0) {
+          return `${item.monthName}: TZS ${item.debt.toLocaleString()} (ulilipa TZS ${item.paid.toLocaleString()})`;
+        }
+        return `${item.monthName}: TZS ${item.debt.toLocaleString()}`;
+      })
+    : [];
 
-  const cleanMonthsList = debtInfo.breakdown && debtInfo.breakdown.length > 0
+  const breakdownText = breakdownItemsList.length > 0
+    ? breakdownItemsList.join(', ')
+    : (debtInfo.feeDebt > 0 ? `TZS ${debtInfo.feeDebt.toLocaleString()}` : 'Hakuna deni la ada');
+
+  const breakdownMistari = breakdownItemsList.length > 0
+    ? breakdownItemsList.map(item => `  • ${item}`).join('\n')
+    : '  • Hakuna deni la ada';
+
+  // For {unpaidMonths} - provide the exact month breakdown with amounts (answering user request)
+  const unpaidMonthsDetailed = breakdownItemsList.length > 0
+    ? breakdownItemsList.join(', ')
+    : (debtInfo.unpaidMonthsText || 'Hakuna');
+
+  const cleanMonthsOnly = debtInfo.breakdown && debtInfo.breakdown.length > 0
     ? debtInfo.breakdown.map(item => item.monthName).join(', ')
     : debtInfo.unpaidMonthsText;
 
@@ -1111,10 +1139,25 @@ export function formatPersonalizedUwalemiSms(
     }
     finesSummaryText = parts.join(', ');
   } else {
-    finesSummaryText = 'Hakuna faini';
+    finesSummaryText = 'Hakuna faini (TZS 0)';
   }
 
   const meetingFineDetailStr = debtInfo.meetingFinesText || formattedOtherFines;
+
+  // Complete structured itemized summary for templates using {mchanganuo_kamili} or {mchanganuo_madeni}
+  const fullBreakdownParts: string[] = [];
+  if (debtInfo.feeDebt > 0) {
+    fullBreakdownParts.push(`- Ada (${debtInfo.periodSummary}): ${breakdownText} (Jumla ya Ada: ${formattedFeeDebt})`);
+  } else {
+    fullBreakdownParts.push(`- Ada: Hakuna deni la ada (TZS 0)`);
+  }
+  if (debtInfo.totalFinesDebt > 0) {
+    fullBreakdownParts.push(`- Faini: ${finesSummaryText}`);
+  } else {
+    fullBreakdownParts.push(`- Faini: Hakuna faini (TZS 0)`);
+  }
+  fullBreakdownParts.push(`- JUMLA KUU UNAYODAIWA: ${formattedTotalDebt}`);
+  const fullBreakdownStr = fullBreakdownParts.join('\n');
 
   return template
     .replace(/{name}/g, debtInfo.memberName)
@@ -1153,10 +1196,14 @@ export function formatPersonalizedUwalemiSms(
     .replace(/{kuanzia}/g, debtInfo.startMonthName || 'Mwezi huu')
     .replace(/{endMonth}/g, debtInfo.endMonthName || 'Mwezi huu')
     .replace(/{hadi}/g, debtInfo.endMonthName || 'Mwezi huu')
-    .replace(/{unpaidMonths}/g, cleanMonthsList)
-    .replace(/{miezi}/g, cleanMonthsList)
+    .replace(/{unpaidMonths}/g, unpaidMonthsDetailed)
+    .replace(/{miezi}/g, unpaidMonthsDetailed)
+    .replace(/{mieziMajina}/g, cleanMonthsOnly)
     .replace(/{mchanganuo}/g, breakdownText)
     .replace(/{breakdown}/g, breakdownText)
+    .replace(/{mchanganuo_mistari}/g, breakdownMistari)
+    .replace(/{mchanganuo_kamili}/g, fullBreakdownStr)
+    .replace(/{mchanganuo_madeni}/g, fullBreakdownStr)
     .replace(/{unpaidMonthsCount}/g, String(debtInfo.unpaidCount))
     .replace(/{monthsCount}/g, String(debtInfo.unpaidCount))
     .replace(/{idadi_ya_miezi}/g, `${debtInfo.unpaidCount} miezi`)

@@ -1609,7 +1609,14 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
       return;
     }
 
-    const template = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada yako ya miezi iliyopita: unadaiwa ada TZS {feeDebt} {periodSummary} ({unpaidMonths}). Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Tafadhali kamilisha malipo yako kuepuka faini ya kuchelewa kulipa ada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!`;
+    const template = `Habari {name}, kikundi cha UWALEMI kinakukumbusha kulipa ada na madeni yako ya nyuma:
+
+Mchanganuo wa Madeni Yako:
+- Ada ({periodSummary}): {mchanganuo} (Jumla ya Ada: {feeDebt})
+- Faini Zilizopo: {fainiSummary}
+JUMLA KUU UNAYODAIWA: {jumlaKuu}.
+
+Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Tafadhali kamilisha malipo yako kuepuka faini ya ziada na kuwa nje ya umoja kwa mujibu wa katiba. Lema, Nguvu Moja!`;
 
     if (onOpenSmsWithTemplate) {
       onOpenSmsWithTemplate(debtors, template);
