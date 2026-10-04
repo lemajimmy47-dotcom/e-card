@@ -4363,7 +4363,8 @@ async function startServer() {
 
           formattedMsg = formattedMsg
             .replace(/{name}/g, name)
-            .replace(/{memberNo}/g, memberNo)
+            .replace(/\s*\(\s*{memberNo}\s*\)/gi, '')
+            .replace(/{memberNo}/gi, '')
             .replace(/{phone}/g, phone)
             .replace(/TZS\s*{feeDebt}/gi, `TZS ${feeDebtVal.toLocaleString()}`)
             .replace(/TZS\s*{ada}/gi, `TZS ${feeDebtVal.toLocaleString()}`)
@@ -4397,6 +4398,11 @@ async function startServer() {
             .replace(/{lipaNumber}/g, 'M Koba au 0758 219 298 Eva O Lema')
             .replace(/TZS\s+TZS/gi, 'TZS');
         }
+
+        // Unconditionally remove memberNo from all outgoing SMS messages to members
+        formattedMsg = formattedMsg
+          .replace(/\s*\(\s*{memberNo}\s*\)/gi, '')
+          .replace(/{memberNo}/gi, '');
 
         let status: 'delivered' | 'sent' | 'simulated' | 'failed' = 'simulated';
 
@@ -5047,7 +5053,7 @@ Lema, Nguvu Moja!`;
       if (voterPhone && voterPhone.length >= 9) {
         setTimeout(async () => {
           try {
-            const smsText = `UWALEMI UCHAGUZI: Ndugu ${voterName} (${voter.memberNo}), kura yako ya viongozi imepokelewa na kurekodiwa kwa siri 100%. Namba ya Stakabadhi: ${receiptCode}. Tarehe: ${new Date(voteTimestamp).toLocaleDateString('sw-TZ')}. Asante kwa kushiriki.`;
+            const smsText = `UWALEMI UCHAGUZI: Ndugu ${voterName}, kura yako ya viongozi imepokelewa na kurekodiwa kwa siri 100%. Namba ya Stakabadhi: ${receiptCode}. Tarehe: ${new Date(voteTimestamp).toLocaleDateString('sw-TZ')}. Asante kwa kushiriki.`;
             
             const configuredSms = state.groupSettings?.smsConfig;
             const globalSmsSettings = db.smsGatewaySettings || {};
@@ -5117,7 +5123,7 @@ Lema, Nguvu Moja!`;
       // Determine base URL
       const hostOrigin = originUrl || 'https://ais-dev-szslj3otpfjyj7doxrjz75-384135275183.europe-west2.run.app';
 
-      const defaultTemplate = `Habari {name} ({memberNo}), uchaguzi wa viongozi wa UWALEMI unaendelea. Bofya kiungo hiki cha siri kupiga kura yako: {link} . Tafadhali usimtumie mtu mwingine kiungo hiki.`;
+      const defaultTemplate = `Habari {name}, uchaguzi wa viongozi wa UWALEMI unaendelea. Bofya kiungo hiki cha siri kupiga kura yako: {link} . Tafadhali usimtumie mtu mwingine kiungo hiki.`;
       const template = customMessageTemplate || defaultTemplate;
 
       const configuredSms = state.groupSettings?.smsConfig;
@@ -5135,7 +5141,8 @@ Lema, Nguvu Moja!`;
         const personalLink = `${hostOrigin}/?uwalemiVote=${voter.voterToken}`;
         const personalizedMsg = template
           .replace(/{name}/g, voter.fullName)
-          .replace(/{memberNo}/g, voter.memberNo)
+          .replace(/\s*\(\s*{memberNo}\s*\)/gi, '')
+          .replace(/{memberNo}/gi, '')
           .replace(/{phone}/g, voter.phone)
           .replace(/{link}/g, personalLink)
           .replace(/{title}/g, election.title);

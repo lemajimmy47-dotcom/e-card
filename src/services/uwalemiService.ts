@@ -1161,8 +1161,8 @@ export function formatPersonalizedUwalemiSms(
 
   return template
     .replace(/{name}/g, debtInfo.memberName)
-    .replace(/\s*\(\s*{memberNo}\s*\)/g, debtInfo.memberNo ? ` (${debtInfo.memberNo})` : '')
-    .replace(/{memberNo}/g, debtInfo.memberNo || '')
+    .replace(/\s*\(\s*{memberNo}\s*\)/g, '')
+    .replace(/{memberNo}/g, '')
     .replace(/{phone}/g, debtInfo.phone)
     .replace(/{role}/g, debtInfo.role)
     .replace(/TZS\s*{totalDebt}/gi, `TZS ${debtInfo.totalDebt.toLocaleString()}`)

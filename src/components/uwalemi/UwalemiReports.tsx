@@ -2096,7 +2096,7 @@ Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya ziada
                   {onOpenSmsWithTemplate && recipientsWithFines.length > 0 && (
                     <button
                       onClick={() => {
-                        const templateText = "Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini zako: {fainiSummary}. Jumla ya faini unayodaiwa ni {faini}. Tafadhali lipa kupitia {lipaNamba}. Ahsante, Lema, Nguvu Moja!";
+                        const templateText = "Habari {name}, Taarifa ya UWALEMI: Unakumbushwa kulipa faini zako: {fainiSummary}. Jumla ya faini unayodaiwa ni {faini}. Tafadhali lipa kupitia {lipaNamba}. Ahsante, Lema, Nguvu Moja!";
                         onOpenSmsWithTemplate(recipientsWithFines, templateText);
                       }}
                       className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-rose-600/20 text-rose-300 border border-rose-500/40 hover:bg-rose-600/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
@@ -2137,7 +2137,7 @@ Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya ziada
                       if (d.meetingAbsentDebt > 0) finesDescParts.push(`faini ya kutokuhudhuria kikao/utoro (TZS ${d.meetingAbsentDebt.toLocaleString()})`);
                       
                       const fineSummaryText = finesDescParts.length > 0 ? finesDescParts.join(', ') : 'faini';
-                      const fineReminderText = `Habari ${d.member.fullName} (${d.member.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa ${fineSummaryText}. Jumla ya faini: TZS ${d.totalMemberFineDebt.toLocaleString()}. Tafadhali lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
+                      const fineReminderText = `Habari ${d.member.fullName}, Taarifa ya UWALEMI: Unakumbushwa kulipa ${fineSummaryText}. Jumla ya faini: TZS ${d.totalMemberFineDebt.toLocaleString()}. Tafadhali lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
 
                       return (
                         <tr key={d.member.id || idx} className="hover:bg-slate-900/40">
@@ -2347,7 +2347,7 @@ Lipa kupitia {lipaNamba}. Tafadhali kamilisha malipo yako kuepuka faini ya ziada
 
                                 {!f.paid && (() => {
                                   const targetMember = members.find(m => m.memberNo === f.memberNo);
-                                  const msg = `Habari ${f.memberName} (${f.memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya ${f.reason} ya ${f.title} (${f.date}) kiasi cha TZS ${f.amount.toLocaleString()}. Tafadhali lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
+                                  const msg = `Habari ${f.memberName}, Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya ${f.reason} ya ${f.title} (${f.date}) kiasi cha TZS ${f.amount.toLocaleString()}. Tafadhali lipa kupitia M Koba au 0758 219 298 Eva O Lema. Lema, Nguvu Moja!`;
                                   return (
                                     <>
                                       {onOpenSmsWithTemplate && targetMember && (

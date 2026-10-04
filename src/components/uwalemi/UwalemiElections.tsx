@@ -111,7 +111,7 @@ export const UwalemiElections: React.FC<Props> = ({
   // Custom SMS template
   const [smsTargetGroup, setSmsTargetGroup] = useState<'all_eligible' | 'unvoted_only'>('all_eligible');
   const [smsCustomMsg, setSmsCustomMsg] = useState<string>(
-    `Habari {name} ({memberNo}), uchaguzi wa viongozi wa UWALEMI unaendelea. Bofya kiungo hiki cha siri kupiga kura yako: {link} . Tafadhali usimtumie mtu mwingine kiungo hiki.`
+    `Habari {name}, uchaguzi wa viongozi wa UWALEMI unaendelea. Bofya kiungo hiki cha siri kupiga kura yako: {link} . Tafadhali usimtumie mtu mwingine kiungo hiki.`
   );
 
   // Clipboard feedback
@@ -1757,7 +1757,6 @@ export const UwalemiElections: React.FC<Props> = ({
                 <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[10px] text-slate-500">
                   <span>Vigezo vinavyojazwa:</span>
                   <code className="bg-slate-800 text-emerald-400 px-1 rounded">{'{name}'}</code>
-                  <code className="bg-slate-800 text-emerald-400 px-1 rounded">{'{memberNo}'}</code>
                   <code className="bg-slate-800 text-emerald-400 px-1 rounded">{'{link}'}</code>
                 </div>
               </div>

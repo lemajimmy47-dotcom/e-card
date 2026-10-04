@@ -70,7 +70,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   
   // Default smart template with clear itemized breakdown of monthly fees, fines, and grand total
   const defaultSmartTemplate = UWALEMI_DEFAULT_DEBT_REMINDER_TEMPLATE;
-  const defaultFinesOnlyTemplate = `Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini zako: {fainiSummary}. Jumla ya faini unayodaiwa ni {faini}. Tafadhali lipa kupitia {lipaNamba}. Ahsante, Lema, Nguvu Moja!`;
+  const defaultFinesOnlyTemplate = `Habari {name}, Taarifa ya UWALEMI: Unakumbushwa kulipa faini zako: {fainiSummary}. Jumla ya faini unayodaiwa ni {faini}. Tafadhali lipa kupitia {lipaNamba}. Ahsante, Lema, Nguvu Moja!`;
   const defaultThreeMonthsAlertTemplate = UWALEMI_THREE_MONTHS_ALERT_TEMPLATE;
 
   // Compose State
@@ -649,13 +649,13 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
       setMessageText(defaultSmartTemplate);
       setMessageType('reminder');
     } else if (type === 'fines_only_reminder') {
-      setMessageText(`Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini zako: {fainiSummary}. Jumla ya faini unayodaiwa ni {faini}. Tafadhali lipa kupitia {lipaNamba}. Lema, Nguvu Moja!`);
+      setMessageText(`Habari {name}, Taarifa ya UWALEMI: Unakumbushwa kulipa faini zako: {fainiSummary}. Jumla ya faini unayodaiwa ni {faini}. Tafadhali lipa kupitia {lipaNamba}. Lema, Nguvu Moja!`);
       setMessageType('reminder');
     } else if (type === 'late_fee_fine_reminder') {
-      setMessageText(`Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kuwa una faini ya ucheleweshaji wa ada ya miezi {fainiMiezi} (zaidi ya miezi 3 ya neema) kiasi cha {fainiAda}. Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
+      setMessageText(`Habari {name}, Taarifa ya UWALEMI: Unakumbushwa kuwa una faini ya ucheleweshaji wa ada ya miezi {fainiMiezi} (zaidi ya miezi 3 ya neema) kiasi cha {fainiAda}. Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
       setMessageType('reminder');
     } else if (type === 'meeting_fine_reminder') {
-      setMessageText(`Habari {name} ({memberNo}), Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya kikao: {fainiVikao}. Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
+      setMessageText(`Habari {name}, Taarifa ya UWALEMI: Unakumbushwa kulipa faini ya kikao: {fainiVikao}. Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
       setMessageType('reminder');
     } else if (type === 'single_month_reminder') {
       setMessageText(`Habari {name}, hii ni taarifa ya kukumbusha ada yako ya kikundi cha UWALEMI ya mwezi huu ({monthlyFee}). Tafadhali kamilisha malipo kupitia {lipaNamba}. Lema, Nguvu Moja!`);
@@ -1103,14 +1103,6 @@ Lema, Nguvu Moja!`);
                   className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[10.5px] font-mono border border-slate-700 cursor-pointer"
                 >
                   {"{name}"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTag('{memberNo}')}
-                  title="Namba ya UWALEMI (mf. UWL-001)"
-                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[10.5px] font-mono border border-slate-700 cursor-pointer"
-                >
-                  {"{memberNo}"}
                 </button>
                 <button
                   type="button"
