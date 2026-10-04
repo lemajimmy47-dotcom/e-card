@@ -1,5 +1,9 @@
-import { config } from "dotenv";
-config({ override: true });
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("dotenv").config({ override: true });
+} catch {
+  // Ignore in production where environment variables are injected directly
+}
 import express from "express";
 import cors from "cors";
 import path from "path";
