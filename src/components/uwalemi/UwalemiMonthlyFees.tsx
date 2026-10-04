@@ -18,6 +18,7 @@ import {
   Download,
   Sparkles,
   Zap,
+  Users,
   CheckCheck,
   RotateCcw,
   Calculator,
@@ -425,6 +426,24 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
     const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
+
+  const filteredMatrixMembers = useMemo(() => {
+    if (!searchTerm.trim()) return members;
+    const term = searchTerm.toLowerCase().trim();
+    return members.filter(m => {
+      const yearPayments = monthlyPayments.filter(p => (p.memberId === m.id || (m.memberNo && p.memberNo === m.memberNo)) && Number(p.year) === Number(selectedYear));
+      const hasMatchingReceipt = yearPayments.some(p => (p.receiptNo && p.receiptNo.toLowerCase().includes(term)) || (p.referenceNo && p.referenceNo.toLowerCase().includes(term)));
+
+      return (
+        m.fullName.toLowerCase().includes(term) ||
+        m.memberNo.toLowerCase().includes(term) ||
+        m.phone.includes(term) ||
+        (m.residence && m.residence.toLowerCase().includes(term)) ||
+        (m.role && m.role.toLowerCase().includes(term)) ||
+        hasMatchingReceipt
+      );
+    });
+  }, [members, searchTerm, monthlyPayments, selectedYear]);
 
   const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2080,6 +2099,45 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
             </div>
           </div>
 
+          {/* Search Bar for 12-Month Matrix View */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+            <div className="relative flex-1 w-full max-w-xl">
+              <Search className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Tafuta mwanachama kwenye jedwali (Jina, UWL-002, Simu, Makazi)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-10 pr-9 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-medium shadow-inner"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
+                  title="Futa utafutaji"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+              <span className="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 font-mono text-emerald-400 font-bold text-[11px]">
+                Wajumbe: {filteredMatrixMembers.length} / {members.length}
+              </span>
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="text-xs text-emerald-400 hover:underline cursor-pointer font-semibold"
+                >
+                  Onyesha Wote
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-md">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
@@ -2097,7 +2155,26 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {members.map((m) => {
+                  {filteredMatrixMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={15} className="py-12 text-center text-slate-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Users className="w-8 h-8 text-slate-600 opacity-60" />
+                          <p className="text-sm font-semibold text-slate-400">
+                            Hakuna mwanachama anayelingana na &ldquo;{searchTerm}&rdquo; kwenye jedwali la mwaka {selectedYear}.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setSearchTerm('')}
+                            className="text-xs text-emerald-400 hover:underline font-semibold cursor-pointer"
+                          >
+                            Futa utafutaji kuona wajumbe wote ({members.length})
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredMatrixMembers.map((m) => {
                     const totalMonthsInYear = selectedYear < 2023 ? 0 : selectedYear === 2023 ? 2 : 12;
                     const yearPayments = monthlyPayments.filter(p => (p.memberId === m.id || (m.memberNo && p.memberNo === m.memberNo)) && Number(p.year) === Number(selectedYear));
                     const totalPaidInYear = yearPayments.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
@@ -2206,8 +2283,9 @@ export const UwalemiMonthlyFees: React.FC<Props> = ({
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
+                  })
+                )}
+              </tbody>
               </table>
             </div>
           </div>
