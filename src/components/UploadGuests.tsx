@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, UserPlus, FileSpreadsheet, Search, Check, FileText, ArrowRight, Eye, Trash2, X, Download, Upload, ArrowUpDown, ArrowUp, ArrowDown, LayoutGrid, ChevronLeft, ChevronRight, Image as ImageIcon, Printer, AlertTriangle, MessageCircle, Smartphone } from 'lucide-react';
 import { EventDetails, TemplateSettings, Guest } from '../types';
@@ -56,7 +56,8 @@ function LazyGuestCardImage({ guest, event, settings, className }: LazyGuestCard
   useEffect(() => {
     let active = true;
     const canvas = document.createElement('canvas');
-    const scaleFactor = 3;
+    // Scale factor 1.2 is lightweight and crystal clear for thumbnail grid cards, avoiding CPU freezing
+    const scaleFactor = 1.2;
     canvas.width = (settings.orientation === 'landscape' ? 600 : 450) * scaleFactor;
     canvas.height = (settings.orientation === 'landscape' ? 450 : 600) * scaleFactor;
     
@@ -64,13 +65,13 @@ function LazyGuestCardImage({ guest, event, settings, className }: LazyGuestCard
       canvas,
       event,
       settings,
-      guest.name.toUpperCase(),
+      (guest.name || '').toUpperCase(),
       guest.cardType,
       guest.code ? `EVENTCARD-${guest.code}` : `EVENTCARD-${guest.id}`,
       () => {
         if (active) {
           try {
-            setImgUrl(canvas.toDataURL('image/jpeg', 0.95));
+            setImgUrl(canvas.toDataURL('image/jpeg', 0.88));
           } catch (err) {
             console.error("Error exporting lazy guest card image canvas:", err);
           }
@@ -129,6 +130,9 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   const { language, t } = useLanguage();
   const isEn = language === 'en';
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(50);
   const [sortBy, setSortBy] = useState<'name' | 'rsvpStatus' | 'cardType' | 'none'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [isSingleModalOpen, setIsSingleModalOpen] = useState(false);
@@ -139,8 +143,14 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [previewFilterType, setPreviewFilterType] = useState<string>('ALL');
   const [previewQuery, setPreviewQuery] = useState('');
+  const deferredPreviewQuery = useDeferredValue(previewQuery);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  // Reset pagination to first page when searching or changing filters
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredSearchTerm, pageSize]);
 
   // Manual & automatic save status tracking
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
@@ -780,13 +790,30 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     setEditingGuest(null);
   };
 
-  // Stat Counters
-  const countDouble = guests.filter(g => g.cardType === 'DOUBLE').length;
-  const countSingle = guests.filter(g => g.cardType === 'SINGLE').length;
-  const countUnclassified = guests.filter(g => g.cardType === 'UNCLASSIFIED').length;
+  // Pre-calculate and cache WhatsApp status map for fast O(1) lookup
+  const waStatusMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    (guests || []).forEach(g => {
+      if (g && g.id) {
+        map.set(g.id, isEligibleWhatsAppNumber(g.phone, g));
+      }
+    });
+    return map;
+  }, [guests]);
+
+  // Stat Counters - Memoized to prevent heavy re-filtering during typing
+  const countDouble = useMemo(() => (guests || []).filter(g => g.cardType === 'DOUBLE').length, [guests]);
+  const countSingle = useMemo(() => (guests || []).filter(g => g.cardType === 'SINGLE').length, [guests]);
+  const countUnclassified = useMemo(() => (guests || []).filter(g => g.cardType === 'UNCLASSIFIED').length, [guests]);
   const totalCards = guests.length;
-  const countWhatsApp = guests.filter(g => isEligibleWhatsAppNumber(g.phone, g)).length;
-  const countSmsOnly = guests.filter(g => !isEligibleWhatsAppNumber(g.phone, g)).length;
+  const countWhatsApp = useMemo(() => {
+    let count = 0;
+    (guests || []).forEach(g => {
+      if (g && waStatusMap.get(g.id)) count++;
+    });
+    return count;
+  }, [guests, waStatusMap]);
+  const countSmsOnly = totalCards - countWhatsApp;
 
   // Handler to check WhatsApp status of all guests or unverified guests
   const handleCheckWhatsAppNumbers = async () => {
@@ -933,39 +960,93 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     return Array.from(tagsSet);
   }, [guests]);
 
-  const filteredGuests = guests.filter(g => {
-    const term = searchTerm.toLowerCase();
-    const matchesSearch = 
-      g.name.toLowerCase().includes(term) || 
-      g.phone.includes(term) ||
-      g.code.toLowerCase().includes(term) ||
-      (g.tags && g.tags.some(t => t.toLowerCase().includes(term))) ||
-      (g.customFields && Object.values(g.customFields).some(val => val.toLowerCase().includes(term)));
+  const filteredGuests = useMemo(() => {
+    const cleanTerm = (deferredSearchTerm || '').trim().toLowerCase();
+    
+    return (guests || []).filter(g => {
+      if (!g) return false;
 
-    const matchesTag = selectedTagFilter === 'ALL' || (g.tags && g.tags.includes(selectedTagFilter));
+      // Safe search match that never throws errors
+      if (cleanTerm) {
+        const nameStr = typeof g.name === 'string' ? g.name.toLowerCase() : '';
+        const phoneStr = typeof g.phone === 'string' ? g.phone.toLowerCase() : '';
+        const codeStr = typeof g.code === 'string' ? g.code.toLowerCase() : '';
+        
+        let tagMatches = false;
+        if (g.tags && Array.isArray(g.tags)) {
+          for (let i = 0; i < g.tags.length; i++) {
+            const t = g.tags[i];
+            if (typeof t === 'string' && t.toLowerCase().includes(cleanTerm)) {
+              tagMatches = true;
+              break;
+            }
+          }
+        }
 
-    let matchesWa = true;
-    if (selectedWaFilter === 'WHATSAPP') {
-      matchesWa = isEligibleWhatsAppNumber(g.phone, g);
-    } else if (selectedWaFilter === 'SMS_ONLY') {
-      matchesWa = !isEligibleWhatsAppNumber(g.phone, g);
-    } else if (selectedWaFilter === 'UNCHECKED') {
-      matchesWa = g.hasWhatsApp === undefined || g.hasWhatsApp === 'unknown';
-    }
+        let customMatches = false;
+        if (g.customFields && typeof g.customFields === 'object') {
+          const vals = Object.values(g.customFields);
+          for (let i = 0; i < vals.length; i++) {
+            const val = vals[i];
+            if (typeof val === 'string' && val.toLowerCase().includes(cleanTerm)) {
+              customMatches = true;
+              break;
+            } else if (typeof val === 'number' && String(val).includes(cleanTerm)) {
+              customMatches = true;
+              break;
+            }
+          }
+        }
 
-    return matchesSearch && matchesTag && matchesWa;
-  });
+        const matchesSearch = 
+          nameStr.includes(cleanTerm) || 
+          phoneStr.includes(cleanTerm) || 
+          codeStr.includes(cleanTerm) ||
+          tagMatches ||
+          customMatches;
 
-  const sortedGuests = [...filteredGuests].sort((a, b) => {
+        if (!matchesSearch) return false;
+      }
+
+      // Tag filter
+      if (selectedTagFilter !== 'ALL') {
+        if (!g.tags || !Array.isArray(g.tags) || !g.tags.includes(selectedTagFilter)) {
+          return false;
+        }
+      }
+
+      // WhatsApp filter using cached O(1) status map
+      if (selectedWaFilter === 'WHATSAPP') {
+        if (!waStatusMap.get(g.id)) return false;
+      } else if (selectedWaFilter === 'SMS_ONLY') {
+        if (waStatusMap.get(g.id)) return false;
+      } else if (selectedWaFilter === 'UNCHECKED') {
+        if (g.hasWhatsApp !== undefined && g.hasWhatsApp !== 'unknown') return false;
+      }
+
+      return true;
+    });
+  }, [guests, deferredSearchTerm, selectedTagFilter, selectedWaFilter, waStatusMap]);
+
+  const sortedGuests = useMemo(() => {
+    if (sortBy === 'none') return filteredGuests;
+
+    const list = [...filteredGuests];
     if (sortBy === 'name') {
-      const valA = a.name.toLowerCase();
-      const valB = b.name.toLowerCase();
-      return sortOrder === 'asc' ? valA.localeCompare(valB, 'sw') : valB.localeCompare(valA, 'sw');
+      return list.sort((a, b) => {
+        const valA = (a.name || '').toLowerCase();
+        const valB = (b.name || '').toLowerCase();
+        if (valA === valB) return 0;
+        return sortOrder === 'asc' ? (valA < valB ? -1 : 1) : (valB < valA ? -1 : 1);
+      });
     }
     if (sortBy === 'rsvpStatus') {
-      const valA = a.rsvpStatus || 'Bado';
-      const valB = b.rsvpStatus || 'Bado';
-      return sortOrder === 'asc' ? valA.localeCompare(valB, 'sw') : valB.localeCompare(valA, 'sw');
+      return list.sort((a, b) => {
+        const valA = (a.rsvpStatus || 'Bado').toLowerCase();
+        const valB = (b.rsvpStatus || 'Bado').toLowerCase();
+        if (valA === valB) return 0;
+        return sortOrder === 'asc' ? (valA < valB ? -1 : 1) : (valB < valA ? -1 : 1);
+      });
     }
     if (sortBy === 'cardType') {
       const getRank = (type: string) => {
@@ -975,19 +1056,27 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
         if (t === 'UNCLASSIFIED') return 3;
         return 4;
       };
-      const rankA = getRank(a.cardType);
-      const rankB = getRank(b.cardType);
-      
-      if (rankA !== rankB) {
-        return sortOrder === 'asc' ? rankA - rankB : rankB - rankA;
-      }
-      
-      const valA = a.name.toLowerCase();
-      const valB = b.name.toLowerCase();
-      return sortOrder === 'asc' ? valA.localeCompare(valB, 'sw') : valB.localeCompare(valA, 'sw');
+      return list.sort((a, b) => {
+        const rankA = getRank(a.cardType);
+        const rankB = getRank(b.cardType);
+        if (rankA !== rankB) {
+          return sortOrder === 'asc' ? rankA - rankB : rankB - rankA;
+        }
+        const valA = (a.name || '').toLowerCase();
+        const valB = (b.name || '').toLowerCase();
+        if (valA === valB) return 0;
+        return sortOrder === 'asc' ? (valA < valB ? -1 : 1) : (valB < valA ? -1 : 1);
+      });
     }
-    return 0;
-  });
+    return list;
+  }, [filteredGuests, sortBy, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedGuests.length / pageSize));
+  const paginatedGuests = useMemo(() => {
+    if (pageSize >= sortedGuests.length) return sortedGuests;
+    const start = (currentPage - 1) * pageSize;
+    return sortedGuests.slice(start, start + pageSize);
+  }, [sortedGuests, currentPage, pageSize]);
 
   const handlePrintAllCards = () => {
     // Select the same filtered and query-matched lists as in the view, sorted alphabetically A-Z
@@ -1438,8 +1527,18 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
               placeholder={isEn ? "Search by Name, Phone, or Code..." : "Tafuta kwa Jina, Simu, au Code..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-white/10 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all font-sans placeholder-slate-400"
+              className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-white/10 bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all font-sans placeholder-slate-400"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition cursor-pointer"
+                title={isEn ? "Clear search" : "Futa utafutaji"}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Tag Filter Dropdown */}
@@ -1622,13 +1721,18 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
               {sortedGuests.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center py-10 text-slate-400 font-sans">
-                    {isEn ? "No guests found. Upload or add guests first to begin!" : "Hakuna mgeni aliyepatikana. Pakia au ongeza wageni kwanza kuanza!"}
+                    {searchTerm 
+                      ? (isEn ? `No guests found matching "${searchTerm}". Try another search.` : `Hakuna mgeni aliyepatikana kwa jina au namba "${searchTerm}". Jaribu neno jingine.`)
+                      : (isEn ? "No guests found. Upload or add guests first to begin!" : "Hakuna mgeni aliyepatikana. Pakia au ongeza wageni kwanza kuanza!")}
                   </td>
                 </tr>
               ) : (
-                sortedGuests.map((guest, rowIndex) => (
+                paginatedGuests.map((guest, rowIndex) => {
+                  const itemSerial = (pageSize < sortedGuests.length ? (currentPage - 1) * pageSize : 0) + rowIndex + 1;
+                  const isWa = waStatusMap.get(guest.id) ?? isEligibleWhatsAppNumber(guest.phone, guest);
+                  return (
                   <tr key={guest.id} className="hover:bg-white/5 transition-colors border-b border-white/5">
-                    <td className="px-5 py-3 font-mono text-slate-400">#{rowIndex + 1}</td>
+                    <td className="px-5 py-3 font-mono text-slate-400">#{itemSerial}</td>
                     <td className="px-5 py-3 font-bold text-white">
                       <div className="max-w-[160px] sm:max-w-[260px] truncate" title={guest.name}>{guest.name}</div>
                       <div className="flex items-center space-x-2 mt-1 text-[10px] font-mono text-slate-400 font-normal">
@@ -1693,7 +1797,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       </div>
                       {/* WhatsApp Identification Badge */}
                       <div className="mt-1">
-                        {isEligibleWhatsAppNumber(guest.phone, guest) ? (
+                        {isWa ? (
                           <button
                             type="button"
                             onClick={(e) => handleToggleWhatsAppStatus(guest.id, e)}
@@ -1766,11 +1870,79 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       </button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        {sortedGuests.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3 border-t border-white/10 bg-white/[0.02] text-xs">
+            <div className="flex items-center space-x-2 text-slate-400 font-mono text-[11px]">
+              <span>
+                {isEn
+                  ? `Showing ${pageSize >= sortedGuests.length ? 1 : (currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, sortedGuests.length)} of ${sortedGuests.length} guests`
+                  : `Inaonyesha wageni ${pageSize >= sortedGuests.length ? 1 : (currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, sortedGuests.length)} kati ya ${sortedGuests.length}`}
+              </span>
+              {searchTerm && (
+                <span className="text-blue-400 font-sans font-bold bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                  {isEn ? `Filtered (${sortedGuests.length}/${guests.length})` : `Uchujaji (${sortedGuests.length}/${guests.length})`}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-3">
+              {/* Page size selector */}
+              <div className="flex items-center space-x-1.5">
+                <span className="text-slate-400 text-[10px] uppercase font-mono">{isEn ? 'Per Page:' : 'Kwa Ukurasa:'}</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-[#090f1d] border border-white/15 rounded-lg px-2 py-1 text-white text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={1000}>Wote ({sortedGuests.length})</option>
+                </select>
+              </div>
+
+              {/* Page navigation */}
+              {totalPages > 1 && (
+                <div className="flex items-center space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage <= 1}
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                    title={isEn ? "Previous page" : "Ukurasa uliopita"}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  <span className="px-2.5 py-1 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-300 font-mono text-[11px] font-bold">
+                    {currentPage} / {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage >= totalPages}
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                    title={isEn ? "Next page" : "Ukurasa unaofuata"}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Navigation button */}
@@ -2392,8 +2564,21 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       setPreviewQuery(e.target.value);
                       setCarouselIndex(0);
                     }}
-                    className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white focus:outline-none focus:ring-1 focus:ring-blue-500/55 text-[10.5px] font-sans"
+                    className="w-full pl-9 pr-8 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white focus:outline-none focus:ring-1 focus:ring-blue-500/55 text-[10.5px] font-sans"
                   />
+                  {previewQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewQuery('');
+                        setCarouselIndex(0);
+                      }}
+                      className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-white transition cursor-pointer"
+                      title="Futa utafutaji"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Badge Type Filter */}
@@ -2425,8 +2610,13 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
               {/* Modal Body Scroll Container */}
               <div className="flex-grow overflow-y-auto py-4">
                 {(() => {
+                  const cleanPreviewQuery = (deferredPreviewQuery || '').trim().toLowerCase();
                   const items = guests.filter(g => {
-                    const matchQuery = g.name.toLowerCase().includes(previewQuery.toLowerCase());
+                    if (!g) return false;
+                    const name = typeof g.name === 'string' ? g.name.toLowerCase() : '';
+                    const phone = typeof g.phone === 'string' ? g.phone.toLowerCase() : '';
+                    const code = typeof g.code === 'string' ? g.code.toLowerCase() : '';
+                    const matchQuery = !cleanPreviewQuery || name.includes(cleanPreviewQuery) || phone.includes(cleanPreviewQuery) || code.includes(cleanPreviewQuery);
                     const matchType = previewFilterType === 'ALL' || g.cardType === previewFilterType;
                     return matchQuery && matchType;
                   });
