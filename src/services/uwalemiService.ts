@@ -1159,7 +1159,7 @@ export function formatPersonalizedUwalemiSms(
   fullBreakdownParts.push(`- JUMLA KUU UNAYODAIWA: ${formattedTotalDebt}`);
   const fullBreakdownStr = fullBreakdownParts.join('\n');
 
-  return template
+  let res = template
     .replace(/{name}/g, debtInfo.memberName)
     .replace(/\s*\(\s*{memberNo}\s*\)/g, '')
     .replace(/{memberNo}/g, '')
@@ -1212,6 +1212,13 @@ export function formatPersonalizedUwalemiSms(
     .replace(/{lipaNamba}/g, 'M Koba au 0758 219 298 Eva O Lema')
     .replace(/{lipaNumber}/g, 'M Koba au 0758 219 298 Eva O Lema')
     .replace(/TZS\s+TZS/gi, 'TZS');
+
+  if (debtInfo.memberNo && debtInfo.memberNo.trim()) {
+    const esc = debtInfo.memberNo.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    res = res.replace(new RegExp(`\\s*\\(\\s*${esc}\\s*\\)`, 'gi'), '');
+    res = res.replace(new RegExp(`\\b${esc}\\b`, 'gi'), '');
+  }
+  return res.replace(/ {2,}/g, ' ').trim();
 }
 
 export async function sendUwalemiSms(payload: {
@@ -1234,7 +1241,16 @@ export async function sendUwalemiSms(payload: {
   }[];
   message: string;
   messageType: 'receipt' | 'reminder' | 'emergency' | 'meeting' | 'broadcast';
-}): Promise<{ success: boolean; deliveredCount: number; message: string; isBalanceError?: boolean; error?: string }> {
+}): Promise<{ 
+  success: boolean; 
+  deliveredCount: number; 
+  sentCount: number; 
+  failedCount: number; 
+  message: string; 
+  isBalanceError?: boolean; 
+  error?: string;
+  logs?: any[];
+}> {
   try {
     const res = await fetch('/api/uwalemi/send-sms', {
       method: 'POST',
@@ -1242,15 +1258,20 @@ export async function sendUwalemiSms(payload: {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
+    const deliveredCount = data.deliveredCount || 0;
+    const failedCount = data.failedCount || 0;
     return {
       success: !!data.success,
-      deliveredCount: data.deliveredCount || 0,
+      deliveredCount,
+      sentCount: deliveredCount,
+      failedCount,
       message: data.message || data.error || (data.success ? 'Ujumbe umetumwa' : 'Imeshindwa kutuma SMS'),
       isBalanceError: !!data.isBalanceError,
-      error: data.error
+      error: data.error,
+      logs: data.logs || []
     };
   } catch (e: any) {
-    return { success: false, deliveredCount: 0, message: e.message || 'Hitilafu ya mtandao', isBalanceError: false };
+    return { success: false, deliveredCount: 0, sentCount: 0, failedCount: 0, message: e.message || 'Hitilafu ya mtandao', isBalanceError: false };
   }
 }
 

@@ -4404,6 +4404,16 @@ async function startServer() {
           .replace(/\s*\(\s*{memberNo}\s*\)/gi, '')
           .replace(/{memberNo}/gi, '');
 
+        if (memberNo && typeof memberNo === 'string' && memberNo.trim()) {
+          const escM = memberNo.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          formattedMsg = formattedMsg
+            .replace(new RegExp(`\\s*\\(\\s*${escM}\\s*\\)`, 'gi'), '')
+            .replace(new RegExp(`\\b${escM}\\b`, 'gi'), '');
+        }
+        // Also strip common member number patterns in parentheses like (UWL-...) or similar
+        formattedMsg = formattedMsg.replace(/\s*\(\s*UWL-[A-Za-z0-9-]+\s*\)/gi, '');
+        formattedMsg = formattedMsg.replace(/ {2,}/g, ' ').trim();
+
         let status: 'delivered' | 'sent' | 'simulated' | 'failed' = 'simulated';
 
         if (smsConfig.provider === 'simulation') {
@@ -5139,13 +5149,21 @@ Lema, Nguvu Moja!`;
 
       for (const voter of targetVoters) {
         const personalLink = `${hostOrigin}/?uwalemiVote=${voter.voterToken}`;
-        const personalizedMsg = template
+        let personalizedMsg = template
           .replace(/{name}/g, voter.fullName)
           .replace(/\s*\(\s*{memberNo}\s*\)/gi, '')
           .replace(/{memberNo}/gi, '')
           .replace(/{phone}/g, voter.phone)
           .replace(/{link}/g, personalLink)
           .replace(/{title}/g, election.title);
+
+        if (voter.memberNo) {
+          const escV = voter.memberNo.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          personalizedMsg = personalizedMsg
+            .replace(new RegExp(`\\s*\\(\\s*${escV}\\s*\\)`, 'gi'), '')
+            .replace(new RegExp(`\\b${escV}\\b`, 'gi'), '');
+        }
+        personalizedMsg = personalizedMsg.replace(/ {2,}/g, ' ').trim();
 
         try {
           if (effectiveProvider !== 'simulation' && activeApiKey) {
@@ -8688,7 +8706,7 @@ Tafadhali toa majibu kwenye mfumo wa JSON pekee wenye muundo ufuatao bila maelez
   // Vite static assets and html routing middleware
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false, ws: false },
       appType: "spa",
     });
     app.use(vite.middlewares);

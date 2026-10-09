@@ -3,6 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Gracefully suppress Vite dev WebSocket / HMR disconnect errors in iframe environment
+      window.addEventListener('error', function(e) {
+        if (
+          e && (
+            (e.message && (e.message.includes('WebSocket') || e.message.includes('vite') || e.message.includes('ModuleRunner'))) ||
+            (e.filename && e.filename.includes('@vite/client')) ||
+            (e.error && e.error.stack && (e.error.stack.includes('@vite/client') || e.error.stack.includes('createWebSocketModuleRunnerTransport')))
+          )
+        ) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return true;
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(e) {
+        const reason = e && e.reason;
+        const msg = String((reason && (reason.message || reason.stack)) || reason || '');
+        if (msg.includes('WebSocket') || msg.includes('@vite/client') || msg.includes('createWebSocketModuleRunnerTransport')) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }
+      }, true);
+    </script>
     <title>EVENTCARD | Kadi ya Mwaliko ya Kidijitali</title>
     <meta name="google-site-verification" content="NNJDwAH2rbC3HtZB5y8nDicEBHCSVE4yjrsEoYiwtnc" />
     <meta name="facebook-domain-verification" content="nteawo2ufc6plo7ez0e2wyfyud7aa8" />

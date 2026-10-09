@@ -12,8 +12,9 @@ export default defineConfig(() => {
       },
     },
     server: {
-      hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {
+      hmr: false,
+      ws: false as const,
+      watch: {
         ignored: ['**/database.json', '**/database.json.tmp']
       },
     },

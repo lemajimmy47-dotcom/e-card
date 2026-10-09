@@ -562,9 +562,8 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
     try {
       const res = await sendUwalemiSms({
         recipients: activeRecipients,
-        messageTemplate: longMsg,
-        messageType: 'emergency',
-        config: state.groupSettings?.smsConfig
+        message: longMsg,
+        messageType: 'emergency'
       });
 
       // Also create or update fund if requested
@@ -821,9 +820,8 @@ export const UwalemiEmergencyFunds: React.FC<Props> = ({
     try {
       const res = await sendUwalemiSms({
         recipients: reminderRecipients,
-        messageTemplate: reminderMessageText,
-        messageType: 'reminder',
-        config: state.groupSettings?.smsConfig
+        message: reminderMessageText,
+        messageType: 'reminder'
       });
 
       await onSaveState({
