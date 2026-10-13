@@ -1801,6 +1801,49 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
         // Not a JSON, keep as standard Custom Webhook
       }
 
+      if (metaConfig && (metaConfig.provider === 'green_api' || metaConfig.provider === 'greenapi')) {
+        const idInstance = String(metaConfig.id_instance || metaConfig.idInstance || "").trim();
+        const apiToken = String(metaConfig.api_token || metaConfig.apiToken || metaConfig.apiTokenInstance || "").trim();
+        let host = String(metaConfig.host || "api.green-api.com").trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+        if (!host) host = "api.green-api.com";
+        const chatId = `${formattedPhone}@c.us`;
+
+        console.log(`[Green-API] Dispatching message to ${chatId} via instance ${idInstance} on ${host}`);
+
+        let targetUrl = `https://${host}/waInstance${idInstance}/sendMessage/${apiToken}`;
+        let requestPayload: any = {
+          chatId,
+          message: text
+        };
+
+        // If an image URL is supplied, we send as sendFileByUrl
+        let resolvedImageUrl = reqImageUrl;
+        if (resolvedImageUrl && resolvedImageUrl.startsWith('/') && appOrigin) {
+          resolvedImageUrl = `${appOrigin}${resolvedImageUrl}`;
+        }
+        if (resolvedImageUrl && (resolvedImageUrl.startsWith('http://') || resolvedImageUrl.startsWith('https://'))) {
+          targetUrl = `https://${host}/waInstance${idInstance}/sendFileByUrl/${apiToken}`;
+          requestPayload = {
+            chatId,
+            urlFile: resolvedImageUrl,
+            fileName: 'kadi_mwaliko.jpg',
+            caption: text
+          };
+        }
+
+        const greenResponse = await fetch(targetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload)
+        });
+
+        const greenRespText = await greenResponse.text();
+        if (!greenResponse.ok) {
+          throw new Error(`Hitilafu ya Green-API (${greenResponse.status}): ${greenRespText}`);
+        }
+        return greenRespText;
+      }
+
       if (metaConfig && metaConfig.provider === 'meta') {
         const token = (metaConfig.meta_token || "").trim();
         const phoneId = (metaConfig.phone_number_id || "").trim();

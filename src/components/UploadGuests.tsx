@@ -256,7 +256,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [guestType, setGuestType] = useState<string>('DOUBLE');
-  const [guestMaxGuests, setGuestMaxGuests] = useState<number>(2);
+  const [guestMaxGuests, setGuestMaxGuests] = useState<number | ''>(2);
   const [availableCategories, setAvailableCategories] = useState<string[]>(['SINGLE', 'DOUBLE', 'WAKWE']);
 
   // Tags & Custom Fields states for adding single guest
@@ -269,7 +269,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   const [editGuestTags, setEditGuestTags] = useState('');
   const [editGuestTableNumber, setEditGuestTableNumber] = useState('');
   const [editGuestFoodPreference, setEditGuestFoodPreference] = useState('');
-  const [editGuestMaxGuests, setEditGuestMaxGuests] = useState<number>(2);
+  const [editGuestMaxGuests, setEditGuestMaxGuests] = useState<number | ''>(2);
   const [editGuestWhatsAppPreference, setEditGuestWhatsAppPreference] = useState<'AUTO' | 'WA' | 'SMS_ONLY'>('AUTO');
 
   // Selected tag filter state
@@ -2052,7 +2052,11 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       id="input-mgeni-single-type"
                       value={guestType}
                       onChange={(e) => {
-                        setGuestType(e.target.value);
+                        const val = e.target.value;
+                        setGuestType(val);
+                        if (val === 'SINGLE') setGuestMaxGuests(1);
+                        else if (val === 'DOUBLE') setGuestMaxGuests(2);
+                        else if (val === 'WAKWE') setGuestMaxGuests('');
                       }}
                       className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none font-bold cursor-pointer"
                     >
@@ -2069,7 +2073,11 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       min="1"
                       max="100"
                       value={guestMaxGuests}
-                      onChange={(e) => setGuestMaxGuests(parseInt(e.target.value) || 1)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setGuestMaxGuests(val === '' ? '' : parseInt(val) || 1);
+                      }}
+                      placeholder={guestType === 'WAKWE' ? "Andika idadi..." : ""}
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 font-bold"
                     />
                   </div>
@@ -2871,7 +2879,11 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       id="edit-mgeni-type"
                       value={editGuestType}
                       onChange={(e) => {
-                        setEditGuestType(e.target.value);
+                        const val = e.target.value;
+                        setEditGuestType(val);
+                        if (val === 'SINGLE') setEditGuestMaxGuests(1);
+                        else if (val === 'DOUBLE') setEditGuestMaxGuests(2);
+                        else if (val === 'WAKWE') setEditGuestMaxGuests('');
                       }}
                       className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none font-bold cursor-pointer"
                     >
@@ -2888,7 +2900,11 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       min="1"
                       max="100"
                       value={editGuestMaxGuests}
-                      onChange={(e) => setEditGuestMaxGuests(parseInt(e.target.value) || 1)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditGuestMaxGuests(val === '' ? '' : parseInt(val) || 1);
+                      }}
+                      placeholder={editGuestType === 'WAKWE' ? "Andika idadi..." : ""}
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 font-bold"
                     />
                   </div>
