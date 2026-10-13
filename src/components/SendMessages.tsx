@@ -957,14 +957,14 @@ Karibu sana!`);
     setEditingGuest(guest);
     setEditGuestName(guest.name);
     setEditGuestPhone(guest.phone);
-    setEditGuestType(['SINGLE', 'DOUBLE'].includes(guest.cardType) ? guest.cardType : 'UNCLASSIFIED');
+    setEditGuestType(['SINGLE', 'DOUBLE', 'WAKWE'].includes(guest.cardType) ? guest.cardType : 'WAKWE');
   };
 
   const handleSaveEditGuest = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGuest) return;
 
-    const finalType = ['SINGLE', 'DOUBLE'].includes(editGuestType) ? editGuestType : 'UNCLASSIFIED';
+    const finalType = ['SINGLE', 'DOUBLE', 'WAKWE'].includes(editGuestType) ? editGuestType : 'WAKWE';
     const rsvpCount = finalType === 'DOUBLE' ? 2 : 1;
 
     const updatedGuest: Guest = {
@@ -3575,7 +3575,7 @@ Asante - EVENT CARD`;
                     >
                       <option value="SINGLE">SINGLE</option>
                       <option value="DOUBLE">DOUBLE</option>
-                      <option value="UNCLASSIFIED">UNCLASSIFIED</option>
+                      <option value="WAKWE">WAKWE</option>
                     </select>
                   </div>
 

@@ -75,7 +75,7 @@ export default function TemplatesSelector({ event, settings, onSave, onNext }: T
         event,
         localSettings,
         'Jimson Lema', // sample name requested by user
-        previewCardType, // preview dynamically chosen card type ('DOUBLE', 'SINGLE', 'UNCLASSIFIED')
+        previewCardType, // preview dynamically chosen card type ('DOUBLE', 'SINGLE', 'WAKWE')
         'EVENTCARD-SAMPLE-QR'
       );
     }

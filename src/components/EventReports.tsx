@@ -89,32 +89,33 @@ export default function EventReports({
   const singleCardsCount = guests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const doubleCardsCount = guests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
   const vipCardsCount = guests.filter(g => g.cardType?.toUpperCase() === 'VIP').length;
-  const totalPaxCapacity = useMemo(() => guests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1)), 0), [guests]);
+  const getGuestPax = (g: Guest) => g.maxGuests || g.rsvpGuestsCount || (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' || g.cardType === 'WAKWE' ? 2 : 1);
+  const totalPaxCapacity = useMemo(() => guests.reduce((acc, current) => acc + getGuestPax(current), 0), [guests]);
 
   const attendingGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Atahudhuria'), [guests]);
   const attendingCount = attendingGuests.length;
   const attendingSingle = useMemo(() => attendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [attendingGuests]);
   const attendingDouble = useMemo(() => attendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [attendingGuests]);
   const attendingVip = useMemo(() => attendingGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [attendingGuests]);
-  const totalRsvpPax = useMemo(() => attendingGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1)), 0), [attendingGuests]);
+  const totalRsvpPax = useMemo(() => attendingGuests.reduce((acc, current) => acc + getGuestPax(current), 0), [attendingGuests]);
 
   const declinedGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Hatahudhuria'), [guests]);
   const declinedCount = declinedGuests.length;
-  const declinedPax = useMemo(() => declinedGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0), [declinedGuests]);
+  const declinedPax = useMemo(() => declinedGuests.reduce((acc, current) => acc + getGuestPax(current), 0), [declinedGuests]);
   const declinedSingle = useMemo(() => declinedGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [declinedGuests]);
   const declinedDouble = useMemo(() => declinedGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [declinedGuests]);
   const declinedVip = useMemo(() => declinedGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [declinedGuests]);
 
   const maybeGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Labda'), [guests]);
   const maybeCount = maybeGuests.length;
-  const maybePax = useMemo(() => maybeGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1)), 0), [maybeGuests]);
+  const maybePax = useMemo(() => maybeGuests.reduce((acc, current) => acc + getGuestPax(current), 0), [maybeGuests]);
   const maybeSingle = useMemo(() => maybeGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [maybeGuests]);
   const maybeDouble = useMemo(() => maybeGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [maybeGuests]);
   const maybeVip = useMemo(() => maybeGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [maybeGuests]);
 
   const pendingGuests = useMemo(() => guests.filter(g => !g.rsvpStatus || g.rsvpStatus === 'Bado'), [guests]);
   const pendingCount = pendingGuests.length;
-  const pendingPax = useMemo(() => pendingGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0), [pendingGuests]);
+  const pendingPax = useMemo(() => pendingGuests.reduce((acc, current) => acc + getGuestPax(current), 0), [pendingGuests]);
   const pendingSingle = useMemo(() => pendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [pendingGuests]);
   const pendingDouble = useMemo(() => pendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [pendingGuests]);
   const pendingVip = useMemo(() => pendingGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [pendingGuests]);
@@ -125,7 +126,7 @@ export default function EventReports({
   const checkedInDouble = useMemo(() => checkedInGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [checkedInGuests]);
   const expectedButNotArrived = Math.max(0, attendingCount - checkedInCount);
   const arrivedPax = checkedInGuests.reduce((acc, curr) => {
-    const count = curr.rsvpStatus === 'Atahudhuria' ? (curr.rsvpGuestsCount || (curr.cardType === 'DOUBLE' ? 2 : 1)) : (curr.cardType === 'DOUBLE' ? 2 : 1);
+    const count = getGuestPax(curr);
     return acc + count;
   }, 0);
 

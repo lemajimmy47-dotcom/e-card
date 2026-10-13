@@ -257,7 +257,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   const [guestPhone, setGuestPhone] = useState('');
   const [guestType, setGuestType] = useState<string>('DOUBLE');
   const [guestMaxGuests, setGuestMaxGuests] = useState<number>(2);
-  const [availableCategories, setAvailableCategories] = useState<string[]>(['SINGLE', 'DOUBLE', 'UNCLASSIFIED']);
+  const [availableCategories, setAvailableCategories] = useState<string[]>(['SINGLE', 'DOUBLE', 'WAKWE']);
 
   // Tags & Custom Fields states for adding single guest
   const [guestTags, setGuestTags] = useState('');
@@ -525,8 +525,8 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     setIsSubmitting(true);
 
     const standardisedPhone = standardisePhoneNumber(guestPhone);
-    const finalType = ['SINGLE', 'DOUBLE'].includes(guestType) ? guestType : 'UNCLASSIFIED';
-    const rsvpCount = finalType === 'DOUBLE' ? 2 : 1;
+    const finalType = ['SINGLE', 'DOUBLE', 'WAKWE'].includes(guestType) ? guestType : 'WAKWE';
+    const rsvpCount = guestMaxGuests || (finalType === 'DOUBLE' ? 2 : 1);
 
     const parsedTags = guestTags
       .split(',')
@@ -689,8 +689,8 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
       ...existingGuest,
       name: newGuest.name || existingGuest.name,
       phone: newGuest.phone || existingGuest.phone,
-      cardType: newGuest.cardType !== 'UNCLASSIFIED' ? newGuest.cardType : existingGuest.cardType,
-      rsvpGuestsCount: newGuest.cardType !== 'UNCLASSIFIED' ? (newGuest.cardType === 'DOUBLE' ? 2 : 1) : (existingGuest.cardType === 'DOUBLE' ? 2 : 1),
+      cardType: newGuest.cardType !== 'WAKWE' ? newGuest.cardType : existingGuest.cardType,
+      rsvpGuestsCount: newGuest.cardType !== 'WAKWE' ? (newGuest.maxGuests || (newGuest.cardType === 'DOUBLE' ? 2 : 1)) : (existingGuest.maxGuests || 1),
       tags: mergedTags,
       customFields: mergedCF
     };
@@ -721,7 +721,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     setEditingGuest(guest);
     setEditGuestName(guest.name);
     setEditGuestPhone(guest.phone);
-    setEditGuestType(['SINGLE', 'DOUBLE'].includes(guest.cardType) ? guest.cardType : 'UNCLASSIFIED');
+    setEditGuestType(['SINGLE', 'DOUBLE', 'WAKWE'].includes(guest.cardType) ? guest.cardType : 'WAKWE');
     setEditGuestMaxGuests(guest.maxGuests || (guest.cardType === 'DOUBLE' ? 2 : 1));
     setEditGuestTags(guest.tags ? guest.tags.join(', ') : '');
     setEditGuestTableNumber(guest.customFields?.tableNumber || '');
@@ -733,8 +733,8 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     e.preventDefault();
     if (!editingGuest) return;
 
-    const finalType = ['SINGLE', 'DOUBLE'].includes(editGuestType) ? editGuestType : 'UNCLASSIFIED';
-    const rsvpCount = finalType === 'DOUBLE' ? 2 : 1;
+    const finalType = ['SINGLE', 'DOUBLE', 'WAKWE'].includes(editGuestType) ? editGuestType : 'WAKWE';
+    const rsvpCount = editGuestMaxGuests || (finalType === 'DOUBLE' ? 2 : 1);
     const standardisedPhone = standardisePhoneNumber(editGuestPhone);
 
     const parsedTags = editGuestTags
@@ -804,7 +804,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
   // Stat Counters - Memoized to prevent heavy re-filtering during typing
   const countDouble = useMemo(() => (guests || []).filter(g => g.cardType === 'DOUBLE').length, [guests]);
   const countSingle = useMemo(() => (guests || []).filter(g => g.cardType === 'SINGLE').length, [guests]);
-  const countUnclassified = useMemo(() => (guests || []).filter(g => g.cardType === 'UNCLASSIFIED').length, [guests]);
+  const countWakwe = useMemo(() => (guests || []).filter(g => g.cardType === 'WAKWE').length, [guests]);
   const totalCards = guests.length;
   const countWhatsApp = useMemo(() => {
     let count = 0;
@@ -1053,7 +1053,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
         const t = (type || '').toUpperCase();
         if (t === 'SINGLE') return 1;
         if (t === 'DOUBLE') return 2;
-        if (t === 'UNCLASSIFIED') return 3;
+        if (t === 'WAKWE') return 3;
         return 4;
       };
       return list.sort((a, b) => {
@@ -1471,8 +1471,8 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
         </div>
 
         <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
-          <p className="text-[9px] uppercase font-mono tracking-wider text-slate-400 font-bold">UNCLASSIFIED</p>
-          <p className="text-xl font-extrabold text-white mt-1">{countUnclassified}</p>
+          <p className="text-[9px] uppercase font-mono tracking-wider text-slate-400 font-bold">WAKWE</p>
+          <p className="text-xl font-extrabold text-white mt-1">{countWakwe}</p>
         </div>
 
         <div className="backdrop-blur-md bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
@@ -2052,9 +2052,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       id="input-mgeni-single-type"
                       value={guestType}
                       onChange={(e) => {
-                        const val = e.target.value;
-                        setGuestType(val);
-                        setGuestMaxGuests(val === 'DOUBLE' ? 2 : 1);
+                        setGuestType(e.target.value);
                       }}
                       className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none font-bold cursor-pointer"
                     >
@@ -2583,7 +2581,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
 
                 {/* Badge Type Filter */}
                 <div className="flex flex-wrap gap-1.5 self-start sm:self-auto">
-                  {['ALL', 'SINGLE', 'DOUBLE', 'UNCLASSIFIED'].map((type) => {
+                  {['ALL', 'SINGLE', 'DOUBLE', 'WAKWE'].map((type) => {
                     const count = type === 'ALL' 
                       ? guests.length 
                       : guests.filter(g => g.cardType === type).length;
@@ -2873,9 +2871,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       id="edit-mgeni-type"
                       value={editGuestType}
                       onChange={(e) => {
-                        const val = e.target.value;
-                        setEditGuestType(val);
-                        setEditGuestMaxGuests(val === 'DOUBLE' ? 2 : 1);
+                        setEditGuestType(e.target.value);
                       }}
                       className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none font-bold cursor-pointer"
                     >

@@ -161,7 +161,7 @@ export interface Guest {
   code: string; // Alphanumeric check-in code e.g. KY-3801
   name: string;
   phone: string;
-  cardType: string; // 'SINGLE' | 'DOUBLE' | 'UNCLASSIFIED'
+  cardType: string; // 'SINGLE' | 'DOUBLE' | 'WAKWE'
   smsStatus: 'Sijatuma' | 'Inatuma' | 'Imetumia';
   whatsappStatus: 'Sijatuma' | 'Inatuma' | 'Imetumia';
   rsvpStatus: 'Bado' | 'Atahudhuria' | 'Hatahudhuria' | 'Labda';
