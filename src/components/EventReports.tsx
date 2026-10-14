@@ -88,22 +88,32 @@ export default function EventReports({
   const totalGuestsCount = guests.length;
   const singleCardsCount = guests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const doubleCardsCount = guests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
+  const wakweCardsCount = guests.filter(g => g.cardType === 'WAKWE' || g.cardType === 'UNCLASSIFIED').length;
   const vipCardsCount = guests.filter(g => g.cardType?.toUpperCase() === 'VIP').length;
-  const getGuestPax = (g: Guest) => g.maxGuests || g.rsvpGuestsCount || (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' || g.cardType === 'WAKWE' ? 2 : 1);
+  const getGuestPax = (g: Guest) => {
+    if (typeof g.maxGuests === 'number' && g.maxGuests > 0) return g.maxGuests;
+    const ct = (g.cardType || '').toUpperCase();
+    if (ct === 'DOUBLE' || ct === 'COUPLE') return 2;
+    if (ct === 'TABLE') return 10;
+    if (ct === 'WAKWE' || ct === 'UNCLASSIFIED') return 2;
+    return 1;
+  };
   const totalPaxCapacity = useMemo(() => guests.reduce((acc, current) => acc + getGuestPax(current), 0), [guests]);
 
   const attendingGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Atahudhuria'), [guests]);
   const attendingCount = attendingGuests.length;
   const attendingSingle = useMemo(() => attendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [attendingGuests]);
   const attendingDouble = useMemo(() => attendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [attendingGuests]);
+  const attendingWakwe = useMemo(() => attendingGuests.filter(g => g.cardType === 'WAKWE' || g.cardType === 'UNCLASSIFIED').length, [attendingGuests]);
   const attendingVip = useMemo(() => attendingGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [attendingGuests]);
   const totalRsvpPax = useMemo(() => attendingGuests.reduce((acc, current) => acc + getGuestPax(current), 0), [attendingGuests]);
 
   const declinedGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Hatahudhuria'), [guests]);
   const declinedCount = declinedGuests.length;
-  const declinedPax = useMemo(() => declinedGuests.reduce((acc, current) => acc + getGuestPax(current), 0), [declinedGuests]);
+  const declinedPax = 0;
   const declinedSingle = useMemo(() => declinedGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [declinedGuests]);
   const declinedDouble = useMemo(() => declinedGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [declinedGuests]);
+  const declinedWakwe = useMemo(() => declinedGuests.filter(g => g.cardType === 'WAKWE' || g.cardType === 'UNCLASSIFIED').length, [declinedGuests]);
   const declinedVip = useMemo(() => declinedGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [declinedGuests]);
 
   const maybeGuests = useMemo(() => guests.filter(g => g.rsvpStatus === 'Labda'), [guests]);
@@ -111,6 +121,7 @@ export default function EventReports({
   const maybePax = useMemo(() => maybeGuests.reduce((acc, current) => acc + getGuestPax(current), 0), [maybeGuests]);
   const maybeSingle = useMemo(() => maybeGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [maybeGuests]);
   const maybeDouble = useMemo(() => maybeGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [maybeGuests]);
+  const maybeWakwe = useMemo(() => maybeGuests.filter(g => g.cardType === 'WAKWE' || g.cardType === 'UNCLASSIFIED').length, [maybeGuests]);
   const maybeVip = useMemo(() => maybeGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [maybeGuests]);
 
   const pendingGuests = useMemo(() => guests.filter(g => !g.rsvpStatus || g.rsvpStatus === 'Bado'), [guests]);
@@ -118,12 +129,14 @@ export default function EventReports({
   const pendingPax = useMemo(() => pendingGuests.reduce((acc, current) => acc + getGuestPax(current), 0), [pendingGuests]);
   const pendingSingle = useMemo(() => pendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [pendingGuests]);
   const pendingDouble = useMemo(() => pendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [pendingGuests]);
+  const pendingWakwe = useMemo(() => pendingGuests.filter(g => g.cardType === 'WAKWE' || g.cardType === 'UNCLASSIFIED').length, [pendingGuests]);
   const pendingVip = useMemo(() => pendingGuests.filter(g => g.cardType?.toUpperCase() === 'VIP').length, [pendingGuests]);
 
   const checkedInGuests = useMemo(() => guests.filter(g => g.checkedIn), [guests]);
   const checkedInCount = checkedInGuests.length;
   const checkedInSingle = useMemo(() => checkedInGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length, [checkedInGuests]);
   const checkedInDouble = useMemo(() => checkedInGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length, [checkedInGuests]);
+  const checkedInWakwe = useMemo(() => checkedInGuests.filter(g => g.cardType === 'WAKWE' || g.cardType === 'UNCLASSIFIED').length, [checkedInGuests]);
   const expectedButNotArrived = Math.max(0, attendingCount - checkedInCount);
   const arrivedPax = checkedInGuests.reduce((acc, curr) => {
     const count = getGuestPax(curr);
@@ -562,21 +575,21 @@ export default function EventReports({
       doc.setTextColor(30, 41, 59);
       doc.setFont("helvetica", "bold");
       const line1 = isEn
-        ? `• ATTENDING (YES): ${attendingCount} Cards (Single: ${attendingSingle}, Double: ${attendingDouble} — ${totalRsvpPax} Pax)   |   • DECLINED (NO): ${declinedCount} Cards (Single: ${declinedSingle}, Double: ${declinedDouble} — ${declinedPax} Pax)`
-        : `• WATAHUDHURIA (YES): ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble} — ${totalRsvpPax} Watu)   |   • HAWATAKUJA (NO): ${declinedCount} Kadi (Single: ${declinedSingle}, Double: ${declinedDouble} — ${declinedPax} Watu)`;
+        ? `• ATTENDING (YES): ${attendingCount} Cards (Single: ${attendingSingle}, Double: ${attendingDouble}, Wakwe: ${attendingWakwe} — ${totalRsvpPax} Pax)   |   • DECLINED (NO): ${declinedCount} Cards (Single: ${declinedSingle}, Double: ${declinedDouble}, Wakwe: ${declinedWakwe} — ${declinedPax} Pax)`
+        : `• WATAHUDHURIA (YES): ${attendingCount} Kadi (Single: ${attendingSingle}, Double: ${attendingDouble}, Wakwe: ${attendingWakwe} — ${totalRsvpPax} Watu)   |   • HAWATAKUJA (NO): ${declinedCount} Kadi (Single: ${declinedSingle}, Double: ${declinedDouble}, Wakwe: ${declinedWakwe} — ${declinedPax} Watu)`;
       doc.text(line1, 13, tableStartY + 4.5);
 
       const line2 = isEn
-        ? `• MAYBE (UNDECIDED): ${maybeCount} Cards (Single: ${maybeSingle}, Double: ${maybeDouble} — ${maybePax} Pax)   |   • PENDING: ${pendingCount} Cards (Single: ${pendingSingle}, Double: ${pendingDouble} — ${pendingPax} Pax)`
-        : `• HAWANA UHAKIKA: ${maybeCount} Kadi (Single: ${maybeSingle}, Double: ${maybeDouble} — ${maybePax} Watu)   |   • BADO JIBU: ${pendingCount} Kadi (Single: ${pendingSingle}, Double: ${pendingDouble} — ${pendingPax} Watu)`;
+        ? `• MAYBE (UNDECIDED): ${maybeCount} Cards (Single: ${maybeSingle}, Double: ${maybeDouble}, Wakwe: ${maybeWakwe} — ${maybePax} Pax)   |   • PENDING: ${pendingCount} Cards (Single: ${pendingSingle}, Double: ${pendingDouble}, Wakwe: ${pendingWakwe} — ${pendingPax} Pax)`
+        : `• HAWANA UHAKIKA: ${maybeCount} Kadi (Single: ${maybeSingle}, Double: ${maybeDouble}, Wakwe: ${maybeWakwe} — ${maybePax} Watu)   |   • BADO JIBU: ${pendingCount} Kadi (Single: ${pendingSingle}, Double: ${pendingDouble}, Wakwe: ${pendingWakwe} — ${pendingPax} Watu)`;
       doc.text(line2, 13, tableStartY + 9);
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(6.6);
       doc.setTextColor(71, 85, 105);
       const line3 = isEn
-        ? `• TOTAL CARDS: ${totalGuestsCount} (${totalPaxCapacity} Pax) (S: ${singleCardsCount}, D: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})   •   ARRIVED: ${checkedInCount} (${arrivedPax} Pax — ${arivedPercent()}%)   •   SMS SENT: ${totalSmsSent}   •   WA SENT: ${totalWhatsappSent}`
-        : `• JUMLA YA KADI: ${totalGuestsCount} (${totalPaxCapacity} Pax) (Single: ${singleCardsCount}, Double: ${doubleCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})   •   WALIOFIKA: ${checkedInCount} (${arrivedPax} Pax — ${arivedPercent()}%)   •   SMS: ${totalSmsSent}   •   WHATSAPP: ${totalWhatsappSent}`;
+        ? `• TOTAL CARDS: ${totalGuestsCount} (Max Capacity: ${totalPaxCapacity} Pax) (S: ${singleCardsCount}, D: ${doubleCardsCount}, WAKWE: ${wakweCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})   •   ARRIVED: ${checkedInCount} (${arrivedPax} Pax — ${arivedPercent()}%)   •   SMS SENT: ${totalSmsSent}   •   WA SENT: ${totalWhatsappSent}`
+        : `• JUMLA YA KADI: ${totalGuestsCount} (Upeo wa Wageni: ${totalPaxCapacity} Watu/Pax) (Single: ${singleCardsCount}, Double: ${doubleCardsCount}, WAKWE: ${wakweCardsCount}${vipCardsCount > 0 ? `, VIP: ${vipCardsCount}` : ''})   •   WALIOFIKA: ${checkedInCount} (${arrivedPax} Pax — ${arivedPercent()}%)   •   SMS: ${totalSmsSent}   •   WHATSAPP: ${totalWhatsappSent}`;
       doc.text(line3, 13, tableStartY + 13.5);
       tableStartY += bannerHeight + 4;
 
@@ -584,9 +597,10 @@ export default function EventReports({
         idx + 1,
         g.name.toUpperCase(),
         g.phone || '-',
-        g.cardType || 'SINGLE',
+        (!g.cardType || g.cardType === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType,
+        `${getGuestPax(g)} Watu`,
         g.rsvpStatus || 'BADO JIBU',
-        g.rsvpStatus === 'Atahudhuria' ? (g.rsvpGuestsCount || (g.cardType === 'DOUBLE' ? 2 : 1)) : 0,
+        g.rsvpStatus === 'Atahudhuria' ? (g.rsvpGuestsCount || getGuestPax(g)) : 0,
         g.checkedIn ? 'NDIO (ARRIVED)' : 'BADO (ABSENT)',
         g.checkedInTime ? g.checkedInTime : '-',
         g.smsCount || (isStatusSent(g.smsStatus) ? 1 : 0),
@@ -595,7 +609,7 @@ export default function EventReports({
 
       autoTable(doc, {
         startY: tableStartY,
-        head: [['S/N', 'Full Name', 'Mobile No.', 'Card Type', 'RSVP Answer', 'Pax', 'Check-In', 'Time Arrived', 'SMS', 'WA']],
+        head: [['S/N', 'Full Name', 'Mobile No.', 'Card Type', 'Upeo (Max)', 'RSVP Answer', 'Pax', 'Check-In', 'Time Arrived', 'SMS', 'WA']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontSize: 8, fontStyle: 'bold', lineColor: [0, 0, 0], lineWidth: 0.5 },
@@ -604,22 +618,23 @@ export default function EventReports({
         columnStyles: {
           0: { halign: 'center' },
           3: { halign: 'center' },
-          4: { halign: 'center' },
+          4: { halign: 'center', fontStyle: 'bold' },
           5: { halign: 'center' },
           6: { halign: 'center' },
           7: { halign: 'center' },
           8: { halign: 'center' },
-          9: { halign: 'center' }
+          9: { halign: 'center' },
+          10: { halign: 'center' }
         },
         didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 6) {
+          if (data.section === 'body' && data.column.index === 7) {
             const val = data.cell.text[0];
             if (val && val.includes('ARRIVED')) {
               data.cell.styles.textColor = [22, 163, 74];
               data.cell.styles.fontStyle = 'bold';
             }
           }
-          if (data.section === 'body' && data.column.index === 4) {
+          if (data.section === 'body' && data.column.index === 5) {
             const val = data.cell.text[0];
             if (val === 'Atahudhuria') {
               data.cell.styles.textColor = [22, 163, 74];
@@ -636,7 +651,8 @@ export default function EventReports({
         g.checkedInTime || '-',
         g.name.toUpperCase(),
         g.phone || '-',
-        g.cardType || 'SINGLE',
+        (!g.cardType || g.cardType === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType,
+        `${getGuestPax(g)} Watu`,
         'SUCCESS SCAN',
         g.smsCount || (isStatusSent(g.smsStatus) ? 1 : 0),
         g.whatsappCount || (isStatusSent(g.whatsappStatus) ? 1 : 0)
@@ -648,6 +664,7 @@ export default function EventReports({
         `${sortedCheckedIn.length} Kadi Zilizothibitishwa`,
         '-',
         '-',
+        `${arrivedPax} Watu/Pax`,
         '-',
         totalSmsSent,
         totalWhatsappSent
@@ -655,7 +672,7 @@ export default function EventReports({
 
       autoTable(doc, {
         startY: tableStartY,
-        head: [['S/N', isEn ? 'Time Arrived' : 'Muda (Time Arrived)', isEn ? 'Guest Full Name' : 'Mgeni (Guest Full Name)', isEn ? 'Mobile' : 'Simu / Mobile', isEn ? 'Card Type' : 'Aina ya Kadi', 'Scan Status', 'SMS', 'WA']],
+        head: [['S/N', isEn ? 'Time Arrived' : 'Muda (Time Arrived)', isEn ? 'Guest Full Name' : 'Mgeni (Guest Full Name)', isEn ? 'Mobile' : 'Simu / Mobile', isEn ? 'Card Type' : 'Aina ya Kadi', 'Upeo (Max)', 'Scan Status', 'SMS', 'WA']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontSize: 8, fontStyle: 'bold', lineColor: [0, 0, 0], lineWidth: 0.5 },
@@ -665,9 +682,10 @@ export default function EventReports({
           0: { halign: 'center' },
           1: { fontStyle: 'bold' },
           4: { halign: 'center' },
-          5: { halign: 'center', textColor: [22, 163, 74], fontStyle: 'bold' },
-          6: { halign: 'center' },
-          7: { halign: 'center' }
+          5: { halign: 'center', fontStyle: 'bold' },
+          6: { halign: 'center', textColor: [22, 163, 74], fontStyle: 'bold' },
+          7: { halign: 'center' },
+          8: { halign: 'center' }
         },
         didParseCell: (data) => {
           if (data.section === 'body' && data.row.index === tableData.length - 1) {

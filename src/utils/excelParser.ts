@@ -4,6 +4,7 @@ export interface ParsedGuestItem {
   name: string;
   phone: string;
   cardType: string;
+  maxGuests?: number;
   category?: string;
   tags?: string[];
   customFields?: Record<string, string>;
@@ -301,10 +302,14 @@ export const parseUniversalGuestTable = (rawMatrix: (string | number)[][]): Pars
       cardType = 'FAMILY';
     } else if (combinedCardStr.includes('MEZA') || combinedCardStr.includes('TABLE')) {
       cardType = 'TABLE';
+    } else if (combinedCardStr.includes('WAKWE')) {
+      cardType = 'WAKWE';
+    } else if (combinedCardStr.includes('UNCLASSIFIED')) {
+      cardType = 'WAKWE';
     } else if (cardTypeRaw) {
-      cardType = cardTypeRaw.toUpperCase();
+      cardType = cardTypeRaw.toUpperCase() === 'UNCLASSIFIED' ? 'WAKWE' : cardTypeRaw.toUpperCase();
     } else if (categoryVal) {
-      cardType = categoryVal.toUpperCase();
+      cardType = categoryVal.toUpperCase() === 'UNCLASSIFIED' ? 'WAKWE' : categoryVal.toUpperCase();
     }
 
     const pledgeAmount = pledgeCol !== -1 ? parseAmountValue(row[pledgeCol]) : 0;

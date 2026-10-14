@@ -113,6 +113,8 @@ export default function GuestInvitePage({ guest, event, settings, viewMode: prop
   const [tablesList, setTablesList] = useState<TableData[]>([]);
   const [loadingTables, setLoadingTables] = useState<boolean>(false);
 
+  const effectiveCardType = (!guest.cardType || guest.cardType.toUpperCase().trim() === 'UNCLASSIFIED') ? 'WAKWE' : guest.cardType;
+
   useEffect(() => {
     const canvas = document.createElement('canvas');
     const scaleFactor = 3;
@@ -124,16 +126,16 @@ export default function GuestInvitePage({ guest, event, settings, viewMode: prop
         event, 
         settings, 
         guest.name.toUpperCase(), 
-        guest.cardType, 
+        effectiveCardType, 
         guest.code ? `EVENTCARD-${guest.code}` : `EVENTCARD-${guest.id}`,
         () => {
             setCardImageUrl(canvas.toDataURL('image/jpeg', 0.95));
         }
     );
-  }, [guest, event, settings]);
+  }, [guest, event, settings, effectiveCardType]);
 
   // Plus-one limits verification calculation
-  const allowedMaxGuests = guest.maxGuests || (guest.cardType === 'DOUBLE' ? 2 : (guest.cardType === 'TABLE' ? 10 : 1));
+  const allowedMaxGuests = guest.maxGuests || (effectiveCardType === 'DOUBLE' ? 2 : (effectiveCardType === 'TABLE' ? 10 : (effectiveCardType === 'WAKWE' ? (guest.maxGuests || 2) : 1)));
 
   // Load tables whenever user enters the "Atahudhuria" (Attending) RSVP state or enables preview map
   useEffect(() => {
@@ -155,7 +157,7 @@ export default function GuestInvitePage({ guest, event, settings, viewMode: prop
     setRsvpUpdating(true);
     setRsvpFeedback(null);
 
-    const finalCount = status === 'Atahudhuria' ? (explicitCount !== undefined ? explicitCount : rsvpGuestsCount) : 0;
+    const finalCount = explicitCount !== undefined ? explicitCount : (guest.rsvpGuestsCount || guest.maxGuests || (guest.cardType === 'DOUBLE' || guest.cardType === 'COUPLE' || guest.cardType === 'WAKWE' ? 2 : 1));
     const finalTable = status === 'Atahudhuria' ? (explicitTable !== undefined ? explicitTable : selectedTable) : '';
 
     // Frontend Plus-One capacity verification safety check
@@ -536,7 +538,7 @@ export default function GuestInvitePage({ guest, event, settings, viewMode: prop
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-neutral-400 font-bold uppercase tracking-wider">{isEn ? "🎟️ Card Type" : "🎫 Aina ya Kadi"}</span>
                       <span className="bg-amber-500/10 text-amber-400 font-extrabold px-3 py-1 rounded-lg text-[10px] tracking-wide uppercase border border-amber-500/20">
-                        {guest.cardType}
+                        {effectiveCardType}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
@@ -780,7 +782,7 @@ export default function GuestInvitePage({ guest, event, settings, viewMode: prop
                 </div>
 
                 <button 
-                  onClick={() => performRsvpUpdate('Hatahudhuria', 0)}
+                  onClick={() => performRsvpUpdate('Hatahudhuria', guest.rsvpGuestsCount || guest.maxGuests || (guest.cardType === 'DOUBLE' || guest.cardType === 'COUPLE' || guest.cardType === 'WAKWE' ? 2 : 1))}
                   disabled={rsvpUpdating}
                   className="w-full py-4 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl transition active:scale-95 disabled:opacity-50 text-[13px] cursor-pointer flex items-center justify-center gap-2 shadow-lg"
                 >

@@ -145,7 +145,8 @@ export function drawCardToCanvas(
       const badgeX = (cardTypeX / 100) * w;
       const badgeY = (cardTypeY / 100) * h;
       
-      const badgeText = cardType.toUpperCase();
+      const rawText = (cardType || '').toUpperCase().trim();
+      const badgeText = (!rawText || rawText === 'UNCLASSIFIED') ? 'WAKWE' : rawText;
       ctx.font = `bold ${(cardTypeSize || 13) * scale}px "${settings.fontFamily || 'Inter'}", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

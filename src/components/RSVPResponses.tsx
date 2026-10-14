@@ -140,9 +140,18 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
   const attendingSingle = attendingGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const attendingDouble = attendingGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
-  const declinedGuests = guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Hatahudhuria');
+  const declinedGuests = guests.filter(g => {
+    const norm = normalizeRsvpStatus(g.rsvpStatus);
+    const status = (g.rsvpStatus || '').toLowerCase();
+    return norm === 'Hatahudhuria' || 
+           status.includes('hatahudhuria') || 
+           status.includes('declined') || 
+           status.includes('sitakuja') || 
+           status.includes('hapana') ||
+           status === 'no';
+  });
   const countDeclined = declinedGuests.length;
-  const countDeclinedPax = declinedGuests.reduce((acc, current) => acc + (current.cardType === 'DOUBLE' || current.cardType === 'COUPLE' ? 2 : 1), 0);
+  const countDeclinedPax = declinedGuests.reduce((acc, current) => acc + (current.rsvpGuestsCount || ((current.cardType === 'DOUBLE' || current.cardType === 'COUPLE') ? 2 : 1)), 0);
   const declinedSingle = declinedGuests.filter(g => !g.cardType || g.cardType === 'SINGLE').length;
   const declinedDouble = declinedGuests.filter(g => g.cardType === 'DOUBLE' || g.cardType === 'COUPLE').length;
 
@@ -201,7 +210,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
         return {
           ...g,
           rsvpStatus: simStatus as any,
-          rsvpGuestsCount: simStatus === 'Hatahudhuria' ? 0 : simCompanions,
+          rsvpGuestsCount: simCompanions,
           rsvpComment: simComment ? simComment.trim() : undefined,
           rsvpUpdatedAt: nowIso,
           rsvpSeen: false
@@ -222,7 +231,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
           guestId: selectedSimGuestId,
           phone: guestObj.phone,
           rsvpStatus: simStatus,
-          rsvpGuestsCount: simStatus === 'Hatahudhuria' ? 0 : simCompanions,
+          rsvpGuestsCount: simCompanions,
           rsvpComment: simComment ? simComment.trim() : ""
         })
       }).catch(err => console.warn("Simulator RSVP update error:", err));
@@ -234,9 +243,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
     const targetGuest = guests.find(g => g.id === guestId);
     const updated = guests.map(g => {
       if (g.id === guestId) {
-        const count = newStatus === 'Atahudhuria' 
-          ? (g.rsvpGuestsCount || (g.cardType === 'DOUBLE' ? 2 : 1))
-          : (newStatus === 'Hatahudhuria' ? 0 : g.rsvpGuestsCount);
+        const count = g.rsvpGuestsCount || (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1);
         return {
           ...g,
           rsvpStatus: newStatus as any,
@@ -285,7 +292,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
       return {
         ...g,
         rsvpStatus: statuses[idx % statusLength()],
-        rsvpGuestsCount: isDeclined ? 0 : (g.cardType === 'DOUBLE' ? 2 : 1),
+        rsvpGuestsCount: g.rsvpGuestsCount || (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1),
         rsvpComment: comments[idx % commentLength()],
         rsvpUpdatedAt: nowIso,
         rsvpSeen: false
@@ -319,9 +326,15 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
     const norm = normalizeRsvpStatus(g.rsvpStatus);
     const matchStatus = filterRsvpStatus === 'ALL' || 
                         (filterRsvpStatus === 'BADO' && norm === 'Bado') ||
+                        (filterRsvpStatus === 'Atahudhuria' && norm === 'Atahudhuria') ||
+                        (filterRsvpStatus === 'Hatahudhuria' && norm === 'Hatahudhuria') ||
+                        (filterRsvpStatus === 'Labda' && norm === 'Labda') ||
                         norm === filterRsvpStatus;
 
-    const matchCardType = filterCardType === 'ALL' || g.cardType === filterCardType;
+    const guestCardType = (!g.cardType || g.cardType.toUpperCase().trim() === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType;
+    const matchCardType = filterCardType === 'ALL' || 
+                          guestCardType === filterCardType ||
+                          (filterCardType === 'WAKWE' && (g.cardType === 'UNCLASSIFIED' || g.cardType === 'WAKWE'));
 
     return matchSearch && matchStatus && matchCardType;
   });
@@ -700,7 +713,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
               className="w-full border border-white/10 bg-[#050b18] px-3.5 py-2.5 rounded-xl text-white focus:outline-none font-bold text-xs cursor-pointer"
             >
               <option value="ALL">{isEn ? 'All Categories' : 'Kundi Lote (All Categories)'}</option>
-              {Array.from(new Set(guests.map(g => g.cardType).filter(Boolean))).map(type => (
+              {Array.from(new Set(guests.map(g => (!g.cardType || g.cardType.toUpperCase().trim() === 'UNCLASSIFIED' ? 'WAKWE' : g.cardType)).filter(Boolean))).map(type => (
                 <option key={type} value={type}>{type}</option>
               ))}
             </select>
@@ -765,10 +778,10 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
             <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 custom-scrollbar">
               {[
                 { id: 'ALL', label: isEn ? 'All' : 'Wote', count: guests.length },
-                { id: 'Atahudhuria', label: isEn ? 'Attending' : 'Wanakuja', count: guests.filter(g => g.rsvpStatus === 'Atahudhuria').length, color: 'text-emerald-400 bg-emerald-500/10' },
-                { id: 'Hatahudhuria', label: isEn ? 'Declined' : 'Hawaji', count: countDeclined, color: 'text-rose-400 bg-rose-500/10' },
-                { id: 'Labda', label: isEn ? 'Maybe' : 'Labda', count: countMaybe, color: 'text-amber-400 bg-amber-500/10' },
-                { id: 'BADO', label: isEn ? 'Pending' : 'Bado', count: countNotResponded, color: 'text-slate-300 bg-white/10' },
+                { id: 'Atahudhuria', label: isEn ? 'Attending' : 'Wanakuja', count: guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Atahudhuria').length, color: 'text-emerald-400 bg-emerald-500/10' },
+                { id: 'Hatahudhuria', label: isEn ? 'Declined' : 'Hawaji', count: guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Hatahudhuria').length, color: 'text-rose-400 bg-rose-500/10' },
+                { id: 'Labda', label: isEn ? 'Maybe' : 'Labda', count: guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Labda').length, color: 'text-amber-400 bg-amber-500/10' },
+                { id: 'BADO', label: isEn ? 'Pending' : 'Bado', count: guests.filter(g => normalizeRsvpStatus(g.rsvpStatus) === 'Bado').length, color: 'text-slate-300 bg-white/10' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -808,6 +821,8 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
                   </div>
                 </th>
                 <th className="px-5 py-3 whitespace-nowrap">{isEn ? 'Phone' : 'Mawasiliano (Phone)'}</th>
+                <th className="px-5 py-3 text-center whitespace-nowrap">{isEn ? 'Card Type' : 'Aina ya Kadi'}</th>
+                <th className="px-5 py-3 text-center whitespace-nowrap text-amber-300">{isEn ? 'Max Guests' : 'Upeo (Max)'}</th>
                 <th 
                   className="px-5 py-3 text-center cursor-pointer select-none hover:text-white transition-colors whitespace-nowrap"
                   onClick={() => handleSort('rsvpStatus')}
@@ -829,7 +844,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
             <tbody className="divide-y divide-white/5 text-white">
               {sortedGuests.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-10 text-slate-400 font-sans">
+                  <td colSpan={8} className="text-center py-10 text-slate-400 font-sans">
                     {isEn ? 'No guests found for RSVP tracking.' : 'Hakuna wageni waliopatikana kwa ajili ya kufuatilia RSVP.'}
                   </td>
                 </tr>
@@ -847,6 +862,25 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
                     </td>
                     <td className="px-5 py-3 font-mono text-slate-300">{g.phone}</td>
                     
+                    {/* Card Type Badge */}
+                    <td className="px-5 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
+                        g.cardType === 'DOUBLE' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                        g.cardType === 'SINGLE' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                        (g.cardType === 'WAKWE' || g.cardType === 'UNCLASSIFIED') ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
+                        'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                      }`}>
+                        {g.cardType === 'UNCLASSIFIED' ? 'WAKWE' : (g.cardType || 'WAKWE')}
+                      </span>
+                    </td>
+
+                    {/* Upeo wa Wageni (Max) */}
+                    <td className="px-5 py-3 text-center font-bold font-mono text-amber-300">
+                      <span className="bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded text-[10px]">
+                        {g.maxGuests || (g.cardType === 'DOUBLE' ? 2 : (g.cardType === 'WAKWE' ? 2 : 1))} watu
+                      </span>
+                    </td>
+
                     {/* Status Badge & Quick Change */}
                     <td className="px-5 py-3 text-center">
                       <select
@@ -867,7 +901,7 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
                     </td>
 
                     <td className="px-5 py-3 text-center font-bold font-mono text-slate-200">
-                      {g.rsvpStatus === 'Hatahudhuria' ? 0 : g.rsvpGuestsCount}
+                      {g.rsvpGuestsCount || (g.cardType === 'DOUBLE' || g.cardType === 'COUPLE' ? 2 : 1)}
                     </td>
 
                     <td className="px-5 py-3 italic text-slate-300 font-sans max-w-[200px] truncate" title={g.rsvpComment}>

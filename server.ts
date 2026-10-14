@@ -49,11 +49,14 @@ async function performSelfCleaningAndMigration(data: any) {
     const originalLen = data.guests.length;
     data.guests = data.guests.filter((g: any) => !isCorruptGuest(g));
     
-    const allowed = ['SINGLE', 'DOUBLE', 'UNCLASSIFIED'];
+    const allowed = ['SINGLE', 'DOUBLE', 'WAKWE', 'VIP', 'VVIP', 'COUPLE', 'TABLE', 'FAMILY'];
     let normalizedCount = 0;
     data.guests = data.guests.map((g: any) => {
-      const currentGroup = (g.cardType || '').toUpperCase().trim();
-      const correctGroup = allowed.includes(currentGroup) ? currentGroup : 'UNCLASSIFIED';
+      let currentGroup = (g.cardType || '').toUpperCase().trim();
+      if (currentGroup === 'UNCLASSIFIED' || !currentGroup) {
+        currentGroup = 'WAKWE';
+      }
+      const correctGroup = allowed.includes(currentGroup) ? currentGroup : currentGroup;
       if (g.cardType !== correctGroup) {
         normalizedCount++;
         return { ...g, cardType: correctGroup };

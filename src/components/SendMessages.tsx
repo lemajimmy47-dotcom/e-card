@@ -209,6 +209,7 @@ export default function SendMessages({ event, settings, guests, language, onUpda
   const [editGuestName, setEditGuestName] = useState('');
   const [editGuestPhone, setEditGuestPhone] = useState('');
   const [editGuestType, setEditGuestType] = useState('DOUBLE');
+  const [editGuestMaxGuests, setEditGuestMaxGuests] = useState<number | string>(2);
   const [editCustomCategoryInput, setEditCustomCategoryInput] = useState('');
 
   // Toggle for sending physical link in SMS (Default: false inline with visitor's preference to conserve balance)
@@ -957,7 +958,9 @@ Karibu sana!`);
     setEditingGuest(guest);
     setEditGuestName(guest.name);
     setEditGuestPhone(guest.phone);
-    setEditGuestType(['SINGLE', 'DOUBLE', 'WAKWE'].includes(guest.cardType) ? guest.cardType : 'WAKWE');
+    const initialType = (guest.cardType === 'UNCLASSIFIED' || !guest.cardType) ? 'WAKWE' : guest.cardType;
+    setEditGuestType(['SINGLE', 'DOUBLE', 'WAKWE'].includes(initialType) ? initialType : 'WAKWE');
+    setEditGuestMaxGuests(guest.maxGuests || (initialType === 'DOUBLE' ? 2 : (initialType === 'WAKWE' ? 2 : 1)));
   };
 
   const handleSaveEditGuest = (e: React.FormEvent) => {
@@ -965,13 +968,17 @@ Karibu sana!`);
     if (!editingGuest) return;
 
     const finalType = ['SINGLE', 'DOUBLE', 'WAKWE'].includes(editGuestType) ? editGuestType : 'WAKWE';
-    const rsvpCount = finalType === 'DOUBLE' ? 2 : 1;
+    const parsedMax = (editGuestMaxGuests !== '' && !isNaN(Number(editGuestMaxGuests)) && Number(editGuestMaxGuests) > 0)
+      ? Number(editGuestMaxGuests)
+      : (finalType === 'DOUBLE' ? 2 : (finalType === 'WAKWE' ? 2 : 1));
+    const rsvpCount = parsedMax;
 
     const updatedGuest: Guest = {
       ...editingGuest,
       name: editGuestName.trim(),
       phone: editGuestPhone.trim(),
       cardType: finalType,
+      maxGuests: parsedMax,
       rsvpGuestsCount: rsvpCount,
     };
 
@@ -1186,11 +1193,11 @@ Karibu sana!`);
       '{{7}}': g.code || "[Code]",
       '{7}': g.code || "[Code]",
       '{{card_number}}': g.code || "[Code]",
-      '{aina}': g.cardType || "DOUBLE",
-      '{card_type}': g.cardType || "DOUBLE",
-      '{{8}}': g.cardType || "DOUBLE",
-      '{8}': g.cardType || "DOUBLE",
-      '{{card_type}}': g.cardType || "DOUBLE",
+      '{aina}': (!g.cardType || g.cardType === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType,
+      '{card_type}': (!g.cardType || g.cardType === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType,
+      '{{8}}': (!g.cardType || g.cardType === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType,
+      '{8}': (!g.cardType || g.cardType === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType,
+      '{{card_type}}': (!g.cardType || g.cardType === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType,
       '{mwasiliano}': contacts,
       '{{contacts}}': contacts,
       '{{9}}': event.contact1Name || "",
@@ -1468,11 +1475,11 @@ Karibu sana!`);
           '{{7}}': target.code || "[Code]",
           '{7}': target.code || "[Code]",
           '{{card_number}}': target.code || "[Code]",
-          '{aina}': target.cardType || "DOUBLE",
-          '{card_type}': target.cardType || "DOUBLE",
-          '{{8}}': target.cardType || "DOUBLE",
-          '{8}': target.cardType || "DOUBLE",
-          '{{card_type}}': target.cardType || "DOUBLE",
+          '{aina}': (!target.cardType || target.cardType === 'UNCLASSIFIED') ? 'WAKWE' : target.cardType,
+          '{card_type}': (!target.cardType || target.cardType === 'UNCLASSIFIED') ? 'WAKWE' : target.cardType,
+          '{{8}}': (!target.cardType || target.cardType === 'UNCLASSIFIED') ? 'WAKWE' : target.cardType,
+          '{8}': (!target.cardType || target.cardType === 'UNCLASSIFIED') ? 'WAKWE' : target.cardType,
+          '{{card_type}}': (!target.cardType || target.cardType === 'UNCLASSIFIED') ? 'WAKWE' : target.cardType,
           '{mwasiliano}': contacts,
           '{{contacts}}': contacts,
           '{{9}}': event.contact1Name || "",
@@ -1769,11 +1776,11 @@ Karibu sana!`);
         '{{7}}': guest.code || "[Code]",
         '{7}': guest.code || "[Code]",
         '{{card_number}}': guest.code || "[Code]",
-        '{aina}': guest.cardType || "DOUBLE",
-        '{card_type}': guest.cardType || "DOUBLE",
-        '{{8}}': guest.cardType || "DOUBLE",
-        '{8}': guest.cardType || "DOUBLE",
-        '{{card_type}}': guest.cardType || "DOUBLE",
+        '{aina}': (!guest.cardType || guest.cardType === 'UNCLASSIFIED') ? 'WAKWE' : guest.cardType,
+        '{card_type}': (!guest.cardType || guest.cardType === 'UNCLASSIFIED') ? 'WAKWE' : guest.cardType,
+        '{{8}}': (!guest.cardType || guest.cardType === 'UNCLASSIFIED') ? 'WAKWE' : guest.cardType,
+        '{8}': (!guest.cardType || guest.cardType === 'UNCLASSIFIED') ? 'WAKWE' : guest.cardType,
+        '{{card_type}}': (!guest.cardType || guest.cardType === 'UNCLASSIFIED') ? 'WAKWE' : guest.cardType,
         '{mwasiliano}': contacts,
         '{{contacts}}': contacts,
         '{{9}}': event.contact1Name || "",
@@ -3570,13 +3577,35 @@ Asante - EVENT CARD`;
                     <select
                       id="edit-send-mgeni-type"
                       value={editGuestType}
-                      onChange={(e) => setEditGuestType(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditGuestType(val);
+                        if (val === 'SINGLE') setEditGuestMaxGuests(1);
+                        else if (val === 'DOUBLE') setEditGuestMaxGuests(2);
+                        else if (val === 'WAKWE') setEditGuestMaxGuests(prev => prev || 2);
+                      }}
                       className="w-full bg-[#050b18] border border-white/15 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 font-bold cursor-pointer"
                     >
                       <option value="SINGLE">SINGLE</option>
                       <option value="DOUBLE">DOUBLE</option>
                       <option value="WAKWE">WAKWE</option>
                     </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-355 block" htmlFor="edit-send-mgeni-max">
+                      {isEn ? 'MAX GUESTS (UPEO) *' : 'UPEO WA WAGENI (MAX) *'}
+                    </label>
+                    <input
+                      id="edit-send-mgeni-max"
+                      type="number"
+                      min="1"
+                      max="1000"
+                      value={editGuestMaxGuests}
+                      onChange={(e) => setEditGuestMaxGuests(e.target.value === '' ? '' : parseInt(e.target.value, 10) || 1)}
+                      placeholder="Andika upeo wa wageni (mfano 30)..."
+                      className="w-full bg-[#050b18] border border-white/15 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/40 font-bold"
+                    />
                   </div>
 
                   <div className="flex space-x-2 pt-2 border-t border-white/5">

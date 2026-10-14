@@ -19,6 +19,28 @@ export function normalizeRsvpStatus(rawStatus: any): StandardRsvpStatus {
     return 'Bado';
   }
 
+  // Negative RSVP (check first before positive because "hatahudhuria" contains "atahudhuria")
+  if (
+    str === 'hatahudhuria' ||
+    str === 'declined' ||
+    str === 'decline' ||
+    str === 'rejected' ||
+    str === 'no' ||
+    str === 'hapana' ||
+    str === 'hawaji' ||
+    str === '2' ||
+    str === 'b' ||
+    str.includes('hatahudhuria') ||
+    str.includes('hawaji') ||
+    str.includes('sitahudhuria') ||
+    str.includes('sitakuja') ||
+    str.includes('sitafika') ||
+    str.includes('siwezi') ||
+    str.includes('sitaweza')
+  ) {
+    return 'Hatahudhuria';
+  }
+
   // Positive RSVP
   if (
     str === 'atahudhuria' ||
@@ -41,26 +63,6 @@ export function normalizeRsvpStatus(rawStatus: any): StandardRsvpStatus {
     str.includes('tutahudhuria')
   ) {
     return 'Atahudhuria';
-  }
-
-  // Negative RSVP
-  if (
-    str === 'hatahudhuria' ||
-    str === 'declined' ||
-    str === 'decline' ||
-    str === 'rejected' ||
-    str === 'no' ||
-    str === 'hapana' ||
-    str === '2' ||
-    str === 'b' ||
-    str.includes('hatahudhuria') ||
-    str.includes('sitahudhuria') ||
-    str.includes('sitakuja') ||
-    str.includes('sitafika') ||
-    str.includes('siwezi') ||
-    str.includes('sitaweza')
-  ) {
-    return 'Hatahudhuria';
   }
 
   // Maybe / Tentative RSVP

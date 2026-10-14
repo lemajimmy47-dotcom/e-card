@@ -61,12 +61,13 @@ function LazyGuestCardImage({ guest, event, settings, className }: LazyGuestCard
     canvas.width = (settings.orientation === 'landscape' ? 600 : 450) * scaleFactor;
     canvas.height = (settings.orientation === 'landscape' ? 450 : 600) * scaleFactor;
     
+    const effectiveType = (!guest.cardType || guest.cardType.toUpperCase().trim() === 'UNCLASSIFIED') ? 'WAKWE' : guest.cardType;
     drawCardToCanvas(
       canvas,
       event,
       settings,
       (guest.name || '').toUpperCase(),
-      guest.cardType,
+      effectiveType,
       guest.code ? `EVENTCARD-${guest.code}` : `EVENTCARD-${guest.id}`,
       () => {
         if (active) {
@@ -107,12 +108,13 @@ const getCardImageUrlOnDemand = (g: Guest, event: EventDetails, settings: Templa
   const scaleFactor = 3;
   canvas.width = (settings.orientation === 'landscape' ? 600 : 450) * scaleFactor;
   canvas.height = (settings.orientation === 'landscape' ? 450 : 600) * scaleFactor;
+  const effectiveType = (!g.cardType || g.cardType.toUpperCase().trim() === 'UNCLASSIFIED') ? 'WAKWE' : g.cardType;
   drawCardToCanvas(
     canvas,
     event,
     settings,
     g.name.toUpperCase(),
-    g.cardType,
+    effectiveType,
     g.code ? `EVENTCARD-${g.code}` : `EVENTCARD-${g.id}`
   );
   return canvas.toDataURL('image/jpeg', 0.95);
@@ -465,19 +467,26 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
       const waStatus = detectGuestWhatsAppStatus(standardisedPhone, itemCustomFields);
       itemCustomFields.noWhatsApp = waStatus.noWhatsAppFlag;
 
-      return {
-        id,
-        eventId: event.id,
-        code: shortCode,
-        name: item.name.trim(),
-        phone: standardisedPhone,
-        cardType: item.cardType || 'DOUBLE',
-        smsStatus: 'Sijatuma',
-        whatsappStatus: 'Sijatuma',
-        rsvpStatus: 'Bado',
-        rsvpGuestsCount: item.cardType === 'DOUBLE' ? 2 : 1,
-        checkedIn: false,
-        category: item.category,
+        const rawCardType = (item.cardType || '').toUpperCase().trim();
+        const finalCardType = (rawCardType === 'UNCLASSIFIED' || !rawCardType) ? 'WAKWE' : item.cardType;
+        const parsedMaxGuests = (item.maxGuests && Number(item.maxGuests) > 0)
+          ? Number(item.maxGuests)
+          : (finalCardType === 'DOUBLE' ? 2 : (finalCardType === 'WAKWE' ? 2 : 1));
+
+        return {
+          id,
+          eventId: event.id,
+          code: shortCode,
+          name: item.name.trim(),
+          phone: standardisedPhone,
+          cardType: finalCardType,
+          smsStatus: 'Sijatuma',
+          whatsappStatus: 'Sijatuma',
+          rsvpStatus: 'Bado',
+          maxGuests: parsedMaxGuests,
+          rsvpGuestsCount: parsedMaxGuests,
+          checkedIn: false,
+          category: item.category,
         tags: itemTags,
         customFields: itemCustomFields,
         hasWhatsApp: waStatus.hasWhatsApp,
@@ -526,7 +535,10 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
 
     const standardisedPhone = standardisePhoneNumber(guestPhone);
     const finalType = ['SINGLE', 'DOUBLE', 'WAKWE'].includes(guestType) ? guestType : 'WAKWE';
-    const rsvpCount = guestMaxGuests || (finalType === 'DOUBLE' ? 2 : 1);
+    const parsedMaxGuests = (guestMaxGuests !== '' && !isNaN(Number(guestMaxGuests)) && Number(guestMaxGuests) > 0)
+      ? Number(guestMaxGuests)
+      : (finalType === 'DOUBLE' ? 2 : (finalType === 'WAKWE' ? 2 : 1));
+    const rsvpCount = parsedMaxGuests;
 
     const parsedTags = guestTags
       .split(',')
@@ -572,7 +584,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
       smsStatus: 'Sijatuma',
       whatsappStatus: 'Sijatuma',
       rsvpStatus: 'Bado',
-      maxGuests: guestMaxGuests,
+      maxGuests: parsedMaxGuests,
       rsvpGuestsCount: rsvpCount,
       checkedIn: false,
       tags: parsedTags,
@@ -643,17 +655,24 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
       const waStatus = detectGuestWhatsAppStatus(standardisedPhone, itemCustomFields);
       itemCustomFields.noWhatsApp = waStatus.noWhatsAppFlag;
 
+      const rawCardType = (item.cardType || '').toUpperCase().trim();
+      const finalCardType = (rawCardType === 'UNCLASSIFIED' || !rawCardType) ? 'WAKWE' : item.cardType;
+      const parsedMaxGuests = (item.maxGuests && Number(item.maxGuests) > 0)
+        ? Number(item.maxGuests)
+        : (finalCardType === 'DOUBLE' ? 2 : (finalCardType === 'WAKWE' ? 2 : 1));
+
       return {
         id,
         eventId: event.id,
         code: shortCode,
         name: item.name.trim(),
         phone: standardisedPhone,
-        cardType: item.cardType || 'DOUBLE',
+        cardType: finalCardType,
         smsStatus: 'Sijatuma',
         whatsappStatus: 'Sijatuma',
         rsvpStatus: 'Bado',
-        rsvpGuestsCount: item.cardType === 'DOUBLE' ? 2 : 1,
+        maxGuests: parsedMaxGuests,
+        rsvpGuestsCount: parsedMaxGuests,
         checkedIn: false,
         category: item.category,
         tags: item.tags || [],
@@ -721,12 +740,28 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     setEditingGuest(guest);
     setEditGuestName(guest.name);
     setEditGuestPhone(guest.phone);
-    setEditGuestType(['SINGLE', 'DOUBLE', 'WAKWE'].includes(guest.cardType) ? guest.cardType : 'WAKWE');
-    setEditGuestMaxGuests(guest.maxGuests || (guest.cardType === 'DOUBLE' ? 2 : 1));
+    const initialType = (guest.cardType === 'UNCLASSIFIED' || !guest.cardType) ? 'WAKWE' : guest.cardType;
+    setEditGuestType(['SINGLE', 'DOUBLE', 'WAKWE'].includes(initialType) ? initialType : 'WAKWE');
+    setEditGuestMaxGuests(guest.maxGuests || (initialType === 'DOUBLE' ? 2 : (initialType === 'WAKWE' ? 2 : 1)));
     setEditGuestTags(guest.tags ? guest.tags.join(', ') : '');
     setEditGuestTableNumber(guest.customFields?.tableNumber || '');
     setEditGuestFoodPreference(guest.customFields?.foodPreference || '');
     setEditGuestWhatsAppPreference(isEligibleWhatsAppNumber(guest.phone, guest) ? 'WA' : 'SMS_ONLY');
+  };
+
+  const handleUpdateGuestMaxGuests = (guestId: string, newMax: number | '') => {
+    const updatedList = guests.map(g => {
+      if (g.id !== guestId) return g;
+      const parsedVal = (newMax !== '' && !isNaN(Number(newMax)) && Number(newMax) > 0) ? Number(newMax) : 1;
+      return {
+        ...g,
+        maxGuests: parsedVal,
+        rsvpGuestsCount: (g.rsvpStatus === 'Atahudhuria' && g.rsvpGuestsCount && g.rsvpGuestsCount > parsedVal) 
+          ? parsedVal 
+          : (g.rsvpGuestsCount || parsedVal)
+      };
+    });
+    onUpdateGuests(updatedList, 'Amesasisha upeo wa wageni (Max guests updated)');
   };
 
   const handleSaveEditGuest = (e: React.FormEvent) => {
@@ -734,7 +769,10 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
     if (!editingGuest) return;
 
     const finalType = ['SINGLE', 'DOUBLE', 'WAKWE'].includes(editGuestType) ? editGuestType : 'WAKWE';
-    const rsvpCount = editGuestMaxGuests || (finalType === 'DOUBLE' ? 2 : 1);
+    const parsedMaxGuests = (editGuestMaxGuests !== '' && !isNaN(Number(editGuestMaxGuests)) && Number(editGuestMaxGuests) > 0)
+      ? Number(editGuestMaxGuests)
+      : (finalType === 'DOUBLE' ? 2 : (finalType === 'WAKWE' ? 2 : 1));
+    const rsvpCount = parsedMaxGuests;
     const standardisedPhone = standardisePhoneNumber(editGuestPhone);
 
     const parsedTags = editGuestTags
@@ -775,7 +813,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
       name: editGuestName.trim(),
       phone: standardisedPhone,
       cardType: finalType,
-      maxGuests: editGuestMaxGuests,
+      maxGuests: parsedMaxGuests,
       rsvpGuestsCount: rsvpCount,
       tags: parsedTags,
       customFields: customFieldsObj,
@@ -1701,6 +1739,9 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                     )}
                   </div>
                 </th>
+                <th className="px-5 py-3 text-center text-amber-300 font-black">
+                  {isEn ? 'Max Guests' : 'Upeo wa Wageni (Max)'}
+                </th>
                 <th 
                   className="px-5 py-3 text-center cursor-pointer select-none hover:text-white transition-colors"
                   onClick={() => handleSort('rsvpStatus')}
@@ -1720,7 +1761,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
             <tbody className="divide-y divide-white/5 text-white">
               {sortedGuests.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400 font-sans">
+                  <td colSpan={8} className="text-center py-10 text-slate-400 font-sans">
                     {searchTerm 
                       ? (isEn ? `No guests found matching "${searchTerm}". Try another search.` : `Hakuna mgeni aliyepatikana kwa jina au namba "${searchTerm}". Jaribu neno jingine.`)
                       : (isEn ? "No guests found. Upload or add guests first to begin!" : "Hakuna mgeni aliyepatikana. Pakia au ongeza wageni kwanza kuanza!")}
@@ -1829,10 +1870,30 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
                         guest.cardType === 'DOUBLE' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
                         guest.cardType === 'SINGLE' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                        (guest.cardType === 'WAKWE' || guest.cardType === 'UNCLASSIFIED') ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
                         'bg-slate-500/10 text-slate-400 border-slate-500/20'
                       }`}>
-                        {guest.cardType}
+                        {guest.cardType === 'UNCLASSIFIED' ? 'WAKWE' : (guest.cardType || 'WAKWE')}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <div className="inline-flex items-center justify-center gap-1.5 bg-white/5 border border-white/10 hover:border-amber-400/50 focus-within:border-amber-400 rounded-xl px-2 py-1 transition group">
+                        <input
+                          type="number"
+                          min="1"
+                          max="500"
+                          value={guest.maxGuests || (guest.cardType === 'DOUBLE' ? 2 : (guest.cardType === 'WAKWE' ? 2 : 1))}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10) || 1);
+                            handleUpdateGuestMaxGuests(guest.id, val);
+                          }}
+                          className="w-12 bg-transparent text-center font-mono font-extrabold text-amber-300 text-xs focus:outline-none"
+                          title={isEn ? "Edit maximum guests allowed directly" : "Andika upeo wa wageni (max) moja kwa moja hapa"}
+                        />
+                        <span className="text-[9.5px] text-slate-400 font-mono select-none">
+                          {isEn ? "pax" : "watu"}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-center">
                       <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold border inline-flex items-center space-x-1 ${
@@ -2056,7 +2117,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                         setGuestType(val);
                         if (val === 'SINGLE') setGuestMaxGuests(1);
                         else if (val === 'DOUBLE') setGuestMaxGuests(2);
-                        else if (val === 'WAKWE') setGuestMaxGuests('');
+                        else if (val === 'WAKWE') setGuestMaxGuests(prev => prev || 2);
                       }}
                       className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none font-bold cursor-pointer"
                     >
@@ -2071,13 +2132,13 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       id="input-mgeni-single-max"
                       type="number" 
                       min="1"
-                      max="100"
+                      max="1000"
                       value={guestMaxGuests}
                       onChange={(e) => {
                         const val = e.target.value;
-                        setGuestMaxGuests(val === '' ? '' : parseInt(val) || 1);
+                        setGuestMaxGuests(val === '' ? '' : parseInt(val, 10) || 1);
                       }}
-                      placeholder={guestType === 'WAKWE' ? "Andika idadi..." : ""}
+                      placeholder="Andika upeo wa wageni (mfano 30)..."
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 font-bold"
                     />
                   </div>
@@ -2661,9 +2722,10 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                                 <span className={`px-1.5 py-0.2 rounded-full font-bold text-[8.5px] border ${
                                   g.cardType === 'DOUBLE' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
                                   g.cardType === 'SINGLE' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                                  (g.cardType === 'WAKWE' || g.cardType === 'UNCLASSIFIED') ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' :
                                   'bg-slate-500/10 text-slate-400 border-slate-500/20'
                                 }`}>
-                                  {g.cardType} {g.maxGuests && g.maxGuests > 1 ? `(Max: ${g.maxGuests})` : ''}
+                                  {g.cardType === 'UNCLASSIFIED' ? 'WAKWE' : (g.cardType || 'WAKWE')} {g.maxGuests && g.maxGuests > 1 ? `(Max: ${g.maxGuests})` : ''}
                                 </span>
                               </div>
                             </div>
@@ -2729,7 +2791,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                               KADI {activeIndex + 1} kati ya {items.length}
                             </span>
                             <h4 className="text-sm font-bold text-white uppercase mt-1">{activeGuest.name}</h4>
-                            <p className="text-[10px] text-slate-400 font-mono">CODE: {activeGuest.code} | AINA: {activeGuest.cardType} | SIMU: {activeGuest.phone}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">CODE: {activeGuest.code} | AINA: {activeGuest.cardType === 'UNCLASSIFIED' ? 'WAKWE' : (activeGuest.cardType || 'WAKWE')} {activeGuest.maxGuests ? `(UPEO: ${activeGuest.maxGuests})` : ''} | SIMU: {activeGuest.phone}</p>
                           </div>
                           
                           {/* Action for Carousel Slider active item */}
@@ -2883,7 +2945,7 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                         setEditGuestType(val);
                         if (val === 'SINGLE') setEditGuestMaxGuests(1);
                         else if (val === 'DOUBLE') setEditGuestMaxGuests(2);
-                        else if (val === 'WAKWE') setEditGuestMaxGuests('');
+                        else if (val === 'WAKWE') setEditGuestMaxGuests(prev => prev || 2);
                       }}
                       className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none font-bold cursor-pointer"
                     >
@@ -2898,13 +2960,13 @@ export default function UploadGuests({ event, settings, guests, onUpdateGuests, 
                       id="edit-mgeni-max"
                       type="number" 
                       min="1"
-                      max="100"
+                      max="1000"
                       value={editGuestMaxGuests}
                       onChange={(e) => {
                         const val = e.target.value;
-                        setEditGuestMaxGuests(val === '' ? '' : parseInt(val) || 1);
+                        setEditGuestMaxGuests(val === '' ? '' : parseInt(val, 10) || 1);
                       }}
-                      placeholder={editGuestType === 'WAKWE' ? "Andika idadi..." : ""}
+                      placeholder="Andika upeo wa wageni (mfano 30)..."
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 font-bold"
                     />
                   </div>
