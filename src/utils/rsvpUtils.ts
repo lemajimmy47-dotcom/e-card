@@ -19,7 +19,7 @@ export function normalizeRsvpStatus(rawStatus: any): StandardRsvpStatus {
     return 'Bado';
   }
 
-  // Negative RSVP (check first before positive because "hatahudhuria" contains "atahudhuria")
+  // Negative RSVP (check first before positive because words contain positive substrings like "kuja")
   if (
     str === 'hatahudhuria' ||
     str === 'declined' ||
@@ -31,12 +31,24 @@ export function normalizeRsvpStatus(rawStatus: any): StandardRsvpStatus {
     str === '2' ||
     str === 'b' ||
     str.includes('hatahudhuria') ||
+    str.includes('hatakuja') ||
+    str.includes('hatafika') ||
+    str.includes('hatakuwepo') ||
+    str.includes('hawezi') ||
+    str.includes('hataweza') ||
     str.includes('hawaji') ||
+    str.includes('hawafiki') ||
+    str.includes('hawatakuja') ||
+    str.includes('waliokataa') ||
     str.includes('sitahudhuria') ||
     str.includes('sitakuja') ||
     str.includes('sitafika') ||
     str.includes('siwezi') ||
-    str.includes('sitaweza')
+    str.includes('sitaweza') ||
+    str.includes('stakuja') ||
+    str.includes('stafika') ||
+    str.includes('siji') ||
+    str.includes('hatuji')
   ) {
     return 'Hatahudhuria';
   }
@@ -107,6 +119,7 @@ export function parseRsvpFromText(rawText: string, cardType: string = 'SINGLE'):
   // Negative Indicators (Must be evaluated first to catch "Sitahudhuria", "Siwezi kufika", "Samahani niko safarini")
   const negativePatterns = [
     'sitahudhuria', 'sintahudhuria', 'sitohudhuria', 'stahudhuria', 'hatahudhuria', 'hatutahudhuria',
+    'hatakuja', 'hatafika', 'hatakuwepo', 'hawezi', 'hataweza', 'hawaji', 'hawafiki', 'hawatakuja', 'waliokataa',
     'sitakuja', 'stakuja', 'siji', 'hatuji', 'hatutakuja', 'sitafika', 'stafika', 'sitofika',
     'siwezi', 'sitaweza', 'sintaweza', 'sitoweza', 'sitafanikiwa', 'nisingeweza', 'singewahi',
     'sitawahi', 'sitakuwepo', 'stakuwepo', 'sintakuwepo', 'sitowepo', 'hapana', 'samahani sita',
