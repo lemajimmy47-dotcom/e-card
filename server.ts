@@ -3533,6 +3533,7 @@ async function startServer() {
   app.use(cors());
 
   app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   // API Ping & Health check for Uptime Robot of choice to keep the backend & database awake 24/7
   // Handles both GET and HEAD requests seamlessly
