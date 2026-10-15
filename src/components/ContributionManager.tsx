@@ -1513,7 +1513,9 @@ export default function ContributionManager({
         } else {
           pledgeText = isEn ? `AMOUNT: TZS ${(g.pledgeAmount || 0).toLocaleString()}` : `KIASI: TZS ${(g.pledgeAmount || 0).toLocaleString()}`;
         }
-        const compatibleImageUrl = await generateContributionCardImage(event, cardTemplate, g, pledgeText, isEn);
+        const compatibleImageUrl = sendingChannel.toLowerCase() === 'whatsapp'
+          ? await generateContributionCardImage(event, cardTemplate, g, pledgeText, isEn)
+          : "";
         const res = await fetch('/api/send-sms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2310,7 +2312,9 @@ export default function ContributionManager({
         } else {
           pledgeText = isEn ? `AMOUNT: TZS ${(g.pledgeAmount || 0).toLocaleString()}` : `KIASI: TZS ${(g.pledgeAmount || 0).toLocaleString()}`;
         }
-        const compatibleImageUrl = await generateContributionCardImage(event, cardTemplate, g, pledgeText, isEn);
+        const compatibleImageUrl = targetChannel.toLowerCase() === 'whatsapp'
+          ? await generateContributionCardImage(event, cardTemplate, g, pledgeText, isEn)
+          : "";
         const res = await fetch('/api/send-sms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

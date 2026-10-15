@@ -28,17 +28,24 @@ export function normalizeRsvpStatus(rawStatus: any): StandardRsvpStatus {
     str === 'no' ||
     str === 'hapana' ||
     str === 'hawaji' ||
+    str === 'haji' ||
+    str === 'wasiokuja' ||
     str === '2' ||
     str === 'b' ||
     str.includes('hatahudhuria') ||
+    str.includes('haji') ||
+    str.includes('hawaji') ||
     str.includes('hatakuja') ||
     str.includes('hatafika') ||
     str.includes('hatakuwepo') ||
+    str.includes('hatawepo') ||
+    str.includes('hawatakuwepo') ||
     str.includes('hawezi') ||
     str.includes('hataweza') ||
-    str.includes('hawaji') ||
     str.includes('hawafiki') ||
     str.includes('hawatakuja') ||
+    str.includes('wasiokuja') ||
+    str.includes('wasio kuja') ||
     str.includes('waliokataa') ||
     str.includes('sitahudhuria') ||
     str.includes('sitakuja') ||
@@ -48,7 +55,10 @@ export function normalizeRsvpStatus(rawStatus: any): StandardRsvpStatus {
     str.includes('stakuja') ||
     str.includes('stafika') ||
     str.includes('siji') ||
-    str.includes('hatuji')
+    str.includes('hatuji') ||
+    str.includes('hatatokea') ||
+    str.includes('hawatatokea') ||
+    str.includes('sitotokea')
   ) {
     return 'Hatahudhuria';
   }

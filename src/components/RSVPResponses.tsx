@@ -232,7 +232,8 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
           phone: guestObj.phone,
           rsvpStatus: simStatus,
           rsvpGuestsCount: simCompanions,
-          rsvpComment: simComment ? simComment.trim() : ""
+          rsvpComment: simComment ? simComment.trim() : "",
+          source: 'admin_panel'
         })
       }).catch(err => console.warn("Simulator RSVP update error:", err));
     }
@@ -270,7 +271,8 @@ export default function RSVPResponses({ event, guests, onUpdateGuests, onNext }:
           phone: targetGuest.phone,
           rsvpStatus: newStatus,
           rsvpGuestsCount: count,
-          rsvpComment: targetGuest.rsvpComment || ""
+          rsvpComment: targetGuest.rsvpComment || "",
+          source: 'admin_panel'
         })
       }).catch(err => console.warn("Quick status RSVP update error:", err));
     }

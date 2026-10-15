@@ -215,12 +215,12 @@ export async function generateContributionCardImage(
       return;
     }
     const canvas = document.createElement('canvas');
-    canvas.width = 900;
-    canvas.height = 900;
+    canvas.width = 700;
+    canvas.height = 700;
     
     drawContributionCardToCanvas(canvas, evt, tpl, guest, pledgeText, isEn, () => {
       try {
-        resolve(canvas.toDataURL('image/jpeg', 0.95));
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
       } catch (err) {
         console.error("Failed to generate contribution card image:", err);
         resolve(tpl.imageUrl || '');

@@ -1515,18 +1515,20 @@ Karibu sana!`);
       
       // Use the simulation or Gateway API
       let compatibleImageUrl = "";
-      try {
-        const qrCodeText = target.code || target.id;
-        compatibleImageUrl = await generateGuestCardImage(
-          event,
-          settings,
-          target.name,
-          target.cardType || "DOUBLE",
-          qrCodeText
-        );
-      } catch (err) {
-        console.error("Failed to generate dynamic guest card image:", err);
-        compatibleImageUrl = await convertWebPToJpeg(settings.imageUrl);
+      if (channel === 'whatsapp') {
+        try {
+          const qrCodeText = target.code || target.id;
+          compatibleImageUrl = await generateGuestCardImage(
+            event,
+            settings,
+            target.name,
+            target.cardType || "DOUBLE",
+            qrCodeText
+          );
+        } catch (err) {
+          console.error("Failed to generate dynamic guest card image:", err);
+          compatibleImageUrl = settings.imageUrl ? await convertWebPToJpeg(settings.imageUrl) : "";
+        }
       }
       const res = await fetch('/api/send-sms', {
         method: 'POST',
@@ -1665,7 +1667,7 @@ Karibu sana!`);
         : 'https://eventcard.co.tz';
       const appUrl = `${currentOrigin}/?invite=${guest.code || guest.id}&eventId=${event.id}&lang=${language}`;
 
-      let compatibleImageUrl = settings.imageUrl || "";
+      let compatibleImageUrl = "";
       if (channel === 'whatsapp') {
         try {
           const qrCodeText = guest.code || guest.id;
@@ -1678,7 +1680,7 @@ Karibu sana!`);
           );
         } catch (err) {
           console.warn(`[SendMessages] Error generating dynamic card for guest ${guest.name}:`, err);
-          compatibleImageUrl = settings.imageUrl || "";
+          compatibleImageUrl = "";
         }
       }
 
@@ -1825,43 +1827,89 @@ Karibu sana!`);
       });
 
       preparedCount++;
-      setSendingProgress(Math.round((preparedCount / pendingGuests.length) * 100));
+      setSendingProgress(Math.round((preparedCount / pendingGuests.length) * 35));
     }
 
+    if (tasks.length === 0) {
+      setIsSendingAll(false);
+      setSendingProgress(100);
+      showToast(isEn ? "No valid tasks to send." : "Hakuna kazi yoyote ya kutuma.", "info");
+      return;
+    }
+
+    const BATCH_SIZE = channel === 'whatsapp' ? 5 : 20;
+
     if (sendMethod === 'direct') {
-      setSendLogs(prev => [`[INFO] Inatuma mialiko ${tasks.length} papo hapo (Njia ya Uwalemi)...`, ...prev]);
+      const totalBatches = Math.ceil(tasks.length / BATCH_SIZE);
+      setSendLogs(prev => [`[INFO] Inatuma mialiko ${tasks.length} kwa mafungu ${totalBatches} (Njia ya Moja kwa Moja)...`, ...prev]);
+      
+      let totalDelivered = 0;
+      let totalFailed = 0;
+      let latestUpdatedGuests: any[] | null = null;
+      let anyErrorOccurred = false;
+
       try {
-        const directRes = await fetch('/api/queue/send-direct', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            eventId: event.id,
-            channel: channel,
-            tasks: tasks
-          })
-        });
+        for (let b = 0; b < tasks.length; b += BATCH_SIZE) {
+          const batchNum = Math.floor(b / BATCH_SIZE) + 1;
+          const chunk = tasks.slice(b, b + BATCH_SIZE);
+          
+          setSendLogs(prev => [`[INFO] Inatuma fungu ${batchNum}/${totalBatches} (Wageni ${chunk.length})...`, ...prev]);
 
-        const responseText = await directRes.text();
-        let responseData: any = {};
-        try {
-          responseData = JSON.parse(responseText);
-        } catch (parseErr) {
-          throw new Error(`Mwitikio wa Server sio wa JSON (Status: ${directRes.status} ${directRes.statusText}).`);
-        }
+          try {
+            const directRes = await fetch('/api/queue/send-direct', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                eventId: event.id,
+                channel: channel,
+                tasks: chunk
+              })
+            });
 
-        if (!directRes.ok) {
-          throw new Error(responseData.error || responseData.message || "Utumaji wa moja kwa moja umeshindwa.");
-        }
+            const responseText = await directRes.text();
+            let responseData: any = {};
+            try {
+              responseData = JSON.parse(responseText);
+            } catch (parseErr) {
+              if (directRes.status === 413) {
+                throw new Error(`Data ya fungu ${batchNum} imezidi ukubwa unaoruhusiwa (Status: 413 Payload Too Large).`);
+              }
+              throw new Error(`Mwitikio wa Server sio wa JSON (Status: ${directRes.status} ${directRes.statusText || 'Hitilafu'}).`);
+            }
 
-        // Add all success and failed logs from the server
-        if (responseData.logs && Array.isArray(responseData.logs)) {
-          setSendLogs(prev => [...responseData.logs.slice().reverse(), ...prev]);
+            if (!directRes.ok) {
+              throw new Error(responseData.error || responseData.message || `Fungu ${batchNum} limeshindwa kutumwa.`);
+            }
+
+            totalDelivered += (typeof responseData.deliveredCount === 'number' ? responseData.deliveredCount : chunk.length);
+            totalFailed += (typeof responseData.failedCount === 'number' ? responseData.failedCount : 0);
+
+            if (responseData.logs && Array.isArray(responseData.logs)) {
+              setSendLogs(prev => [...responseData.logs.slice().reverse(), ...prev]);
+            }
+
+            if (Array.isArray(responseData.updatedGuests)) {
+              latestUpdatedGuests = responseData.updatedGuests;
+            }
+
+            const currentSent = Math.min(b + BATCH_SIZE, tasks.length);
+            setSendingProgress(35 + Math.round((currentSent / tasks.length) * 65));
+          } catch (batchErr: any) {
+            anyErrorOccurred = true;
+            console.error(`Direct Send Batch ${batchNum} Failed:`, batchErr);
+            totalFailed += chunk.length;
+            setSendLogs(prev => [`[ERROR] Fungu ${batchNum}/${totalBatches} limeshindwa: ${batchErr.message}`, ...prev]);
+          }
+
+          // Small delay between batches to ensure network buffer drain
+          if (b + BATCH_SIZE < tasks.length) {
+            await new Promise(r => setTimeout(r, 200));
+          }
         }
 
         // Sync guest list from server's updatedGuests or /api/guests without regressing local state
-        const freshGuests = Array.isArray(responseData.updatedGuests) ? responseData.updatedGuests : null;
-        if (freshGuests && onUpdateGuests) {
-          onUpdateGuests(freshGuests, "Marekebisho baada ya utumaji wa moja kwa moja", true);
+        if (latestUpdatedGuests && onUpdateGuests) {
+          onUpdateGuests(latestUpdatedGuests, "Marekebisho baada ya utumaji wa moja kwa moja", true);
         } else if (onUpdateGuests) {
           fetch('/api/guests')
             .then(r => r.json())
@@ -1875,13 +1923,13 @@ Karibu sana!`);
 
         showToast(
           isEn 
-            ? `Successfully sent to ${responseData.deliveredCount} guests. Failed for ${responseData.failedCount} guests.` 
-            : `Ujumbe umetumwa kikamilifu kwa wageni ${responseData.deliveredCount}. Imeshindwa kwa wageni ${responseData.failedCount}.`, 
-          'success'
+            ? `Successfully sent to ${totalDelivered} guests. Failed for ${totalFailed} guests.` 
+            : `Ujumbe umetumwa: ${totalDelivered} wamepokea kikamilifu, ${totalFailed} wameshindikana.`, 
+          totalDelivered > 0 ? 'success' : 'error'
         );
       } catch (err: any) {
-        console.error("Direct Send Failed:", err);
-        showToast("Imeshindwa kutuma moja kwa moja: " + err.message, "error");
+        console.error("Direct Send Overall Failed:", err);
+        showToast("Hitilafu wakati wa utumaji: " + err.message, "error");
         setSendLogs(prev => [`[ERROR] Hitilafu ya utumaji: ${err.message}`, ...prev]);
       } finally {
         setIsSendingAll(false);
@@ -1890,33 +1938,56 @@ Karibu sana!`);
       return;
     }
 
-    setSendLogs(prev => [`[INFO] Inatuma mialiko ${tasks.length} kwenye Foleni ya Server...`, ...prev]);
- 
+    // Queue method: send in chunks of BATCH_SIZE
+    const totalQueueBatches = Math.ceil(tasks.length / BATCH_SIZE);
+    setSendLogs(prev => [`[INFO] Inatuma mialiko ${tasks.length} kwenye Foleni ya Server kwa mafungu ${totalQueueBatches}...`, ...prev]);
+
+    let createdJobId = '';
     try {
-      const queueRes = await fetch('/api/queue/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventId: event.id,
-          channel: channel,
-          tasks: tasks
-        })
-      });
+      for (let b = 0; b < tasks.length; b += BATCH_SIZE) {
+        const batchNum = Math.floor(b / BATCH_SIZE) + 1;
+        const chunk = tasks.slice(b, b + BATCH_SIZE);
 
-      const responseText = await queueRes.text();
-      let responseData: any = {};
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (parseErr) {
-        throw new Error(`Mwitikio wa Server sio wa JSON (Status: ${queueRes.status} ${queueRes.statusText}).`);
-      }
+        const queueRes = await fetch('/api/queue/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId: event.id,
+            channel: channel,
+            tasks: chunk,
+            jobId: createdJobId || undefined
+          })
+        });
 
-      if (!queueRes.ok) {
-        throw new Error(responseData.error || responseData.message || "Mchakato wa kujiunga na foleni umeshindwa.");
+        const responseText = await queueRes.text();
+        let responseData: any = {};
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (parseErr) {
+          if (queueRes.status === 413) {
+            throw new Error(`Data ya fungu ${batchNum} imezidi ukubwa wa seva (Status: 413 Payload Too Large).`);
+          }
+          throw new Error(`Mwitikio wa Server sio wa JSON (Status: ${queueRes.status} ${queueRes.statusText || 'Hitilafu'}).`);
+        }
+
+        if (!queueRes.ok) {
+          throw new Error(responseData.error || responseData.message || `Mchakato wa kujiunga na foleni umeshindwa kwa fungu ${batchNum}.`);
+        }
+
+        if (responseData.job?.id) {
+          createdJobId = responseData.job.id;
+        }
+
+        const currentEnqueued = Math.min(b + BATCH_SIZE, tasks.length);
+        setSendingProgress(35 + Math.round((currentEnqueued / tasks.length) * 65));
+
+        if (b + BATCH_SIZE < tasks.length) {
+          await new Promise(r => setTimeout(r, 150));
+        }
       }
 
       setSendLogs(prev => [
-        `[SUCCESS] ✓ Kazi imeanza kutekelezwa background! ID ya kazi: ${responseData.job?.id}`,
+        `[SUCCESS] ✓ Kazi imeanza kutekelezwa background! ID ya kazi: ${createdJobId}`,
         `[INFO] Unaweza kuendelea kutumia mfumo au kufunga kivinjari na utumaji utaendelea background.`,
         ...prev
       ]);

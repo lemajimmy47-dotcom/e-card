@@ -483,17 +483,24 @@ function normalizeRsvpStatusServer(rawStatus: any): 'Atahudhuria' | 'Hatahudhuri
     str === 'no' ||
     str === 'hapana' ||
     str === 'hawaji' ||
+    str === 'haji' ||
+    str === 'wasiokuja' ||
     str === '2' ||
     str === 'b' ||
     str.includes('hatahudhuria') ||
+    str.includes('haji') ||
+    str.includes('hawaji') ||
     str.includes('hatakuja') ||
     str.includes('hatafika') ||
     str.includes('hatakuwepo') ||
+    str.includes('hatawepo') ||
+    str.includes('hawatakuwepo') ||
     str.includes('hawezi') ||
     str.includes('hataweza') ||
-    str.includes('hawaji') ||
     str.includes('hawafiki') ||
     str.includes('hawatakuja') ||
+    str.includes('wasiokuja') ||
+    str.includes('wasio kuja') ||
     str.includes('waliokataa') ||
     str.includes('sitahudhuria') ||
     str.includes('sitakuja') ||
@@ -503,7 +510,10 @@ function normalizeRsvpStatusServer(rawStatus: any): 'Atahudhuria' | 'Hatahudhuri
     str.includes('stakuja') ||
     str.includes('stafika') ||
     str.includes('siji') ||
-    str.includes('hatuji')
+    str.includes('hatuji') ||
+    str.includes('hatatokea') ||
+    str.includes('hawatatokea') ||
+    str.includes('sitotokea')
   ) {
     return 'Hatahudhuria';
   }
@@ -518,7 +528,6 @@ function normalizeRsvpStatusServer(rawStatus: any): 'Atahudhuria' | 'Hatahudhuri
     str === 'ndio' ||
     str === 'ndiyo' ||
     str === 'naam' ||
-    str === 'sawa' ||
     str === 'accepted' ||
     str === '1' ||
     str === 'a' ||
@@ -567,7 +576,8 @@ function parseRsvpFromTextServer(rawText: string, cardType: string = 'SINGLE'): 
     'sitawahi', 'sitakuwepo', 'stakuwepo', 'sintakuwepo', 'sitowepo', 'hapana', 'samahani sita',
     'poleni sita', 'udhuru', 'dharura', 'safarini', 'safari', 'sitaweza kufika', 'sitaweza kuja',
     'siwezi fika', 'siwezi kuja', 'kazi nyingi', 'nje ya mji', 'nje ya nchi', 'wagonjwa', 'mgonjwa',
-    'msiba', 'no', 'declined', 'reject', 'cannot attend', 'wont make it', 'unable to attend'
+    'msiba', 'no', 'declined', 'reject', 'cannot attend', 'wont make it', 'unable to attend',
+    'haji', 'hawaji', 'wasiokuja', 'wasio kuja', 'hatawepo', 'hawatakuwepo', 'hatatokea', 'hawatatokea'
   ];
 
   let isNegative = false;
@@ -579,21 +589,24 @@ function parseRsvpFromTextServer(rawText: string, cardType: string = 'SINGLE'): 
   }
 
   const positivePatterns = [
-    'ndio', 'ndiyo', 'naam', 'yes', 'nitakuja', 'ntakuja', 'nakuja', 'tutakuja', 'tutafika',
+    'nitakuja', 'ntakuja', 'tutakuja', 'tutafika',
     'nitahudhuria', 'ntahudhuria', 'tutahudhuria', 'nitafika', 'ntafika', 'nitawepo', 'ntawepo',
-    'tutawepo', 'nitakuwepo', 'ntakuwepo', 'tutakuwepo', 'nitaweza', 'tutaweza', 'nitafanikiwa',
-    'tutafanikiwa', 'pamoja', 'nipo', 'niko', 'tupo', 'tuko', 'sawa', 'kuja', 'naja', 'hakika nitakuja',
-    'mungu akipenda nitakuja', 'inshallah nitafika', 'mungu akijaalia', 'mungu akipenda', 'inshaallah',
-    'confirmed', 'attending', 'will attend', 'count me in', 'will be there', 'i will come', 'we will come',
+    'tutawepo', 'nitakuwepo', 'ntakuwepo', 'tutakuwepo', 'nitaweza kufika', 'tutaweza kufika',
+    'hakika nitakuja', 'mungu akipenda nitakuja', 'inshallah nitafika', 'mungu akijaalia nitafika',
+    'confirmed', 'will attend', 'count me in', 'will be there', 'i will come', 'we will come',
     'nimepokea mwaliko na nitakuja', 'asante kwa mwaliko nitafika', 'shukrani nitakuwepo'
   ];
 
   let isPositive = false;
   if (!isNegative) {
-    for (const pattern of positivePatterns) {
-      if (lowerText === '1' || lowerText === 'a' || lowerText === 'ok' || lowerText.includes(pattern)) {
-        isPositive = true;
-        break;
+    if (lowerText === '1' || lowerText === 'a' || lowerText === 'ndio' || lowerText === 'ndiyo' || lowerText === 'yes' || lowerText === 'naam') {
+      isPositive = true;
+    } else {
+      for (const pattern of positivePatterns) {
+        if (lowerText.includes(pattern)) {
+          isPositive = true;
+          break;
+        }
       }
     }
   }
@@ -1338,8 +1351,10 @@ Ujumbe wa Mgeni: "${textBody}"
 MWONGOZO MUHIMU:
 - Jibu kwa Kiswahili kirafiki, kwa heshima na ukarimu.
 - MARUFUKU KUTAJA AU KUTANGAZA LENGO KUU LA MICHANGO YA SHEREHE ("Lengo la michango")! Usiseme kabisa "Lengo la michango ni TZS X".
-- Kama ujumbe wa mgeni unaonyesha nia au mrejesho wa kuhudhuria au kutokuhudhuria (RSVP), mpe uthibitisho wa joto na weka mwishoni kabisa mwa jibu lako (kwenye mstari mpya pekee):
-  [RSVP_DETECTED: Atahudhuria|Hatahudhuria|Labda | PAX: 1..10]
+- MUHIMU KUHUSU MAHUDHURIO (RSVP):
+  Hali ya sasa ya RSVP ya mgeni huyu ni: "${matchedGuest ? (matchedGuest.rsvpStatus || 'Bado') : 'Bado'}".
+  1. Kama mgeni amerekodiwa kama 'Hatahudhuria' (Haji / Udhuru) na kwenye ujumbe wake mpya HAJASEMA KWA UWAZI kuwa amebadili maamuzi na sasa anakuja, USISEME wala USIWEKE [RSVP_DETECTED: Atahudhuria]! Heshimu uamuzi wake uliopo.
+  2. Weka tag ya [RSVP_DETECTED: Atahudhuria|Hatahudhuria|Labda | PAX: 1..10] PEKEE pale mgeni anapothibitisha kwa uwazi nia yake au kubadili maamuzi (mfano akisema wazi 'nitakuja' au 'sitakuja'). Usiweke tag hii kwa maongezi ya kawaida, maswali ya ukumbi au salam.
 - Kama mgeni anauliza kuhusu ukumbi/mahali/ramani/location, mpe jina la ukumbi (${venueName})${venueLocation ? `, mahali ulipo ukumbi (${venueLocation})` : ''} na umpe na kiungo cha Google Maps Pin: ${mapsPinUrl}
 - Kama mgeni hajaweka ahadi bado (Ahadi = TZS 0) na anauliza kuhusu ahadi/mchango wake au anataka kuweka ahadi: Mueleze kwa upendo kwamba hajaweka ahadi kwenye mfumo bado, na umwombe aandike kiasi anachopenda kuahidi (mfano 'Naahidi 100,000' au '100000') na kiasi hicho kitaingia moja kwa moja kwenye mfumo!
 - Kama mgeni anauliza kuhusu ahadi yake, mchango wake, au salio lake:
@@ -1355,38 +1370,46 @@ MWONGOZO MUHIMU:
         const rsvpAiMatch = rawAiText.match(/\[RSVP_DETECTED:\s*(Atahudhuria|Hatahudhuria|Labda)(?:\s*\|\s*PAX:\s*(\d{1,2}))?\]/i);
         if (rsvpAiMatch && matchedGuest) {
           const detectedAiStatus = rsvpAiMatch[1] as 'Atahudhuria' | 'Hatahudhuria' | 'Labda';
-          const detectedAiPax = rsvpAiMatch[2] ? parseInt(rsvpAiMatch[2], 10) : (detectedAiStatus === 'Atahudhuria' ? (matchedGuest.cardType === 'DOUBLE' || matchedGuest.cardType === 'COUPLE' ? 2 : 1) : 0);
-          
-          const previousStatus = normalizeRsvpStatusServer(matchedGuest.rsvpStatus);
-          const previousPax = Number(matchedGuest.rsvpGuestsCount) || (matchedGuest.cardType === 'DOUBLE' || matchedGuest.cardType === 'COUPLE' ? 2 : 1);
+          const currentNorm = normalizeRsvpStatusServer(matchedGuest.rsvpStatus);
 
-          matchedGuest.rsvpStatus = detectedAiStatus;
-          matchedGuest.rsvpGuestsCount = detectedAiPax;
-          matchedGuest.rsvpComment = textBody;
-          matchedGuest.rsvpUpdatedAt = new Date().toISOString();
-          matchedGuest.rsvpSeen = false;
+          // If guest was already 'Hatahudhuria', only change to 'Atahudhuria' if the text contains explicit positive phrases
+          const lowerUserMsg = textBody.toLowerCase();
+          const hasExplicitPositiveWords = lowerUserMsg.includes('nitakuja') || lowerUserMsg.includes('nitahudhuria') || lowerUserMsg.includes('tutakuja') || lowerUserMsg.includes('tutafika') || lowerUserMsg.includes('nimebadili');
+          const shouldApplyRsvp = !(currentNorm === 'Hatahudhuria' && detectedAiStatus === 'Atahudhuria' && !hasExplicitPositiveWords);
 
-          const gIdx = guests.findIndex((g: any) => String(g.id) === String(matchedGuest.id));
-          if (gIdx !== -1) {
-            guests[gIdx] = matchedGuest;
-            db.guests = guests;
+          if (shouldApplyRsvp) {
+            const detectedAiPax = rsvpAiMatch[2] ? parseInt(rsvpAiMatch[2], 10) : (detectedAiStatus === 'Atahudhuria' ? (matchedGuest.cardType === 'DOUBLE' || matchedGuest.cardType === 'COUPLE' ? 2 : 1) : 0);
+            
+            const previousStatus = currentNorm;
+            const previousPax = Number(matchedGuest.rsvpGuestsCount) || (matchedGuest.cardType === 'DOUBLE' || matchedGuest.cardType === 'COUPLE' ? 2 : 1);
+
+            matchedGuest.rsvpStatus = detectedAiStatus;
+            matchedGuest.rsvpGuestsCount = detectedAiPax;
+            matchedGuest.rsvpComment = textBody;
+            matchedGuest.rsvpUpdatedAt = new Date().toISOString();
+            matchedGuest.rsvpSeen = false;
+
+            const gIdx = guests.findIndex((g: any) => String(g.id) === String(matchedGuest.id));
+            if (gIdx !== -1) {
+              guests[gIdx] = matchedGuest;
+              db.guests = guests;
+            }
+            databaseUpdated = true;
+
+            notifyAdminAndGuestOnRSVPChange({
+              guest: matchedGuest,
+              previousStatus,
+              newStatus: detectedAiStatus,
+              previousGuestsCount: previousPax,
+              newGuestsCount: detectedAiPax,
+              rsvpComment: textBody,
+              tableNumber: matchedGuest.customFields?.tableNumber || matchedGuest.tableNumber,
+              db,
+              source: 'whatsapp_chatbot'
+            }).catch(err => console.error("[AI RSVP Alert Error]:", err));
           }
-          databaseUpdated = true;
-
           // Strip the tag from the final WhatsApp message
           rawAiText = rawAiText.replace(/\[RSVP_DETECTED:[^\]]+\]/gi, '').trim();
-
-          notifyAdminAndGuestOnRSVPChange({
-            guest: matchedGuest,
-            previousStatus,
-            newStatus: detectedAiStatus,
-            previousGuestsCount: previousPax,
-            newGuestsCount: detectedAiPax,
-            rsvpComment: textBody,
-            tableNumber: matchedGuest.customFields?.tableNumber || matchedGuest.tableNumber,
-            db,
-            source: 'whatsapp_chatbot'
-          }).catch(err => console.error("[AI RSVP Alert Error]:", err));
         }
 
         botReply = rawAiText;
@@ -3535,6 +3558,19 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+  // Return clean JSON instead of HTML if payload exceeds limit or bad JSON is sent
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+      return res.status(413).json({
+        error: "Mzigo wa data umezidi ukubwa (Payload Too Large). Mfumo sasa unatuma kwa mafungu madogo kiotomatiki."
+      });
+    }
+    if (err instanceof SyntaxError && 'body' in err) {
+      return res.status(400).json({ error: "Data ya JSON iliyotumwa si sahihi." });
+    }
+    next(err);
+  });
+
   // API Ping & Health check for Uptime Robot of choice to keep the backend & database awake 24/7
   // Handles both GET and HEAD requests seamlessly
   app.all("/api/ping", async (req, res) => {
@@ -5438,7 +5474,7 @@ Lema, Nguvu Moja!`;
   // API 4: RSVP response submission endpoint
   app.post("/api/rsvp-update", async (req, res) => {
     try {
-      const { guestId, code, phone, token, rsvpStatus: rawStatus, rsvpGuestsCount, rsvpComment, tableNumber, eventId } = req.body;
+      const { guestId, code, phone, token, rsvpStatus: rawStatus, rsvpGuestsCount, rsvpComment, tableNumber, eventId, source } = req.body;
       const searchTarget = guestId || code || phone || token;
       if (!searchTarget) {
         return res.status(400).json({ error: "Missing guestId or code" });
@@ -5496,7 +5532,7 @@ Lema, Nguvu Moja!`;
         rsvpComment: updatedGuestAfter.rsvpComment,
         tableNumber: finalTable,
         db,
-        source: 'web_portal'
+        source: source || 'web_portal'
       }).then(async () => {
         try {
           await writeDB(db);
@@ -6856,7 +6892,7 @@ Lema, Nguvu Moja!`;
   // Queue Endpoints
   app.post("/api/queue/create", async (req, res) => {
     try {
-      const { eventId, channel, tasks } = req.body;
+      const { eventId, channel, tasks, jobId } = req.body;
       if (!channel || !tasks || !Array.isArray(tasks)) {
         return res.status(400).json({ error: "Missing required parameters (channel, tasks)" });
       }
@@ -6898,6 +6934,30 @@ Lema, Nguvu Moja!`;
         });
       }
 
+      const mappedTasks = activeTasks.map((t: any) => ({
+        guestId: t.guestId,
+        phone: t.phone,
+        text: t.text,
+        templateParams: t.templateParams,
+        templateName: t.templateName,
+        imageUrl: t.imageUrl,
+        lang: t.lang || "sw",
+        messageType: t.messageType || "invitation",
+        status: 'pending'
+      }));
+
+      // If appending to an existing job in this batch series
+      if (jobId) {
+        const existingJob = db.queueJobs.find((j: any) => j && j.id === jobId);
+        if (existingJob) {
+          existingJob.tasks = (existingJob.tasks || []).concat(mappedTasks);
+          existingJob.total = existingJob.tasks.length;
+          await writeDB(db);
+          processQueueJobs();
+          return res.json({ success: true, job: existingJob });
+        }
+      }
+
       const initialLogs = [`[${new Date().toLocaleTimeString()}] Kazi imeongezwa kwenye foleni ya kutuma (Queue). Jumla ya ujumbe: ${activeTasks.length}`];
       if (excludedNoWaCount > 0) {
         initialLogs.push(`[${new Date().toLocaleTimeString()}] ℹ️ Wageni ${excludedNoWaCount} ambao hawana WhatsApp wametengwa kiotomatiki na hawajawekwa kwenye foleni ya WhatsApp.`);
@@ -6911,17 +6971,7 @@ Lema, Nguvu Moja!`;
         total: activeTasks.length,
         processed: 0,
         created_at: new Date().toISOString(),
-        tasks: activeTasks.map((t: any) => ({
-          guestId: t.guestId,
-          phone: t.phone,
-          text: t.text,
-          templateParams: t.templateParams,
-          templateName: t.templateName,
-          imageUrl: t.imageUrl,
-          lang: t.lang || "sw",
-          messageType: t.messageType || "invitation",
-          status: 'pending'
-        })),
+        tasks: mappedTasks,
         logs: initialLogs
       };
 

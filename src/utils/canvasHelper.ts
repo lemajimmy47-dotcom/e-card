@@ -377,8 +377,8 @@ export async function generateGuestCardImage(
   return new Promise((resolve) => {
     const canvas = document.createElement('canvas');
     const isLandscape = settings.orientation === 'landscape';
-    canvas.width = isLandscape ? 1200 : 900;
-    canvas.height = isLandscape ? 900 : 1200;
+    canvas.width = isLandscape ? 800 : 600;
+    canvas.height = isLandscape ? 600 : 800;
 
     let resolved = false;
     const timeout = setTimeout(() => {
@@ -402,7 +402,7 @@ export async function generateGuestCardImage(
             resolved = true;
             clearTimeout(timeout);
             try {
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
               resolve(dataUrl);
             } catch (e) {
               console.error("[canvasHelper] Error exporting canvas to dataUrl", e);
