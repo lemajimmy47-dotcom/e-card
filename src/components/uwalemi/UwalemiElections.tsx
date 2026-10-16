@@ -39,8 +39,17 @@ import {
   Share2,
   ChevronRight,
   Sparkles,
-  Info
+  Info,
+  Download,
+  Eye,
+  X
 } from 'lucide-react';
+import { 
+  loadUwalemiLogoAsBase64,
+  generateElectionResultsPDF,
+  downloadPdfDocument,
+  getPdfBlobUrl
+} from '../../services/uwalemiPdfGenerator';
 
 interface Props {
   state: UwalemiState;
@@ -103,6 +112,16 @@ export const UwalemiElections: React.FC<Props> = ({
 
   // Individual SMS sending states
   const [sendingIndividualSmsToken, setSendingIndividualSmsToken] = useState<string | null>(null);
+
+  // PDF Export & Interactive Preview States
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [isPrintingReport, setIsPrintingReport] = useState<boolean>(false);
+  const [previewPdfModal, setPreviewPdfModal] = useState<{
+    isOpen: boolean;
+    url: string;
+    title: string;
+    fileName: string;
+  } | null>(null);
 
   // Add candidate form
   const [candMemberId, setCandMemberId] = useState<string>('');
@@ -509,25 +528,37 @@ export const UwalemiElections: React.FC<Props> = ({
     }
   };
 
-  // Print/Export Results Report
-  const handlePrintResults = () => {
+  // Print/Export Official Results Report with Logo & Watermark
+  const handlePrintResults = async () => {
     if (!activeElection || !tallyData) {
       alert("Hakuna matokeo ya kupakua kwa sasa.");
       return;
     }
 
+    setIsPrintingReport(true);
+    let logoB64 = '';
+    try {
+      logoB64 = await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
+    } catch (e) {
+      console.warn("Could not load logo as base64 for report:", e);
+    }
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert("Tafadhali ruhusu Popups (pop-up blocker) kwenye kivinjari chako ili kupakua ripoti.");
+      setIsPrintingReport(false);
       return;
     }
 
     const groupName = state.groupSettings?.groupName || "UWALEMI";
-    const slogan = state.groupSettings?.slogan || "Lema, Nguvu Moja.";
+    const slogan = state.groupSettings?.slogan && !state.groupSettings.slogan.includes('Shida na Raha')
+      ? state.groupSettings.slogan
+      : "Lema, Nguvu Moja.";
     const title = activeElection.title || "Uchaguzi wa Viongozi";
     const term = activeElection.termYears ? `${activeElection.termYears} (Miaka ${activeElection.termYears})` : "-";
     const dateStr = new Date().toLocaleDateString('sw-TZ', { dateStyle: 'long' });
     const timeStr = new Date().toLocaleTimeString('sw-TZ', { timeStyle: 'short' });
+    const logoSrc = logoB64 || state.groupSettings?.logoUrl || '/uwalemi_logo.png';
 
     let positionsHtml = '';
     tallyData.positionsTally.forEach((pos: any) => {
@@ -535,12 +566,15 @@ export const UwalemiElections: React.FC<Props> = ({
       pos.results.forEach((cand: any, idx: number) => {
         candidatesHtml += `
           <tr style="border-bottom: 1px solid #e2e8f0;">
-            <td style="padding: 10px; font-weight: bold;">${idx + 1}</td>
-            <td style="padding: 10px;">${cand.candidateName} <span style="color: #64748b; font-family: monospace;">(${cand.candidateNo})</span></td>
-            <td style="padding: 10px; text-align: center; font-weight: bold; font-family: monospace;">${cand.votesCount}</td>
-            <td style="padding: 10px; text-align: right; font-weight: bold; font-family: monospace; color: #0f766e;">${cand.percentage}%</td>
+            <td style="padding: 10px; font-weight: bold; text-align: center;">${idx + 1}</td>
+            <td style="padding: 10px;">
+              <span style="font-weight: 700; color: #0f172a;">${cand.candidateName}</span> 
+              <span style="color: #64748b; font-family: monospace; font-size: 11px;">(${cand.candidateNo})</span>
+            </td>
+            <td style="padding: 10px; text-align: center; font-weight: bold; font-family: monospace; font-size: 14px;">${cand.votesCount}</td>
+            <td style="padding: 10px; text-align: right; font-weight: bold; font-family: monospace; color: #0f766e; font-size: 13px;">${cand.percentage}%</td>
             <td style="padding: 10px; text-align: center;">
-              ${cand.isWinner ? '<span style="background-color: #d1fae5; color: #065f46; padding: 3px 12px; border-radius: 9999px; font-size: 11px; font-weight: bold; display: inline-block;">Mshindi ✓</span>' : cand.isTie ? '<span style="background-color: #fef3c7; color: #92400e; padding: 3px 12px; border-radius: 9999px; font-size: 11px; font-weight: bold; display: inline-block;">Sare ⚠</span>' : '-'}
+              ${cand.isWinner ? '<span style="background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; padding: 3px 12px; border-radius: 9999px; font-size: 11px; font-weight: bold; display: inline-block;">Mshindi ✓</span>' : cand.isTie ? '<span style="background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; padding: 3px 12px; border-radius: 9999px; font-size: 11px; font-weight: bold; display: inline-block;">Sare ⚠</span>' : '<span style="color: #94a3b8;">-</span>'}
             </td>
           </tr>
         `;
@@ -548,21 +582,22 @@ export const UwalemiElections: React.FC<Props> = ({
 
       positionsHtml += `
         <div style="margin-top: 25px; page-break-inside: avoid;">
-          <h3 style="background-color: #f1f5f9; padding: 10px 14px; margin-bottom: 10px; border-left: 4px solid #0f766e; color: #1e293b; font-size: 15px; font-weight: bold;">
-            ${pos.positionTitle} (Wanaohitajika: ${pos.maxWinners})
+          <h3 style="background-color: #f1f5f9; padding: 10px 14px; margin-bottom: 10px; border-left: 4px solid #0f766e; color: #0f172a; font-size: 14px; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+            <span>${pos.positionTitle.toUpperCase()}</span>
+            <span style="font-size: 11px; font-weight: normal; color: #475569;">Nafasi Zinazotakiwa: <strong>${pos.maxWinners}</strong> | Jumla: <strong>${pos.totalVotesForPosition}</strong> Kura</span>
           </h3>
           <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">
             <thead>
-              <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; color: #475569; font-weight: bold;">
-                <th style="padding: 10px; text-align: left; width: 50px;">Namba</th>
-                <th style="padding: 10px; text-align: left;">Mgombea</th>
-                <th style="padding: 10px; text-align: center; width: 100px;">Jumla ya Kura</th>
+              <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; color: #475569; font-weight: bold; font-size: 12px; text-transform: uppercase;">
+                <th style="padding: 10px; text-align: center; width: 45px;">#</th>
+                <th style="padding: 10px; text-align: left;">Jina la Mgombea</th>
+                <th style="padding: 10px; text-align: center; width: 110px;">Jumla ya Kura</th>
                 <th style="padding: 10px; text-align: right; width: 100px;">Asilimia (%)</th>
-                <th style="padding: 10px; text-align: center; width: 120px;">Matokeo / Hali</th>
+                <th style="padding: 10px; text-align: center; width: 130px;">Hali ya Matokeo</th>
               </tr>
             </thead>
             <tbody>
-              ${candidatesHtml}
+              ${candidatesHtml || '<tr><td colspan="5" style="text-align: center; padding: 14px; color: #94a3b8;">Hakuna wagombea walioteuliwa</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -580,28 +615,30 @@ export const UwalemiElections: React.FC<Props> = ({
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             color: #334155;
             line-height: 1.5;
-            padding: 30px;
+            padding: 25px;
             background-color: #f8fafc;
           }
           .report-container {
             border: 2px solid #0f766e;
-            padding: 40px;
-            border-radius: 4px;
-            background-color: white;
+            padding: 35px 40px;
+            border-radius: 8px;
+            background-color: #ffffff;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-            max-width: 800px;
+            max-width: 820px;
             margin: 0 auto;
+            position: relative;
+            overflow: hidden;
           }
           .stats-grid {
             display: flex;
             gap: 15px;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
           }
           .stat-card {
             flex: 1;
             border: 1px solid #e2e8f0;
-            padding: 15px;
-            border-radius: 6px;
+            padding: 14px;
+            border-radius: 8px;
             text-align: center;
             background-color: #f8fafc;
           }
@@ -613,10 +650,10 @@ export const UwalemiElections: React.FC<Props> = ({
         </style>
       </head>
       <body>
-        <div class="no-print" style="background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 15px; border-radius: 12px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin-left: auto; margin-right: auto; box-sizing: border-box;">
+        <div class="no-print" style="background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 14px 20px; border-radius: 12px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; max-width: 820px; margin-left: auto; margin-right: auto; box-sizing: border-box;">
           <div>
-            <h4 style="margin: 0; color: #0f766e; font-size: 15px; font-weight: bold;">Kihakiki Ripoti ya Matokeo</h4>
-            <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">Huu ni mwonekano safi wa kuchapa PDF. Bonyeza kitufe kilicho kulia kuhifadhi kama PDF.</p>
+            <h4 style="margin: 0; color: #0f766e; font-size: 15px; font-weight: bold;">Kihakiki Ripoti Rasmi ya Matokeo</h4>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">Huu ni mwonekano rasmi wa kuchapa au kuhifadhi kama PDF ukiwa na nembo ya ${groupName}.</p>
           </div>
           <button onclick="window.print()" style="background-color: #0f766e; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; transition: background-color 0.2s;">
             Chapa / Hifadhi kama PDF
@@ -624,53 +661,85 @@ export const UwalemiElections: React.FC<Props> = ({
         </div>
 
         <div class="report-container">
-          <!-- Offical Crest Header -->
-          <div style="text-align: center; border-bottom: 3px double #0f766e; padding-bottom: 15px; margin-bottom: 25px;">
-            <h1 style="margin: 0; font-size: 26px; letter-spacing: 1px; color: #0f766e; text-transform: uppercase; font-weight: bold;">${groupName}</h1>
-            <p style="margin: 4px 0; font-size: 12px; font-style: italic; color: #64748b; font-weight: bold;">"${slogan}"</p>
-            <div style="margin-top: 15px; font-weight: bold; font-size: 16px; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">
-              TAARIFA RASMI YA MATOKEO YA UCHAGUZI WA VIONGOZI
-            </div>
-            <p style="margin: 6px 0 0 0; font-size: 13px; color: #475569;">
-              <strong>Uchaguzi:</strong> ${title} • <strong>Kipindi:</strong> ${term}
-            </p>
+          <!-- Subtle Center Security Watermark Logo -->
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.045; pointer-events: none; z-index: 0; width: 440px; height: 440px;">
+            <img src="${logoSrc}" alt="Watermark" style="width: 100%; height: 100%; object-fit: contain;" />
           </div>
 
-          <!-- Statistics Cards Grid -->
-          <div class="stats-grid">
-            <div class="stat-card">
-              <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; tracking-wider">Daftari la Wapiga Kura</p>
-              <h2 style="margin: 5px 0 0 0; font-size: 24px; color: #1e293b; font-family: monospace; font-weight: bold;">${tallyData.totalEligibleVoters}</h2>
-            </div>
-            <div class="stat-card">
-              <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; tracking-wider">Kura Zilizopigwa</p>
-              <h2 style="margin: 5px 0 0 0; font-size: 24px; color: #0f766e; font-family: monospace; font-weight: bold;">${tallyData.totalBallotsCast}</h2>
-            </div>
-            <div class="stat-card">
-              <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; tracking-wider">Asilimia ya Ushiriki</p>
-              <h2 style="margin: 5px 0 0 0; font-size: 24px; color: #0d9488; font-family: monospace; font-weight: bold;">${tallyData.turnoutPercentage}%</h2>
-            </div>
-          </div>
+          <div style="position: relative; z-index: 1;">
+            <!-- Top Emerald Stripe -->
+            <div style="height: 6px; background: linear-gradient(90deg, #059669, #0d9488, #10b981); border-radius: 4px 4px 0 0; margin: -35px -40px 22px -40px;"></div>
 
-          <!-- Position breakdown -->
-          ${positionsHtml}
-
-          <!-- Declaration / Verification Sign-off -->
-          <div style="margin-top: 50px; border-top: 1px dashed #cbd5e1; padding-top: 25px; page-break-inside: avoid;">
-            <p style="font-size: 12px; color: #475569; font-style: italic; text-align: center;">
-              Taarifa hii imetolewa na kujumuishwa kiotomatiki kwa usahihi wa 100% kupitia Mfumo wa Kidijitali wa ${groupName} tarehe ${dateStr} saa ${timeStr}.
-            </p>
-            
-            <div style="display: flex; justify-content: space-between; margin-top: 45px; font-size: 13px;">
-              <div style="width: 250px; text-align: center;">
-                <div style="border-bottom: 1px solid #94a3b8; height: 40px; margin-bottom: 5px;"></div>
-                <strong>Msimamizi wa Uchaguzi</strong>
-                <p style="margin: 3px 0 0 0; font-size: 11px; color: #64748b;">Sahihi na Tarehe</p>
+            <!-- Official Crest Header with Logo (Matching Other Reports) -->
+            <div style="text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 18px; margin-bottom: 25px;">
+              <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px;">
+                <div style="width: 80px; height: 80px; border-radius: 50%; padding: 3px; background: linear-gradient(135deg, #059669, #0d9488, #0284c7); box-shadow: 0 4px 10px rgba(15, 118, 110, 0.25); display: flex; align-items: center; justify-content: center;">
+                  <img 
+                    src="${logoSrc}" 
+                    alt="${groupName} Logo" 
+                    style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; background: #ffffff;"
+                  />
+                </div>
               </div>
-              <div style="width: 250px; text-align: center;">
-                <div style="border-bottom: 1px solid #94a3b8; height: 40px; margin-bottom: 5px;"></div>
-                <strong>Katibu wa Kamati</strong>
-                <p style="margin: 3px 0 0 0; font-size: 11px; color: #64748b;">Sahihi na Tarehe</p>
+              <h1 style="margin: 0; font-size: 24px; letter-spacing: 1.5px; color: #0f766e; text-transform: uppercase; font-weight: 900;">${groupName}</h1>
+              <p style="margin: 4px 0; font-size: 13px; font-style: italic; color: #475569; font-weight: 600;">"${slogan}"</p>
+              <p style="margin: 2px 0 12px 0; font-size: 10px; font-weight: bold; color: #059669; letter-spacing: 1.5px; text-transform: uppercase;">CHAMA CHA KIJAMII CHA KUSAIDIANA NA KUSTAWISHANA</p>
+
+              <div style="display: inline-block; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-left: 4px solid #0f766e; padding: 8px 22px; border-radius: 6px;">
+                <div style="font-weight: 900; font-size: 14px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">
+                  TAARIFA RASMI YA MATOKEO YA UCHAGUZI WA VIONGOZI
+                </div>
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: #475569;">
+                  <strong>Uchaguzi:</strong> ${title} • <strong>Kipindi cha Uongozi:</strong> ${term} • <strong>Tarehe:</strong> ${dateStr}
+                </p>
+              </div>
+            </div>
+
+            <!-- Statistics Cards Grid -->
+            <div class="stats-grid">
+              <div class="stat-card">
+                <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; letter-spacing: 0.5px;">Daftari la Wapiga Kura</p>
+                <h2 style="margin: 5px 0 0 0; font-size: 22px; color: #1e293b; font-family: monospace; font-weight: bold;">${tallyData.totalEligibleVoters}</h2>
+                <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Wanachama wenye sifa</p>
+              </div>
+              <div class="stat-card">
+                <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; letter-spacing: 0.5px;">Kura Zilizopigwa</p>
+                <h2 style="margin: 5px 0 0 0; font-size: 22px; color: #0f766e; font-family: monospace; font-weight: bold;">${tallyData.totalBallotsCast}</h2>
+                <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Kura zilizorekodiwa</p>
+              </div>
+              <div class="stat-card">
+                <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; letter-spacing: 0.5px;">Asilimia ya Ushiriki</p>
+                <h2 style="margin: 5px 0 0 0; font-size: 22px; color: #0d9488; font-family: monospace; font-weight: bold;">${tallyData.turnoutPercentage}%</h2>
+                <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Kiwango cha ushiriki</p>
+              </div>
+            </div>
+
+            <!-- Position breakdown -->
+            ${positionsHtml}
+
+            <!-- Declaration / Verification Sign-off -->
+            <div style="margin-top: 45px; border-top: 1px dashed #cbd5e1; padding-top: 25px; page-break-inside: avoid;">
+              <p style="font-size: 12px; color: #475569; font-style: italic; text-align: center;">
+                Taarifa hii imetolewa na kuthibitishwa rasmi kupitia Mfumo wa Kidijitali wa ${groupName} tarehe ${dateStr} saa ${timeStr}.
+              </p>
+
+              <div style="display: flex; justify-content: space-between; margin-top: 40px; font-size: 13px;">
+                <div style="width: 250px; text-align: center;">
+                  <div style="border-bottom: 1px solid #94a3b8; height: 35px; margin-bottom: 5px;"></div>
+                  <strong>Msimamizi wa Uchaguzi</strong>
+                  <p style="margin: 3px 0 0 0; font-size: 11px; color: #64748b;">Sahihi na Tarehe</p>
+                </div>
+                <div style="width: 250px; text-align: center;">
+                  <div style="border-bottom: 1px solid #94a3b8; height: 35px; margin-bottom: 5px;"></div>
+                  <strong>Katibu wa Kamati ya Uchaguzi</strong>
+                  <p style="margin: 3px 0 0 0; font-size: 11px; color: #64748b;">Sahihi na Tarehe</p>
+                </div>
+              </div>
+
+              <div style="text-align: center; margin-top: 25px;">
+                <span style="display: inline-block; border: 2px solid #0f766e; color: #0f766e; font-size: 11px; font-weight: bold; padding: 4px 16px; border-radius: 4px; letter-spacing: 1px; text-transform: uppercase;">
+                  ✓ IMETHIBITISHWA NA KAMATI YA UCHAGUZI YA ${groupName}
+                </span>
               </div>
             </div>
           </div>
@@ -689,6 +758,52 @@ export const UwalemiElections: React.FC<Props> = ({
 
     printWindow.document.write(reportHtml);
     printWindow.document.close();
+    setIsPrintingReport(false);
+  };
+
+  // Download PDF Results
+  const handleDownloadPDFResults = async () => {
+    if (!activeElection || !tallyData) {
+      alert("Hakuna matokeo ya kupakua kwa sasa.");
+      return;
+    }
+    setIsExportingPdf(true);
+    try {
+      const logoB64 = await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
+      const doc = generateElectionResultsPDF(state, activeElection.id, logoB64);
+      const safeTitle = (activeElection.title || 'Matokeo_ya_Uchaguzi').replace(/\s+/g, '_');
+      const fileName = `UWALEMI_${safeTitle}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      downloadPdfDocument(doc, fileName);
+    } catch (err: any) {
+      console.error(err);
+      alert('Hitilafu katika kutengeneza PDF ya matokeo: ' + (err?.message || ''));
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  // Interactive PDF Preview Modal
+  const handlePreviewPDFResults = async () => {
+    if (!activeElection || !tallyData) {
+      alert("Hakuna matokeo ya kupakua kwa sasa.");
+      return;
+    }
+    try {
+      const logoB64 = await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
+      const doc = generateElectionResultsPDF(state, activeElection.id, logoB64);
+      const safeTitle = (activeElection.title || 'Matokeo_ya_Uchaguzi').replace(/\s+/g, '_');
+      const fileName = `UWALEMI_${safeTitle}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      const blobUrl = getPdfBlobUrl(doc);
+      setPreviewPdfModal({
+        isOpen: true,
+        url: blobUrl,
+        title: `Taarifa Rasmi ya Matokeo: ${activeElection.title || 'Uchaguzi'}`,
+        fileName
+      });
+    } catch (err: any) {
+      console.error(err);
+      alert('Hitilafu katika kufungua muonekano wa PDF: ' + (err?.message || ''));
+    }
   };
 
   // Filtered voters
@@ -942,6 +1057,33 @@ export const UwalemiElections: React.FC<Props> = ({
           {/* SUB-TAB 1: LIVE TALLY & RESULTS */}
           {subTab === 'tally' && (
             <div className="space-y-6">
+              {/* Official Letterhead Banner with Emblem Logo */}
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 text-center relative overflow-hidden backdrop-blur-md">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-full p-0.5 bg-gradient-to-tr from-emerald-500 via-blue-500 to-teal-400 shadow-xl shadow-emerald-950/60 mb-2.5 flex items-center justify-center">
+                  <img 
+                    src={state.groupSettings?.logoUrl || '/uwalemi_logo.png'} 
+                    alt="UWALEMI Emblem" 
+                    className="w-full h-full object-cover rounded-full bg-slate-950 border border-slate-900"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase">
+                  {state.groupSettings?.groupName || 'UWALEMI'}
+                </h3>
+                <p className="text-xs text-slate-400 italic">
+                  "{state.groupSettings?.slogan && !state.groupSettings.slogan.includes('Shida na Raha') ? state.groupSettings.slogan : 'Lema, Nguvu Moja.'}"
+                </p>
+
+                <div className="mt-3 inline-block bg-slate-800/90 px-4 py-1.5 rounded-full border border-slate-700">
+                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">
+                    TAARIFA RASMI YA MATOKEO YA UCHAGUZI WA VIONGOZI
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Uchaguzi: <strong className="text-slate-200">{activeElection.title}</strong> • Kipindi cha Uongozi: <strong className="text-slate-200">{activeElection.termYears || '-'}</strong>
+                </p>
+              </div>
+
               {/* Turnout Stats Card */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
@@ -975,8 +1117,8 @@ export const UwalemiElections: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Print / Export Action */}
-              <div className="flex items-center justify-between">
+              {/* Print / Export Actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-white">
                     Matokeo ya Kila Nafasi ya Uongozi
@@ -986,13 +1128,42 @@ export const UwalemiElections: React.FC<Props> = ({
                   </p>
                 </div>
 
-                <button
-                  onClick={handlePrintResults}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                  Chapisha Ripoti Rasmi ya Matokeo
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={handlePreviewPDFResults}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                    title="Kihakiki Ripoti ya PDF yenye Nembo"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-teal-400" />
+                    Kihakiki PDF
+                  </button>
+
+                  <button
+                    onClick={handleDownloadPDFResults}
+                    disabled={isExportingPdf}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold border border-emerald-600 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isExportingPdf ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 text-white" />
+                    )}
+                    Pakua PDF ya Matokeo
+                  </button>
+
+                  <button
+                    onClick={handlePrintResults}
+                    disabled={isPrintingReport}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                  >
+                    {isPrintingReport ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    ) : (
+                      <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    Chapisha Ripoti Rasmi
+                  </button>
+                </div>
               </div>
 
               {/* Position Tally Cards */}
@@ -1796,6 +1967,62 @@ export const UwalemiElections: React.FC<Props> = ({
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Interactive Preview Modal with Logo & Letterhead */}
+      {previewPdfModal && previewPdfModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">{previewPdfModal.title}</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">{previewPdfModal.fileName}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = previewPdfModal.url;
+                    link.download = previewPdfModal.fileName;
+                    link.click();
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-emerald-950/40"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Pakua PDF
+                </button>
+                <button
+                  onClick={() => {
+                    const win = window.open(previewPdfModal.url, '_blank');
+                    if (win) win.print();
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                  Chapa
+                </button>
+                <button
+                  onClick={() => setPreviewPdfModal(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer ml-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-slate-950 p-2 overflow-hidden">
+              <iframe
+                src={previewPdfModal.url}
+                className="w-full h-full rounded-xl border border-slate-800 bg-white"
+                title="Interactive Election Results PDF Viewer"
+              />
             </div>
           </div>
         </div>

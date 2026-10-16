@@ -727,7 +727,7 @@ Thank you - EVENT CARD`;
         }
       }
     } catch (err) {
-      console.error("Error fetching queue jobs:", err);
+      console.debug("Error fetching queue jobs:", err);
     }
   };
 
@@ -1542,7 +1542,7 @@ Karibu sana!`);
           scheduleTime: formattedScheduleTime,
           templateParams,
           templateName: metaTemplateName || (messageType === 'thank-you' ? 'asante_kushiriki' : (messageType === 'reminder' ? 'ukumbusho' : 'mwaliko_wa_sherehe')),
-          imageUrl: compatibleImageUrl,
+          imageUrl: channel === 'whatsapp' ? compatibleImageUrl : '',
           lang: language,
           msgType: messageType,
           messageType: messageType
@@ -1821,7 +1821,7 @@ Karibu sana!`);
         text: mainText,
         templateParams: templateParams,
         templateName: metaTemplateName || (messageType === 'thank-you' ? 'asante_kushiriki' : (messageType === 'reminder' ? 'ukumbusho' : 'mwaliko_wa_sherehe')),
-        imageUrl: compatibleImageUrl,
+        imageUrl: channel === 'whatsapp' ? compatibleImageUrl : '',
         lang: language,
         messageType: messageType
       });

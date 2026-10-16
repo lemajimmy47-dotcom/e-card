@@ -178,10 +178,28 @@ export interface Guest {
   tags?: string[];
   customFields?: Record<string, string>;
   hasWhatsApp?: boolean | 'checking' | 'unknown';
-  waCheckedAt?: string;
   waStatusDetail?: string;
+  waCheckedAt?: string;
   lastSentChannel?: string;
   lastSentLang?: string;
+  lastSentAt?: string;
+  lastSentDate?: string;
+  lastSentTime?: string;
+  invitationSentAt?: string;
+  invitationSentDate?: string;
+  invitationSentTime?: string;
+  reminderSentAt?: string;
+  reminderSentDate?: string;
+  reminderSentTime?: string;
+  thankYouSentAt?: string;
+  thankYouSentDate?: string;
+  thankYouSentTime?: string;
+  pledgeSentAt?: string;
+  pledgeSentDate?: string;
+  pledgeSentTime?: string;
+  stdSentAt?: string;
+  stdSentDate?: string;
+  stdSentTime?: string;
 
   // Contribution Module Fields
   pledgeAmount?: number;

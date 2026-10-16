@@ -5,7 +5,8 @@ import {
   UwalemiMember, 
   UwalemiEmergencyFund, 
   UwalemiMeeting, 
-  UwalemiMonthlyPayment 
+  UwalemiMonthlyPayment,
+  UwalemiElection
 } from '../types/uwalemi';
 import { 
   sortMembersByLeadership, 
@@ -15,7 +16,8 @@ import {
   calculateMemberOtherFines,
   classifyFinePaymentType,
   decomposeFinePaymentAmounts,
-  normalizePaymentMethod
+  normalizePaymentMethod,
+  calculateElectionTally
 } from './uwalemiService';
 
 const MONTH_NAMES_SW = [
@@ -2462,3 +2464,139 @@ export const generatePaymentReceiptPDF = (receiptData: {
   addUwalemiReportWatermark(doc, logoB64);
   return doc;
 };
+
+/**
+ * Generate Official Election Results Report PDF with Letterhead Logo & Security Watermark
+ */
+export const generateElectionResultsPDF = (
+  state: UwalemiState,
+  electionId?: string,
+  logoBase64Override?: string
+): jsPDF => {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const election = electionId 
+    ? (state.elections || []).find(e => e.id === electionId)
+    : (state.elections || []).find(e => e.status === 'active') || (state.elections || [])[0];
+
+  if (!election) {
+    throw new Error('Hakuna taarifa za uchaguzi zilizopatikana kwa sasa.');
+  }
+
+  const tallyData = calculateElectionTally(election);
+  const term = election.termYears ? `${election.termYears} (Miaka ${election.termYears})` : '-';
+
+  const currentY = drawOfficialHeader(
+    doc,
+    state,
+    'TAARIFA RASMI YA MATOKEO YA UCHAGUZI WA VIONGOZI',
+    `Uchaguzi: ${election.title || 'Uchaguzi wa Viongozi'} • Kipindi cha Uongozi: ${term}`,
+    logoBase64Override
+  );
+
+  let nextY = currentY;
+
+  // Turnout & General Statistics Table
+  autoTable(doc, {
+    startY: nextY,
+    head: [['TAKWIMU ZA UCHAGUZI WA VIONGOZI', 'TAARIFA / IDADI']],
+    body: [
+      ['Daftari la Wapiga Kura Wenye Sifa (Eligible Voters)', `${tallyData.totalEligibleVoters} Wanachama`],
+      ['Jumla ya Kura Zilizopigwa (Ballots Cast)', `${tallyData.totalBallotsCast} Kura`],
+      ['Asilimia ya Ushiriki (Voter Turnout)', `${tallyData.turnoutPercentage}%`],
+      ['Hali ya Zoezi la Uchaguzi', election.status === 'completed' ? 'UMEKAMILIKA RASMI' : election.status === 'active' ? 'ZOEZI LINAENDELEA' : 'RATIBA ILIYOPITA']
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    bodyStyles: { fontSize: 8 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 100 },
+      1: { cellWidth: 80, halign: 'right', fontStyle: 'bold', textColor: [15, 23, 42] }
+    }
+  });
+
+  // @ts-ignore
+  nextY = doc.lastAutoTable.finalY + 8;
+
+  // Breakdown for each position
+  tallyData.positionsTally.forEach((pos) => {
+    if (nextY + 40 > 270) {
+      doc.addPage();
+      nextY = 20;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${pos.positionTitle.toUpperCase()} (Wanaohitajika: ${pos.maxWinners} | Jumla ya Kura: ${pos.totalVotesForPosition})`, 14, nextY);
+    nextY += 3;
+
+    const candRows = pos.results.map((c, idx) => [
+      idx + 1,
+      `${c.candidateName} (${c.candidateNo})`,
+      c.votesCount,
+      `${c.percentage}%`,
+      c.isWinner ? 'Mshindi ✓' : c.isTie ? 'Sare ya Kura ⚠' : '-'
+    ]);
+
+    autoTable(doc, {
+      startY: nextY,
+      head: [['#', 'Jina la Mgombea', 'Jumla ya Kura', 'Asilimia', 'Hali ya Matokeo']],
+      body: candRows.length > 0 ? candRows : [['-', 'Hakuna wagombea walioteuliwa', '-', '-', '-']],
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 80, fontStyle: 'bold' },
+        2: { cellWidth: 25, halign: 'center', fontStyle: 'bold' },
+        3: { cellWidth: 25, halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
+        4: { cellWidth: 40, halign: 'center', fontStyle: 'bold' }
+      }
+    });
+
+    // @ts-ignore
+    nextY = doc.lastAutoTable.finalY + 7;
+  });
+
+  // Election Committee Verification & Sign-off Block
+  if (nextY + 45 > 270) {
+    doc.addPage();
+    nextY = 20;
+  }
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  const nowSw = new Date().toLocaleString('sw-TZ', { dateStyle: 'long', timeStyle: 'short' });
+  doc.text(
+    `Taarifa hii imethibitishwa na kutolewa rasmi na Kamati ya Uchaguzi ya ${state.groupSettings?.groupName || 'UWALEMI'} tarehe ${nowSw}.`,
+    14,
+    nextY
+  );
+  nextY += 8;
+
+  // Two signature lines: Msimamizi wa Uchaguzi & Katibu wa Kamati
+  const leftSigX = 25;
+  const rightSigX = 125;
+  const sigLineWidth = 60;
+
+  doc.setDrawColor(148, 163, 184);
+  doc.line(leftSigX, nextY + 14, leftSigX + sigLineWidth, nextY + 14);
+  doc.line(rightSigX, nextY + 14, rightSigX + sigLineWidth, nextY + 14);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Msimamizi Mkuu wa Uchaguzi', leftSigX + (sigLineWidth / 2), nextY + 19, { align: 'center' });
+  doc.text('Katibu wa Kamati ya Uchaguzi', rightSigX + (sigLineWidth / 2), nextY + 19, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Sahihi & Tarehe', leftSigX + (sigLineWidth / 2), nextY + 23, { align: 'center' });
+  doc.text('Sahihi & Tarehe', rightSigX + (sigLineWidth / 2), nextY + 23, { align: 'center' });
+
+  addUwalemiReportWatermark(doc, logoBase64Override);
+  return doc;
+};
+
