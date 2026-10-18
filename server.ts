@@ -3908,6 +3908,38 @@ async function startServer() {
             const mergedThkSentDate = cg.thankYouSentDate || sg.thankYouSentDate || (cg.customFields as any)?.thankYouSentDate || (sg.customFields as any)?.thankYouSentDate || null;
             const mergedThkSentTime = cg.thankYouSentTime || sg.thankYouSentTime || (cg.customFields as any)?.thankYouSentTime || (sg.customFields as any)?.thankYouSentTime || null;
 
+            const mergedWhatsappSentAt = cg.whatsappSentAt || sg.whatsappSentAt || (cg.customFields as any)?.whatsappSentAt || (sg.customFields as any)?.whatsappSentAt || null;
+            const mergedWhatsappSentDate = cg.whatsappSentDate || sg.whatsappSentDate || (cg.customFields as any)?.whatsappSentDate || (sg.customFields as any)?.whatsappSentDate || null;
+            const mergedWhatsappSentTime = cg.whatsappSentTime || sg.whatsappSentTime || (cg.customFields as any)?.whatsappSentTime || (sg.customFields as any)?.whatsappSentTime || null;
+
+            const mergedSmsSentAt = cg.smsSentAt || sg.smsSentAt || (cg.customFields as any)?.smsSentAt || (sg.customFields as any)?.smsSentAt || null;
+            const mergedSmsSentDate = cg.smsSentDate || sg.smsSentDate || (cg.customFields as any)?.smsSentDate || (sg.customFields as any)?.smsSentDate || null;
+            const mergedSmsSentTime = cg.smsSentTime || sg.smsSentTime || (cg.customFields as any)?.smsSentTime || (sg.customFields as any)?.smsSentTime || null;
+
+            const mergedInvWaSentDate = cg.invitationWhatsappSentDate || sg.invitationWhatsappSentDate || (cg.customFields as any)?.invitationWhatsappSentDate || (sg.customFields as any)?.invitationWhatsappSentDate || mergedWhatsappSentDate;
+            const mergedInvWaSentTime = cg.invitationWhatsappSentTime || sg.invitationWhatsappSentTime || (cg.customFields as any)?.invitationWhatsappSentTime || (sg.customFields as any)?.invitationWhatsappSentTime || mergedWhatsappSentTime;
+            const mergedInvWaSentAt = cg.invitationWhatsappSentAt || sg.invitationWhatsappSentAt || (cg.customFields as any)?.invitationWhatsappSentAt || (sg.customFields as any)?.invitationWhatsappSentAt || mergedWhatsappSentAt;
+
+            const mergedInvSmsSentDate = cg.invitationSmsSentDate || sg.invitationSmsSentDate || (cg.customFields as any)?.invitationSmsSentDate || (sg.customFields as any)?.invitationSmsSentDate || mergedSmsSentDate;
+            const mergedInvSmsSentTime = cg.invitationSmsSentTime || sg.invitationSmsSentTime || (cg.customFields as any)?.invitationSmsSentTime || (sg.customFields as any)?.invitationSmsSentTime || mergedSmsSentTime;
+            const mergedInvSmsSentAt = cg.invitationSmsSentAt || sg.invitationSmsSentAt || (cg.customFields as any)?.invitationSmsSentAt || (sg.customFields as any)?.invitationSmsSentAt || mergedSmsSentAt;
+
+            const mergedRemWaSentDate = cg.reminderWhatsappSentDate || sg.reminderWhatsappSentDate || (cg.customFields as any)?.reminderWhatsappSentDate || (sg.customFields as any)?.reminderWhatsappSentDate || null;
+            const mergedRemWaSentTime = cg.reminderWhatsappSentTime || sg.reminderWhatsappSentTime || (cg.customFields as any)?.reminderWhatsappSentTime || (sg.customFields as any)?.reminderWhatsappSentTime || null;
+            const mergedRemWaSentAt = cg.reminderWhatsappSentAt || sg.reminderWhatsappSentAt || (cg.customFields as any)?.reminderWhatsappSentAt || (sg.customFields as any)?.reminderWhatsappSentAt || null;
+
+            const mergedRemSmsSentDate = cg.reminderSmsSentDate || sg.reminderSmsSentDate || (cg.customFields as any)?.reminderSmsSentDate || (sg.customFields as any)?.reminderSmsSentDate || null;
+            const mergedRemSmsSentTime = cg.reminderSmsSentTime || sg.reminderSmsSentTime || (cg.customFields as any)?.reminderSmsSentTime || (sg.customFields as any)?.reminderSmsSentTime || null;
+            const mergedRemSmsSentAt = cg.reminderSmsSentAt || sg.reminderSmsSentAt || (cg.customFields as any)?.reminderSmsSentAt || (sg.customFields as any)?.reminderSmsSentAt || null;
+
+            const mergedThkWaSentDate = cg.thankYouWhatsappSentDate || sg.thankYouWhatsappSentDate || (cg.customFields as any)?.thankYouWhatsappSentDate || (sg.customFields as any)?.thankYouWhatsappSentDate || null;
+            const mergedThkWaSentTime = cg.thankYouWhatsappSentTime || sg.thankYouWhatsappSentTime || (cg.customFields as any)?.thankYouWhatsappSentTime || (sg.customFields as any)?.thankYouWhatsappSentTime || null;
+            const mergedThkWaSentAt = cg.thankYouWhatsappSentAt || sg.thankYouWhatsappSentAt || (cg.customFields as any)?.thankYouWhatsappSentAt || (sg.customFields as any)?.thankYouWhatsappSentAt || null;
+
+            const mergedThkSmsSentDate = cg.thankYouSmsSentDate || sg.thankYouSmsSentDate || (cg.customFields as any)?.thankYouSmsSentDate || (sg.customFields as any)?.thankYouSmsSentDate || null;
+            const mergedThkSmsSentTime = cg.thankYouSmsSentTime || sg.thankYouSmsSentTime || (cg.customFields as any)?.thankYouSmsSentTime || (sg.customFields as any)?.thankYouSmsSentTime || null;
+            const mergedThkSmsSentAt = cg.thankYouSmsSentAt || sg.thankYouSmsSentAt || (cg.customFields as any)?.thankYouSmsSentAt || (sg.customFields as any)?.thankYouSmsSentAt || null;
+
             const mergedCustomFields = {
               ...(sg.customFields || {}),
               ...(cg.customFields || {}),
@@ -3932,6 +3964,30 @@ async function startServer() {
               thankYouSentDate: mergedThkSentDate,
               thankYouSentTime: mergedThkSentTime,
               thankYouSentAt: mergedThkSentAt,
+              whatsappSentDate: mergedWhatsappSentDate,
+              whatsappSentTime: mergedWhatsappSentTime,
+              whatsappSentAt: mergedWhatsappSentAt,
+              smsSentDate: mergedSmsSentDate,
+              smsSentTime: mergedSmsSentTime,
+              smsSentAt: mergedSmsSentAt,
+              invitationWhatsappSentDate: mergedInvWaSentDate,
+              invitationWhatsappSentTime: mergedInvWaSentTime,
+              invitationWhatsappSentAt: mergedInvWaSentAt,
+              invitationSmsSentDate: mergedInvSmsSentDate,
+              invitationSmsSentTime: mergedInvSmsSentTime,
+              invitationSmsSentAt: mergedInvSmsSentAt,
+              reminderWhatsappSentDate: mergedRemWaSentDate,
+              reminderWhatsappSentTime: mergedRemWaSentTime,
+              reminderWhatsappSentAt: mergedRemWaSentAt,
+              reminderSmsSentDate: mergedRemSmsSentDate,
+              reminderSmsSentTime: mergedRemSmsSentTime,
+              reminderSmsSentAt: mergedRemSmsSentAt,
+              thankYouWhatsappSentDate: mergedThkWaSentDate,
+              thankYouWhatsappSentTime: mergedThkWaSentTime,
+              thankYouWhatsappSentAt: mergedThkWaSentAt,
+              thankYouSmsSentDate: mergedThkSmsSentDate,
+              thankYouSmsSentTime: mergedThkSmsSentTime,
+              thankYouSmsSentAt: mergedThkSmsSentAt,
             };
 
             let mergedHasWhatsApp = cg.hasWhatsApp !== undefined ? cg.hasWhatsApp : sg.hasWhatsApp;
@@ -3973,6 +4029,30 @@ async function startServer() {
               thankYouSentAt: mergedThkSentAt,
               thankYouSentDate: mergedThkSentDate,
               thankYouSentTime: mergedThkSentTime,
+              whatsappSentDate: mergedWhatsappSentDate,
+              whatsappSentTime: mergedWhatsappSentTime,
+              whatsappSentAt: mergedWhatsappSentAt,
+              smsSentDate: mergedSmsSentDate,
+              smsSentTime: mergedSmsSentTime,
+              smsSentAt: mergedSmsSentAt,
+              invitationWhatsappSentDate: mergedInvWaSentDate,
+              invitationWhatsappSentTime: mergedInvWaSentTime,
+              invitationWhatsappSentAt: mergedInvWaSentAt,
+              invitationSmsSentDate: mergedInvSmsSentDate,
+              invitationSmsSentTime: mergedInvSmsSentTime,
+              invitationSmsSentAt: mergedInvSmsSentAt,
+              reminderWhatsappSentDate: mergedRemWaSentDate,
+              reminderWhatsappSentTime: mergedRemWaSentTime,
+              reminderWhatsappSentAt: mergedRemWaSentAt,
+              reminderSmsSentDate: mergedRemSmsSentDate,
+              reminderSmsSentTime: mergedRemSmsSentTime,
+              reminderSmsSentAt: mergedRemSmsSentAt,
+              thankYouWhatsappSentDate: mergedThkWaSentDate,
+              thankYouWhatsappSentTime: mergedThkWaSentTime,
+              thankYouWhatsappSentAt: mergedThkWaSentAt,
+              thankYouSmsSentDate: mergedThkSmsSentDate,
+              thankYouSmsSentTime: mergedThkSmsSentTime,
+              thankYouSmsSentAt: mergedThkSmsSentAt,
               pledgeSentAt: cg.pledgeSentAt || sg.pledgeSentAt,
               stdSentAt: cg.stdSentAt || sg.stdSentAt,
               hasWhatsApp: mergedHasWhatsApp,

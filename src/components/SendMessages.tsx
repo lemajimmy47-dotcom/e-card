@@ -2315,44 +2315,48 @@ Karibu sana!`);
         {deliveries.map((del, i) => {
           const isWa = del.channel === 'whatsapp';
           const langDisplay = String(del.lang).toUpperCase() === 'EN' ? 'EN' : 'SW';
+          const chDate = isWa ? (g.whatsappSentDate || g.invitationSentDate || g.lastSentDate) : (g.smsSentDate || g.invitationSentDate || g.lastSentDate);
+          const chTime = isWa ? (g.whatsappSentTime || g.invitationSentTime || g.lastSentTime) : (g.smsSentTime || g.invitationSentTime || g.lastSentTime);
+
           return (
-            <span
-              key={i}
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold border ${
-                isWa 
-                  ? 'bg-teal-500/10 text-teal-400 border-teal-500/20' 
-                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-              }`}
-              title={isWa ? `Iliyofanikiwa kupitia WhatsApp (${langDisplay})` : `Iliyofanikiwa kupitia SMS (${langDisplay})`}
-            >
-              {isWa ? (
-                // WhatsApp Icon SVG (compact and matching lucide stroke size)
-                <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
-                  <path d="M12.003 2c-5.522 0-9.997 4.477-9.997 9.997 0 1.764.459 3.483 1.332 5.017L2 22l5.127-1.345a9.96 9.96 0 0 0 4.877 1.28c5.522 0 9.997-4.477 9.997-9.997 0-5.52-4.475-9.938-9.998-9.938zm5.952 14.175c-.26.732-1.517 1.345-2.094 1.41-.577.065-1.127.276-3.615-.756-3.136-1.301-5.127-4.477-5.29-4.688-.163-.211-1.301-1.731-1.301-3.308 0-1.577.829-2.35 1.122-2.659.293-.309.65-.39.862-.39s.423.016.602.024c.187.008.439-.073.691.537.26.634.894 2.18.976 2.342.081.163.138.35.024.577-.114.228-.171.366-.341.569-.171.203-.358.455-.512.61-.171.171-.35.358-.154.699.195.341.87 1.431 1.862 2.31 1.277 1.127 2.35 1.477 2.684 1.639.333.163.529.138.724-.089.195-.228.837-.976 1.065-1.309.228-.333.455-.276.764-.163.309.114 1.959.927 2.293 1.097s.561.26.642.407c.082.146.082.846-.178 1.578z" />
-                </svg>
-              ) : (
-                // SMS Mail/Message Icon SVG
-                <svg className="w-2.5 h-2.5 stroke-current fill-none" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
+            <div key={i} className="flex items-center gap-1.5 flex-wrap">
+              <span
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold border ${
+                  isWa 
+                    ? 'bg-teal-500/10 text-teal-400 border-teal-500/20' 
+                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                }`}
+                title={isWa ? `Iliyofanikiwa kupitia WhatsApp (${langDisplay})` : `Iliyofanikiwa kupitia SMS (${langDisplay})`}
+              >
+                {isWa ? (
+                  // WhatsApp Icon SVG (compact and matching lucide stroke size)
+                  <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M12.003 2c-5.522 0-9.997 4.477-9.997 9.997 0 1.764.459 3.483 1.332 5.017L2 22l5.127-1.345a9.96 9.96 0 0 0 4.877 1.28c5.522 0 9.997-4.477 9.997-9.997 0-5.52-4.475-9.938-9.998-9.938zm5.952 14.175c-.26.732-1.517 1.345-2.094 1.41-.577.065-1.127.276-3.615-.756-3.136-1.301-5.127-4.477-5.29-4.688-.163-.211-1.301-1.731-1.301-3.308 0-1.577.829-2.35 1.122-2.659.293-.309.65-.39.862-.39s.423.016.602.024c.187.008.439-.073.691.537.26.634.894 2.18.976 2.342.081.163.138.35.024.577-.114.228-.171.366-.341.569-.171.203-.358.455-.512.61-.171.171-.35.358-.154.699.195.341.87 1.431 1.862 2.31 1.277 1.127 2.35 1.477 2.684 1.639.333.163.529.138.724-.089.195-.228.837-.976 1.065-1.309.228-.333.455-.276.764-.163.309.114 1.959.927 2.293 1.097s.561.26.642.407c.082.146.082.846-.178 1.578z" />
+                  </svg>
+                ) : (
+                  // SMS Mail/Message Icon SVG
+                  <svg className="w-2.5 h-2.5 stroke-current fill-none" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                    <polyline points="22,6 12,13 2,6" />
+                  </svg>
+                )}
+                <span className="capitalize">{del.channel}</span>
+                <span className="text-slate-500 font-normal">|</span>
+                <span className="text-[8px] font-bold tracking-wider">{langDisplay}</span>
+              </span>
+
+              {(chDate || chTime) && (
+                <span 
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-slate-800/90 text-blue-300 border border-blue-500/25 shadow-xs"
+                  title={`Tarehe na Muda uliotumwa (${del.channel}): ${chDate || ''} ${chTime || ''}`}
+                >
+                  <Clock className="w-2.5 h-2.5 text-blue-400" />
+                  <span>{chDate} {chTime}</span>
+                </span>
               )}
-              <span className="capitalize">{del.channel}</span>
-              <span className="text-slate-500 font-normal">|</span>
-              <span className="text-[8px] font-bold tracking-wider">{langDisplay}</span>
-            </span>
+            </div>
           );
         })}
-
-        {displayTimestamp && (
-          <span 
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-slate-800/90 text-blue-300 border border-blue-500/25 shadow-xs"
-            title={`Tarehe na Muda uliotumwa: ${displayTimestamp}`}
-          >
-            <Clock className="w-2.5 h-2.5 text-blue-400" />
-            <span>{displayTimestamp}</span>
-          </span>
-        )}
 
         {hasStoredMessage && (
           <button
@@ -3516,9 +3520,15 @@ Asante - EVENT CARD`;
                               {smsStatus}
                             </button>
                             {isSmsSent && (
-                              <span className="text-[10px] text-slate-400 font-mono font-normal">
-                                {isEn ? "Sent:" : "Zilizotumwa:"} <strong className="text-emerald-400 font-bold">{guest.smsCount || 1}</strong>
-                              </span>
+                              <div className="flex flex-col items-center gap-0.5 mt-1 text-[9px] font-mono">
+                                {(guest.smsSentDate || guest.invitationSentDate || guest.lastSentDate) && (
+                                  <span className="text-slate-300">📅 {guest.smsSentDate || guest.invitationSentDate || guest.lastSentDate}</span>
+                                )}
+                                {(guest.smsSentTime || guest.invitationSentTime || guest.lastSentTime) && (
+                                  <span className="text-slate-300">⏰ {guest.smsSentTime || guest.invitationSentTime || guest.lastSentTime}</span>
+                                )}
+                                <span className="text-emerald-400 font-bold">SMS: {guest.smsCount || 1}</span>
+                              </div>
                             )}
                           </div>
                         </td>
@@ -3539,9 +3549,15 @@ Asante - EVENT CARD`;
                               {waStatus}
                             </button>
                             {isWaSent && (
-                              <span className="text-[10px] text-slate-400 font-mono font-normal">
-                                {isEn ? "Sent:" : "Zilizotumwa:"} <strong className="text-blue-400 font-bold">{guest.whatsappCount || 1}</strong>
-                              </span>
+                              <div className="flex flex-col items-center gap-0.5 mt-1 text-[9px] font-mono">
+                                {(guest.whatsappSentDate || guest.invitationSentDate || guest.lastSentDate) && (
+                                  <span className="text-slate-300">📅 {guest.whatsappSentDate || guest.invitationSentDate || guest.lastSentDate}</span>
+                                )}
+                                {(guest.whatsappSentTime || guest.invitationSentTime || guest.lastSentTime) && (
+                                  <span className="text-slate-300">⏰ {guest.whatsappSentTime || guest.invitationSentTime || guest.lastSentTime}</span>
+                                )}
+                                <span className="text-blue-400 font-bold">WA: {guest.whatsappCount || 1}</span>
+                              </div>
                             )}
                           </div>
                         </td>
