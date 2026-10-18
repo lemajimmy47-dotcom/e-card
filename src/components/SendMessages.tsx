@@ -96,6 +96,10 @@ export default function SendMessages({ event, settings, guests, language, onUpda
   const [previewModalChannel, setPreviewModalChannel] = useState<'sms' | 'whatsapp'>('sms');
   const [copyPreviewSuccess, setCopyPreviewSuccess] = useState<boolean>(false);
 
+  // Sent message details and history modal state
+  const [selectedHistoryGuest, setSelectedHistoryGuest] = useState<Guest | null>(null);
+  const [copyHistorySuccess, setCopyHistorySuccess] = useState<boolean>(false);
+
   useEffect(() => {
     if (!activeSendTarget) {
       setModalCardUrl('');
@@ -1573,6 +1577,11 @@ Karibu sana!`);
       console.log(`[Diagnostic] API Success:`, data);
 
       // Update state
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const nowDate = now.toLocaleDateString('sw-TZ');
+      const nowTime = now.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' });
+
       const updated = guests.map(g => {
         if (g.id === guestId) {
           const actualChannel = data.usedChannel || channel;
@@ -1582,37 +1591,61 @@ Karibu sana!`);
           const isSmsSent = actualChannel === 'sms';
           const isWaSent = actualChannel === 'whatsapp';
 
+          const histItem = {
+            id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            channel: actualChannel,
+            type: messageType,
+            text: mainText,
+            sentAt: nowIso,
+            status: 'sent' as const
+          };
+          const updatedHist = [histItem, ...(Array.isArray(g.messageHistory) ? g.messageHistory : [])].slice(0, 50);
+
+          const baseProps = {
+            ...g,
+            lastSentChannel: actualChannel,
+            lastSentLang: language,
+            lastSentAt: nowIso,
+            lastSentDate: nowDate,
+            lastSentTime: nowTime,
+            lastMessageText: mainText,
+            messageHistory: updatedHist
+          };
+
           if (messageType === 'reminder') {
             return {
-              ...g,
+              ...baseProps,
               reminderSmsStatus: isSmsSent ? ('Imetumia' as const) : (g.reminderSmsStatus || 'Sijatuma'),
               reminderWhatsappStatus: isWaSent ? ('Imetumia' as const) : (g.reminderWhatsappStatus || 'Sijatuma'),
+              reminderSentAt: nowIso,
+              reminderSentDate: nowDate,
+              reminderSentTime: nowTime,
               smsCount: isSmsSent ? currentSmsCount + 1 : currentSmsCount,
-              whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount,
-              lastSentChannel: actualChannel,
-              lastSentLang: language
+              whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount
             };
           } else if (messageType === 'thank-you') {
             return {
-              ...g,
+              ...baseProps,
               thankYouSmsStatus: isSmsSent ? ('Imetumia' as const) : (g.thankYouSmsStatus || 'Sijatuma'),
               thankYouWhatsappStatus: isWaSent ? ('Imetumia' as const) : (g.thankYouWhatsappStatus || 'Sijatuma'),
+              thankYouSentAt: nowIso,
+              thankYouSentDate: nowDate,
+              thankYouSentTime: nowTime,
               smsCount: isSmsSent ? currentSmsCount + 1 : currentSmsCount,
-              whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount,
-              lastSentChannel: actualChannel,
-              lastSentLang: language
+              whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount
             };
           } else {
             return {
-              ...g,
+              ...baseProps,
               smsStatus: isSmsSent ? ('Imetumia' as const) : g.smsStatus,
               whatsappStatus: isWaSent ? ('Imetumia' as const) : g.whatsappStatus,
               invitationSmsStatus: isSmsSent ? ('Imetumia' as const) : (g.invitationSmsStatus || g.smsStatus),
               invitationWhatsappStatus: isWaSent ? ('Imetumia' as const) : (g.invitationWhatsappStatus || g.whatsappStatus),
+              invitationSentAt: nowIso,
+              invitationSentDate: nowDate,
+              invitationSentTime: nowTime,
               smsCount: isSmsSent ? currentSmsCount + 1 : currentSmsCount,
-              whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount,
-              lastSentChannel: actualChannel,
-              lastSentLang: language
+              whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount
             };
           }
         }
@@ -2200,8 +2233,40 @@ Karibu sana!`);
 
     if (deliveries.length === 0) return null;
 
+    const activeSentDate = messageType === 'reminder'
+      ? (g.reminderSentDate || g.lastSentDate)
+      : messageType === 'thank-you'
+        ? (g.thankYouSentDate || g.lastSentDate)
+        : (g.invitationSentDate || g.lastSentDate);
+
+    const activeSentTime = messageType === 'reminder'
+      ? (g.reminderSentTime || g.lastSentTime)
+      : messageType === 'thank-you'
+        ? (g.thankYouSentTime || g.lastSentTime)
+        : (g.invitationSentTime || g.lastSentTime);
+
+    const activeSentAt = messageType === 'reminder'
+      ? (g.reminderSentAt || g.lastSentAt)
+      : messageType === 'thank-you'
+        ? (g.thankYouSentAt || g.lastSentAt)
+        : (g.invitationSentAt || g.lastSentAt);
+
+    let displayTimestamp = "";
+    if (activeSentDate && activeSentTime) {
+      displayTimestamp = `${activeSentDate} ${activeSentTime}`;
+    } else if (activeSentAt) {
+      try {
+        const d = new Date(activeSentAt);
+        displayTimestamp = d.toLocaleDateString('sw-TZ') + ' ' + d.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' });
+      } catch {
+        displayTimestamp = activeSentAt;
+      }
+    }
+
+    const hasStoredMessage = !!(g.lastMessageText || (Array.isArray(g.messageHistory) && g.messageHistory.length > 0));
+
     return (
-      <div className="flex flex-wrap gap-1.5 mt-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
         {deliveries.map((del, i) => {
           const isWa = del.channel === 'whatsapp';
           const langDisplay = String(del.lang).toUpperCase() === 'EN' ? 'EN' : 'SW';
@@ -2233,6 +2298,31 @@ Karibu sana!`);
             </span>
           );
         })}
+
+        {displayTimestamp && (
+          <span 
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium bg-slate-800/90 text-blue-300 border border-blue-500/25 shadow-xs"
+            title={`Tarehe na Muda uliotumwa: ${displayTimestamp}`}
+          >
+            <Clock className="w-2.5 h-2.5 text-blue-400" />
+            <span>{displayTimestamp}</span>
+          </span>
+        )}
+
+        {hasStoredMessage && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedHistoryGuest(g);
+            }}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-mono font-bold bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 transition cursor-pointer"
+            title="Bofya kutazama ujumbe halisi uliotumwa kwa mgeni huyu"
+          >
+            <Eye className="w-2.5 h-2.5 text-indigo-400" />
+            <span>Tazama Ujumbe</span>
+          </button>
+        )}
       </div>
     );
   };
@@ -4296,6 +4386,159 @@ Asante - EVENT CARD`;
                     className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/30 rounded-xl text-xs font-bold text-white transition cursor-pointer"
                   >
                     {confirmModalConfig.confirmText}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          </PortalModal>
+        )}
+      </AnimatePresence>
+
+      {/* Sent Message Details & History Modal */}
+      <AnimatePresence>
+        {selectedHistoryGuest && (
+          <PortalModal>
+            <div className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="bg-[#0b1329] border border-white/15 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-4 text-left font-sans text-white max-h-[90vh] flex flex-col"
+              >
+                {/* Modal Header */}
+                <div className="flex items-start justify-between border-b border-white/10 pb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-3 bg-blue-500/15 text-blue-400 rounded-2xl border border-blue-500/25">
+                      <MessageSquare className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <span>{selectedHistoryGuest.name}</span>
+                        {selectedHistoryGuest.cardType && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-slate-300 font-mono">
+                            {selectedHistoryGuest.cardType}
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">
+                        {selectedHistoryGuest.phone}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedHistoryGuest(null)}
+                    className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Content body */}
+                <div className="space-y-4 overflow-y-auto flex-1 pr-1 custom-scrollbar">
+                  {/* Summary row */}
+                  <div className="flex flex-wrap items-center gap-2 bg-white/5 p-3 rounded-2xl border border-white/10 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-300">
+                      <Clock className="w-4 h-4 text-blue-400" />
+                      <span className="font-semibold">{isEn ? "Sent Timestamp:" : "Muda wa Kutumwa:"}</span>
+                    </div>
+                    <span className="font-mono text-blue-300 font-bold">
+                      {(() => {
+                        const sDate = selectedHistoryGuest.lastSentDate || selectedHistoryGuest.invitationSentDate || selectedHistoryGuest.reminderSentDate;
+                        const sTime = selectedHistoryGuest.lastSentTime || selectedHistoryGuest.invitationSentTime || selectedHistoryGuest.reminderSentTime;
+                        if (sDate && sTime) return `${sDate} ${sTime}`;
+                        if (selectedHistoryGuest.lastSentAt) {
+                          try {
+                            const d = new Date(selectedHistoryGuest.lastSentAt);
+                            return `${d.toLocaleDateString('sw-TZ')} ${d.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' })}`;
+                          } catch {
+                            return selectedHistoryGuest.lastSentAt;
+                          }
+                        }
+                        return isEn ? "Recent" : "Hivi karibuni";
+                      })()}
+                    </span>
+                    {selectedHistoryGuest.lastSentChannel && (
+                      <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 uppercase font-mono">
+                        {selectedHistoryGuest.lastSentChannel}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Message History list or Last Message */}
+                  {Array.isArray(selectedHistoryGuest.messageHistory) && selectedHistoryGuest.messageHistory.length > 0 ? (
+                    <div className="space-y-3">
+                      <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold block">
+                        {isEn ? `Message History (${selectedHistoryGuest.messageHistory.length}):` : `Kumbukumbu ya Ujumbe (${selectedHistoryGuest.messageHistory.length}):`}
+                      </span>
+                      {selectedHistoryGuest.messageHistory.map((item, idx) => (
+                        <div key={item.id || idx} className="bg-[#050b18] border border-white/10 rounded-2xl p-4 space-y-2">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pb-2 border-b border-white/5">
+                            <span className="flex items-center gap-1 font-bold text-slate-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                              <span className="uppercase">{item.type || 'invitation'}</span>
+                              <span>•</span>
+                              <span className="uppercase text-emerald-400">{item.channel}</span>
+                            </span>
+                            <span>
+                              {(() => {
+                                try {
+                                  const d = new Date(item.sentAt);
+                                  return `${d.toLocaleDateString('sw-TZ')} ${d.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' })}`;
+                                } catch {
+                                  return item.sentAt;
+                                }
+                              })()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-200 font-mono whitespace-pre-wrap leading-relaxed">
+                            {item.text}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : selectedHistoryGuest.lastMessageText ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-bold">
+                          {isEn ? "Dispatched Message Text:" : "Maneno ya Ujumbe Uliotumwa:"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (selectedHistoryGuest.lastMessageText) {
+                              navigator.clipboard.writeText(selectedHistoryGuest.lastMessageText);
+                              setCopyHistorySuccess(true);
+                              setTimeout(() => setCopyHistorySuccess(false), 2000);
+                            }
+                          }}
+                          className="text-[10px] text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          {copyHistorySuccess ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copyHistorySuccess ? (isEn ? "Copied!" : "Imenakiliwa!") : (isEn ? "Copy" : "Nakili")}</span>
+                        </button>
+                      </div>
+                      <div className="bg-[#050b18] border border-white/10 rounded-2xl p-4 text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed select-all">
+                        {selectedHistoryGuest.lastMessageText}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#050b18] border border-white/10 rounded-2xl p-6 text-center text-slate-400 text-xs">
+                      {isEn 
+                        ? "Delivery status is recorded, but message text preview was sent before history tracking was activated." 
+                        : "Hali ya utumaji imerekodiwa, lakini ujumbe huu ulitumwa kabla ya ufuatiliaji wa maandishi kamili kuwashwa. Ujumbe mpya unaotumwa sasa unahifadhi maneno yote kiotomatiki."}
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="pt-3 border-t border-white/10 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedHistoryGuest(null)}
+                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    {isEn ? "Close" : "Funga"}
                   </button>
                 </div>
               </motion.div>

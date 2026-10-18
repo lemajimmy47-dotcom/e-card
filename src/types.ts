@@ -185,6 +185,15 @@ export interface Guest {
   lastSentAt?: string;
   lastSentDate?: string;
   lastSentTime?: string;
+  lastMessageText?: string;
+  messageHistory?: {
+    id: string;
+    channel: 'sms' | 'whatsapp';
+    type: string;
+    text: string;
+    sentAt: string;
+    status: 'sent' | 'delivered' | 'failed';
+  }[];
   invitationSentAt?: string;
   invitationSentDate?: string;
   invitationSentTime?: string;
