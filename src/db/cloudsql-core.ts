@@ -243,6 +243,20 @@ export async function ensureTablesExist(): Promise<void> {
         ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "thank_you_whatsapp_status" text DEFAULT 'Sijatuma';
         ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "last_sent_channel" text;
         ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "last_sent_lang" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "last_sent_date" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "last_sent_time" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "last_sent_at" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "last_message_text" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "message_history" jsonb;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "invitation_sent_date" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "invitation_sent_time" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "invitation_sent_at" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "reminder_sent_date" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "reminder_sent_time" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "reminder_sent_at" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "thank_you_sent_date" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "thank_you_sent_time" text;
+        ALTER TABLE "guests" ADD COLUMN IF NOT EXISTS "thank_you_sent_at" text;
         ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "venue_location" text;
         ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "admin_alert_whatsapp_phone" text;
         ALTER TABLE "sms_gateway_settings" ADD COLUMN IF NOT EXISTS "admin_alert_whatsapp_phone" text;
@@ -630,6 +644,20 @@ export async function fetchFullStateFromDB(): Promise<any> {
       const thkWa = (g as any).thankYouWhatsappStatus || cf.thankYouWhatsappStatus || "Sijatuma";
       const lastChannel = (g as any).lastSentChannel || cf.lastSentChannel || null;
       const lastLang = (g as any).lastSentLang || cf.lastSentLang || null;
+      const lastSentDate = (g as any).lastSentDate || cf.lastSentDate || null;
+      const lastSentTime = (g as any).lastSentTime || cf.lastSentTime || null;
+      const lastSentAt = (g as any).lastSentAt || cf.lastSentAt || null;
+      const lastMessageText = (g as any).lastMessageText || cf.lastMessageText || null;
+      const messageHistory = Array.isArray((g as any).messageHistory) ? (g as any).messageHistory : (Array.isArray(cf.messageHistory) ? cf.messageHistory : []);
+      const invitationSentDate = (g as any).invitationSentDate || cf.invitationSentDate || null;
+      const invitationSentTime = (g as any).invitationSentTime || cf.invitationSentTime || null;
+      const invitationSentAt = (g as any).invitationSentAt || cf.invitationSentAt || null;
+      const reminderSentDate = (g as any).reminderSentDate || cf.reminderSentDate || null;
+      const reminderSentTime = (g as any).reminderSentTime || cf.reminderSentTime || null;
+      const reminderSentAt = (g as any).reminderSentAt || cf.reminderSentAt || null;
+      const thankYouSentDate = (g as any).thankYouSentDate || cf.thankYouSentDate || null;
+      const thankYouSentTime = (g as any).thankYouSentTime || cf.thankYouSentTime || null;
+      const thankYouSentAt = (g as any).thankYouSentAt || cf.thankYouSentAt || null;
 
       return {
         id: g.id,
@@ -648,6 +676,20 @@ export async function fetchFullStateFromDB(): Promise<any> {
         thankYouWhatsappStatus: thkWa,
         lastSentChannel: lastChannel,
         lastSentLang: lastLang,
+        lastSentDate,
+        lastSentTime,
+        lastSentAt,
+        lastMessageText,
+        messageHistory,
+        invitationSentDate,
+        invitationSentTime,
+        invitationSentAt,
+        reminderSentDate,
+        reminderSentTime,
+        reminderSentAt,
+        thankYouSentDate,
+        thankYouSentTime,
+        thankYouSentAt,
         rsvpStatus: g.rsvpStatus || "Bado",
         maxGuests: (g.maxGuests && Number(g.maxGuests) > 0) ? Number(g.maxGuests) : (String(g.cardType).toUpperCase().includes('DOUBLE') ? 2 : (String(g.cardType).toUpperCase().includes('WAKWE') ? 2 : 1)),
         rsvpGuestsCount: g.rsvpGuestsCount || 0,
@@ -975,6 +1017,20 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
             thankYouWhatsappStatus: String(g.thankYouWhatsappStatus || "Sijatuma"),
             lastSentChannel: g.lastSentChannel ? String(g.lastSentChannel) : null,
             lastSentLang: g.lastSentLang ? String(g.lastSentLang) : null,
+            lastSentDate: g.lastSentDate ? String(g.lastSentDate) : null,
+            lastSentTime: g.lastSentTime ? String(g.lastSentTime) : null,
+            lastSentAt: g.lastSentAt ? String(g.lastSentAt) : null,
+            lastMessageText: g.lastMessageText ? String(g.lastMessageText) : null,
+            messageHistory: Array.isArray(g.messageHistory) ? g.messageHistory : null,
+            invitationSentDate: g.invitationSentDate ? String(g.invitationSentDate) : null,
+            invitationSentTime: g.invitationSentTime ? String(g.invitationSentTime) : null,
+            invitationSentAt: g.invitationSentAt ? String(g.invitationSentAt) : null,
+            reminderSentDate: g.reminderSentDate ? String(g.reminderSentDate) : null,
+            reminderSentTime: g.reminderSentTime ? String(g.reminderSentTime) : null,
+            reminderSentAt: g.reminderSentAt ? String(g.reminderSentAt) : null,
+            thankYouSentDate: g.thankYouSentDate ? String(g.thankYouSentDate) : null,
+            thankYouSentTime: g.thankYouSentTime ? String(g.thankYouSentTime) : null,
+            thankYouSentAt: g.thankYouSentAt ? String(g.thankYouSentAt) : null,
             customFields: {
               ...(g.customFields || {}),
               invitationSmsStatus: g.invitationSmsStatus || g.smsStatus || "Sijatuma",
@@ -985,6 +1041,20 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
               thankYouWhatsappStatus: g.thankYouWhatsappStatus || "Sijatuma",
               lastSentChannel: g.lastSentChannel || null,
               lastSentLang: g.lastSentLang || null,
+              lastSentDate: g.lastSentDate || null,
+              lastSentTime: g.lastSentTime || null,
+              lastSentAt: g.lastSentAt || null,
+              lastMessageText: g.lastMessageText || null,
+              messageHistory: Array.isArray(g.messageHistory) ? g.messageHistory : [],
+              invitationSentDate: g.invitationSentDate || null,
+              invitationSentTime: g.invitationSentTime || null,
+              invitationSentAt: g.invitationSentAt || null,
+              reminderSentDate: g.reminderSentDate || null,
+              reminderSentTime: g.reminderSentTime || null,
+              reminderSentAt: g.reminderSentAt || null,
+              thankYouSentDate: g.thankYouSentDate || null,
+              thankYouSentTime: g.thankYouSentTime || null,
+              thankYouSentAt: g.thankYouSentAt || null,
             },
             tags: g.tags || null,
           }));
@@ -1008,6 +1078,20 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
               thankYouWhatsappStatus: sql`EXCLUDED.thank_you_whatsapp_status`,
               lastSentChannel: sql`EXCLUDED.last_sent_channel`,
               lastSentLang: sql`EXCLUDED.last_sent_lang`,
+              lastSentDate: sql`EXCLUDED.last_sent_date`,
+              lastSentTime: sql`EXCLUDED.last_sent_time`,
+              lastSentAt: sql`EXCLUDED.last_sent_at`,
+              lastMessageText: sql`EXCLUDED.last_message_text`,
+              messageHistory: sql`EXCLUDED.message_history`,
+              invitationSentDate: sql`EXCLUDED.invitation_sent_date`,
+              invitationSentTime: sql`EXCLUDED.invitation_sent_time`,
+              invitationSentAt: sql`EXCLUDED.invitation_sent_at`,
+              reminderSentDate: sql`EXCLUDED.reminder_sent_date`,
+              reminderSentTime: sql`EXCLUDED.reminder_sent_time`,
+              reminderSentAt: sql`EXCLUDED.reminder_sent_at`,
+              thankYouSentDate: sql`EXCLUDED.thank_you_sent_date`,
+              thankYouSentTime: sql`EXCLUDED.thank_you_sent_time`,
+              thankYouSentAt: sql`EXCLUDED.thank_you_sent_at`,
               rsvpStatus: sql`EXCLUDED.rsvp_status`,
               maxGuests: sql`EXCLUDED.max_guests`,
               rsvpGuestsCount: sql`EXCLUDED.rsvp_guests_count`,

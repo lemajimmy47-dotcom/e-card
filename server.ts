@@ -3880,6 +3880,34 @@ async function startServer() {
               if (isSent(sg.thankYouWhatsappStatus) && !isSent(mergedThkWa)) mergedThkWa = sg.thankYouWhatsappStatus;
             }
 
+            const mergedLastSentDate = cg.lastSentDate || sg.lastSentDate || (cg.customFields as any)?.lastSentDate || (sg.customFields as any)?.lastSentDate || null;
+            const mergedLastSentTime = cg.lastSentTime || sg.lastSentTime || (cg.customFields as any)?.lastSentTime || (sg.customFields as any)?.lastSentTime || null;
+            const mergedLastSentAt = cg.lastSentAt || sg.lastSentAt || (cg.customFields as any)?.lastSentAt || (sg.customFields as any)?.lastSentAt || null;
+            const mergedLastMessageText = cg.lastMessageText || sg.lastMessageText || (cg.customFields as any)?.lastMessageText || (sg.customFields as any)?.lastMessageText || null;
+
+            // Merge message history so past sent logs are preserved
+            const serverHist = Array.isArray(sg.messageHistory) ? sg.messageHistory : ((sg.customFields as any)?.messageHistory || []);
+            const clientHist = Array.isArray(cg.messageHistory) ? cg.messageHistory : ((cg.customFields as any)?.messageHistory || []);
+            const histMap = new Map<string, any>();
+            for (const h of [...clientHist, ...serverHist]) {
+              if (h && (h.id || h.sentAt)) {
+                histMap.set(h.id || `${h.sentAt}-${h.channel}-${h.type}`, h);
+              }
+            }
+            const mergedMessageHistory = Array.from(histMap.values()).slice(0, 50);
+
+            const mergedInvSentAt = cg.invitationSentAt || sg.invitationSentAt || (cg.customFields as any)?.invitationSentAt || (sg.customFields as any)?.invitationSentAt || ((isSent(mergedInvSms) || isSent(mergedInvWa)) ? mergedLastSentAt : null);
+            const mergedInvSentDate = cg.invitationSentDate || sg.invitationSentDate || (cg.customFields as any)?.invitationSentDate || (sg.customFields as any)?.invitationSentDate || ((isSent(mergedInvSms) || isSent(mergedInvWa)) ? mergedLastSentDate : null);
+            const mergedInvSentTime = cg.invitationSentTime || sg.invitationSentTime || (cg.customFields as any)?.invitationSentTime || (sg.customFields as any)?.invitationSentTime || ((isSent(mergedInvSms) || isSent(mergedInvWa)) ? mergedLastSentTime : null);
+
+            const mergedRemSentAt = cg.reminderSentAt || sg.reminderSentAt || (cg.customFields as any)?.reminderSentAt || (sg.customFields as any)?.reminderSentAt || null;
+            const mergedRemSentDate = cg.reminderSentDate || sg.reminderSentDate || (cg.customFields as any)?.reminderSentDate || (sg.customFields as any)?.reminderSentDate || null;
+            const mergedRemSentTime = cg.reminderSentTime || sg.reminderSentTime || (cg.customFields as any)?.reminderSentTime || (sg.customFields as any)?.reminderSentTime || null;
+
+            const mergedThkSentAt = cg.thankYouSentAt || sg.thankYouSentAt || (cg.customFields as any)?.thankYouSentAt || (sg.customFields as any)?.thankYouSentAt || null;
+            const mergedThkSentDate = cg.thankYouSentDate || sg.thankYouSentDate || (cg.customFields as any)?.thankYouSentDate || (sg.customFields as any)?.thankYouSentDate || null;
+            const mergedThkSentTime = cg.thankYouSentTime || sg.thankYouSentTime || (cg.customFields as any)?.thankYouSentTime || (sg.customFields as any)?.thankYouSentTime || null;
+
             const mergedCustomFields = {
               ...(sg.customFields || {}),
               ...(cg.customFields || {}),
@@ -3891,6 +3919,19 @@ async function startServer() {
               thankYouWhatsappStatus: mergedThkWa || "Sijatuma",
               lastSentChannel: cg.lastSentChannel || sg.lastSentChannel,
               lastSentLang: cg.lastSentLang || sg.lastSentLang,
+              lastSentDate: mergedLastSentDate,
+              lastSentTime: mergedLastSentTime,
+              lastSentAt: mergedLastSentAt,
+              lastMessageText: mergedLastMessageText,
+              invitationSentDate: mergedInvSentDate,
+              invitationSentTime: mergedInvSentTime,
+              invitationSentAt: mergedInvSentAt,
+              reminderSentDate: mergedRemSentDate,
+              reminderSentTime: mergedRemSentTime,
+              reminderSentAt: mergedRemSentAt,
+              thankYouSentDate: mergedThkSentDate,
+              thankYouSentTime: mergedThkSentTime,
+              thankYouSentAt: mergedThkSentAt,
             };
 
             let mergedHasWhatsApp = cg.hasWhatsApp !== undefined ? cg.hasWhatsApp : sg.hasWhatsApp;
@@ -3918,20 +3959,20 @@ async function startServer() {
               thankYouWhatsappStatus: mergedThkWa || "Sijatuma",
               lastSentChannel: cg.lastSentChannel || sg.lastSentChannel,
               lastSentLang: cg.lastSentLang || sg.lastSentLang,
-              lastSentAt: cg.lastSentAt || sg.lastSentAt,
-              lastSentDate: cg.lastSentDate || sg.lastSentDate,
-              lastSentTime: cg.lastSentTime || sg.lastSentTime,
-              lastMessageText: cg.lastMessageText || sg.lastMessageText,
-              messageHistory: cg.messageHistory || sg.messageHistory,
-              invitationSentAt: cg.invitationSentAt || sg.invitationSentAt,
-              invitationSentDate: cg.invitationSentDate || sg.invitationSentDate,
-              invitationSentTime: cg.invitationSentTime || sg.invitationSentTime,
-              reminderSentAt: cg.reminderSentAt || sg.reminderSentAt,
-              reminderSentDate: cg.reminderSentDate || sg.reminderSentDate,
-              reminderSentTime: cg.reminderSentTime || sg.reminderSentTime,
-              thankYouSentAt: cg.thankYouSentAt || sg.thankYouSentAt,
-              thankYouSentDate: cg.thankYouSentDate || sg.thankYouSentDate,
-              thankYouSentTime: cg.thankYouSentTime || sg.thankYouSentTime,
+              lastSentAt: mergedLastSentAt,
+              lastSentDate: mergedLastSentDate,
+              lastSentTime: mergedLastSentTime,
+              lastMessageText: mergedLastMessageText,
+              messageHistory: mergedMessageHistory,
+              invitationSentAt: mergedInvSentAt,
+              invitationSentDate: mergedInvSentDate,
+              invitationSentTime: mergedInvSentTime,
+              reminderSentAt: mergedRemSentAt,
+              reminderSentDate: mergedRemSentDate,
+              reminderSentTime: mergedRemSentTime,
+              thankYouSentAt: mergedThkSentAt,
+              thankYouSentDate: mergedThkSentDate,
+              thankYouSentTime: mergedThkSentTime,
               pledgeSentAt: cg.pledgeSentAt || sg.pledgeSentAt,
               stdSentAt: cg.stdSentAt || sg.stdSentAt,
               hasWhatsApp: mergedHasWhatsApp,
@@ -6794,6 +6835,13 @@ Lema, Nguvu Moja!`;
                   };
                   const updatedHist = [histItem, ...(Array.isArray(g.messageHistory) ? g.messageHistory : [])].slice(0, 50);
 
+                  cf.lastSentChannel = usedChannel;
+                  cf.lastSentLang = task.lang || "sw";
+                  cf.lastSentAt = qNowIso;
+                  cf.lastSentDate = qNowDate;
+                  cf.lastSentTime = qNowTime;
+                  cf.lastMessageText = task.text;
+
                   const baseUpdates = {
                     ...g,
                     customFields: cf,
@@ -6810,24 +6858,42 @@ Lema, Nguvu Moja!`;
                     const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                     if (msgType === 'reminder') {
                       cf.reminderWhatsappStatus = 'Imetumia';
+                      cf.reminderSentAt = qNowIso;
+                      cf.reminderSentDate = qNowDate;
+                      cf.reminderSentTime = qNowTime;
                       return { ...baseUpdates, reminderWhatsappStatus: "Imetumia", reminderSentAt: qNowIso, reminderSentDate: qNowDate, reminderSentTime: qNowTime, whatsappCount: currentCount + 1 };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouWhatsappStatus = 'Imetumia';
+                      cf.thankYouSentAt = qNowIso;
+                      cf.thankYouSentDate = qNowDate;
+                      cf.thankYouSentTime = qNowTime;
                       return { ...baseUpdates, thankYouWhatsappStatus: "Imetumia", thankYouSentAt: qNowIso, thankYouSentDate: qNowDate, thankYouSentTime: qNowTime, whatsappCount: currentCount + 1 };
                     } else {
                       cf.invitationWhatsappStatus = 'Imetumia';
+                      cf.invitationSentAt = qNowIso;
+                      cf.invitationSentDate = qNowDate;
+                      cf.invitationSentTime = qNowTime;
                       return { ...baseUpdates, whatsappStatus: "Imetumia", invitationWhatsappStatus: "Imetumia", invitationSentAt: qNowIso, invitationSentDate: qNowDate, invitationSentTime: qNowTime, whatsappCount: currentCount + 1 };
                     }
                   } else {
                     const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
                     if (msgType === 'reminder') {
                       cf.reminderSmsStatus = 'Imetumia';
+                      cf.reminderSentAt = qNowIso;
+                      cf.reminderSentDate = qNowDate;
+                      cf.reminderSentTime = qNowTime;
                       return { ...baseUpdates, reminderSmsStatus: "Imetumia", reminderSentAt: qNowIso, reminderSentDate: qNowDate, reminderSentTime: qNowTime, smsCount: currentCount + 1 };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouSmsStatus = 'Imetumia';
+                      cf.thankYouSentAt = qNowIso;
+                      cf.thankYouSentDate = qNowDate;
+                      cf.thankYouSentTime = qNowTime;
                       return { ...baseUpdates, thankYouSmsStatus: "Imetumia", thankYouSentAt: qNowIso, thankYouSentDate: qNowDate, thankYouSentTime: qNowTime, smsCount: currentCount + 1 };
                     } else {
                       cf.invitationSmsStatus = 'Imetumia';
+                      cf.invitationSentAt = qNowIso;
+                      cf.invitationSentDate = qNowDate;
+                      cf.invitationSentTime = qNowTime;
                       return { ...baseUpdates, smsStatus: "Imetumia", invitationSmsStatus: "Imetumia", invitationSentAt: qNowIso, invitationSentDate: qNowDate, invitationSentTime: qNowTime, smsCount: currentCount + 1 };
                     }
                   }
@@ -7125,6 +7191,13 @@ Lema, Nguvu Moja!`;
                   };
                   const updatedHist = [histItem, ...(Array.isArray(g.messageHistory) ? g.messageHistory : [])].slice(0, 50);
 
+                  cf.lastSentChannel = channel;
+                  cf.lastSentLang = task.lang || "sw";
+                  cf.lastSentAt = dNowIso;
+                  cf.lastSentDate = dNowDate;
+                  cf.lastSentTime = dNowTime;
+                  cf.lastMessageText = task.text;
+
                   const baseUpdates = {
                     ...g,
                     customFields: cf,
@@ -7141,24 +7214,42 @@ Lema, Nguvu Moja!`;
                     const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                     if (msgType === 'reminder') {
                       cf.reminderWhatsappStatus = 'Imetumia';
+                      cf.reminderSentAt = dNowIso;
+                      cf.reminderSentDate = dNowDate;
+                      cf.reminderSentTime = dNowTime;
                       return { ...baseUpdates, reminderWhatsappStatus: "Imetumia", reminderSentAt: dNowIso, reminderSentDate: dNowDate, reminderSentTime: dNowTime, whatsappCount: currentCount + 1 };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouWhatsappStatus = 'Imetumia';
+                      cf.thankYouSentAt = dNowIso;
+                      cf.thankYouSentDate = dNowDate;
+                      cf.thankYouSentTime = dNowTime;
                       return { ...baseUpdates, thankYouWhatsappStatus: "Imetumia", thankYouSentAt: dNowIso, thankYouSentDate: dNowDate, thankYouSentTime: dNowTime, whatsappCount: currentCount + 1 };
                     } else {
                       cf.invitationWhatsappStatus = 'Imetumia';
+                      cf.invitationSentAt = dNowIso;
+                      cf.invitationSentDate = dNowDate;
+                      cf.invitationSentTime = dNowTime;
                       return { ...baseUpdates, whatsappStatus: "Imetumia", invitationWhatsappStatus: "Imetumia", invitationSentAt: dNowIso, invitationSentDate: dNowDate, invitationSentTime: dNowTime, whatsappCount: currentCount + 1 };
                     }
                   } else {
                     const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
                     if (msgType === 'reminder') {
                       cf.reminderSmsStatus = 'Imetumia';
+                      cf.reminderSentAt = dNowIso;
+                      cf.reminderSentDate = dNowDate;
+                      cf.reminderSentTime = dNowTime;
                       return { ...baseUpdates, reminderSmsStatus: "Imetumia", reminderSentAt: dNowIso, reminderSentDate: dNowDate, reminderSentTime: dNowTime, smsCount: currentCount + 1 };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouSmsStatus = 'Imetumia';
+                      cf.thankYouSentAt = dNowIso;
+                      cf.thankYouSentDate = dNowDate;
+                      cf.thankYouSentTime = dNowTime;
                       return { ...baseUpdates, thankYouSmsStatus: "Imetumia", thankYouSentAt: dNowIso, thankYouSentDate: dNowDate, thankYouSentTime: dNowTime, smsCount: currentCount + 1 };
                     } else {
                       cf.invitationSmsStatus = 'Imetumia';
+                      cf.invitationSentAt = dNowIso;
+                      cf.invitationSentDate = dNowDate;
+                      cf.invitationSentTime = dNowTime;
                       return { ...baseUpdates, smsStatus: "Imetumia", invitationSmsStatus: "Imetumia", invitationSentAt: dNowIso, invitationSentDate: dNowDate, invitationSentTime: dNowTime, smsCount: currentCount + 1 };
                     }
                   }
@@ -7376,6 +7467,13 @@ Lema, Nguvu Moja!`;
             };
             const updatedHist = [histItem, ...(Array.isArray(g.messageHistory) ? g.messageHistory : [])].slice(0, 50);
 
+            customFields.lastSentChannel = usedChannel;
+            customFields.lastSentLang = lang || "sw";
+            customFields.lastSentAt = sNowIso;
+            customFields.lastSentDate = sNowDate;
+            customFields.lastSentTime = sNowTime;
+            customFields.lastMessageText = text;
+
             const baseUpdates = {
               ...g,
               customFields,
@@ -7391,6 +7489,9 @@ Lema, Nguvu Moja!`;
             if (activeMsgType === 'save_the_date') {
               customFields.std_sent_channel = usedChannel;
               customFields.std_sent_lang = lang || "sw";
+              customFields.stdSentAt = sNowIso;
+              customFields.stdSentDate = sNowDate;
+              customFields.stdSentTime = sNowTime;
               return {
                 ...baseUpdates,
                 stdSent: true,
@@ -7403,6 +7504,9 @@ Lema, Nguvu Moja!`;
             } else if (activeMsgType === 'pledge') {
               customFields.pledge_sent_channel = usedChannel;
               customFields.pledge_sent_lang = lang || "sw";
+              customFields.pledgeSentAt = sNowIso;
+              customFields.pledgeSentDate = sNowDate;
+              customFields.pledgeSentTime = sNowTime;
               return {
                 ...baseUpdates,
                 pledgeSent: true,
@@ -7415,6 +7519,9 @@ Lema, Nguvu Moja!`;
             } else if (activeMsgType === 'reminder') {
               customFields.reminder_sent_channel = usedChannel;
               customFields.reminder_sent_lang = lang || "sw";
+              customFields.reminderSentAt = sNowIso;
+              customFields.reminderSentDate = sNowDate;
+              customFields.reminderSentTime = sNowTime;
               if (usedChannel === 'whatsapp') {
                 const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                 customFields.reminderWhatsappStatus = 'Imetumia';
@@ -7447,6 +7554,9 @@ Lema, Nguvu Moja!`;
             } else if (activeMsgType === 'thanks' || activeMsgType === 'thank-you') {
               customFields.thanks_sent_channel = usedChannel;
               customFields.thanks_sent_lang = lang || "sw";
+              customFields.thankYouSentAt = sNowIso;
+              customFields.thankYouSentDate = sNowDate;
+              customFields.thankYouSentTime = sNowTime;
               if (usedChannel === 'whatsapp') {
                 const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                 customFields.thankYouWhatsappStatus = 'Imetumia';
@@ -7480,6 +7590,9 @@ Lema, Nguvu Moja!`;
               // Default to invitation
               customFields.invite_sent_channel = usedChannel;
               customFields.invite_sent_lang = lang || "sw";
+              customFields.invitationSentAt = sNowIso;
+              customFields.invitationSentDate = sNowDate;
+              customFields.invitationSentTime = sNowTime;
               if (usedChannel === 'whatsapp') {
                 const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                 customFields.invitationWhatsappStatus = 'Imetumia';
@@ -7529,6 +7642,16 @@ Lema, Nguvu Moja!`;
         }
 
         await writeDB(db);
+
+        const updatedGuestObj = (db.guests || []).find((g: any) => g.id === guestId);
+        return res.json({ 
+          success: true, 
+          log: failoverLog + result, 
+          batchId, 
+          usedChannel, 
+          failoverAttempted, 
+          updatedGuest: updatedGuestObj 
+        });
       }
       
       res.json({ success: true, log: failoverLog + result, batchId, usedChannel, failoverAttempted });

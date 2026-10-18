@@ -1601,8 +1601,17 @@ Karibu sana!`);
           };
           const updatedHist = [histItem, ...(Array.isArray(g.messageHistory) ? g.messageHistory : [])].slice(0, 50);
 
+          const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+          cf.lastSentChannel = actualChannel;
+          cf.lastSentLang = language;
+          cf.lastSentAt = nowIso;
+          cf.lastSentDate = nowDate;
+          cf.lastSentTime = nowTime;
+          cf.lastMessageText = mainText;
+
           const baseProps = {
             ...g,
+            customFields: cf,
             lastSentChannel: actualChannel,
             lastSentLang: language,
             lastSentAt: nowIso,
@@ -1613,8 +1622,14 @@ Karibu sana!`);
           };
 
           if (messageType === 'reminder') {
+            cf.reminderSentAt = nowIso;
+            cf.reminderSentDate = nowDate;
+            cf.reminderSentTime = nowTime;
+            if (isSmsSent) cf.reminderSmsStatus = 'Imetumia';
+            if (isWaSent) cf.reminderWhatsappStatus = 'Imetumia';
             return {
               ...baseProps,
+              customFields: cf,
               reminderSmsStatus: isSmsSent ? ('Imetumia' as const) : (g.reminderSmsStatus || 'Sijatuma'),
               reminderWhatsappStatus: isWaSent ? ('Imetumia' as const) : (g.reminderWhatsappStatus || 'Sijatuma'),
               reminderSentAt: nowIso,
@@ -1624,8 +1639,14 @@ Karibu sana!`);
               whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount
             };
           } else if (messageType === 'thank-you') {
+            cf.thankYouSentAt = nowIso;
+            cf.thankYouSentDate = nowDate;
+            cf.thankYouSentTime = nowTime;
+            if (isSmsSent) cf.thankYouSmsStatus = 'Imetumia';
+            if (isWaSent) cf.thankYouWhatsappStatus = 'Imetumia';
             return {
               ...baseProps,
+              customFields: cf,
               thankYouSmsStatus: isSmsSent ? ('Imetumia' as const) : (g.thankYouSmsStatus || 'Sijatuma'),
               thankYouWhatsappStatus: isWaSent ? ('Imetumia' as const) : (g.thankYouWhatsappStatus || 'Sijatuma'),
               thankYouSentAt: nowIso,
@@ -1635,8 +1656,20 @@ Karibu sana!`);
               whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount
             };
           } else {
+            cf.invitationSentAt = nowIso;
+            cf.invitationSentDate = nowDate;
+            cf.invitationSentTime = nowTime;
+            if (isSmsSent) {
+              cf.invitationSmsStatus = 'Imetumia';
+              cf.smsStatus = 'Imetumia';
+            }
+            if (isWaSent) {
+              cf.invitationWhatsappStatus = 'Imetumia';
+              cf.whatsappStatus = 'Imetumia';
+            }
             return {
               ...baseProps,
+              customFields: cf,
               smsStatus: isSmsSent ? ('Imetumia' as const) : g.smsStatus,
               whatsappStatus: isWaSent ? ('Imetumia' as const) : g.whatsappStatus,
               invitationSmsStatus: isSmsSent ? ('Imetumia' as const) : (g.invitationSmsStatus || g.smsStatus),
@@ -2234,22 +2267,22 @@ Karibu sana!`);
     if (deliveries.length === 0) return null;
 
     const activeSentDate = messageType === 'reminder'
-      ? (g.reminderSentDate || g.lastSentDate)
+      ? (g.reminderSentDate || (g.customFields as any)?.reminderSentDate || g.lastSentDate || (g.customFields as any)?.lastSentDate)
       : messageType === 'thank-you'
-        ? (g.thankYouSentDate || g.lastSentDate)
-        : (g.invitationSentDate || g.lastSentDate);
+        ? (g.thankYouSentDate || (g.customFields as any)?.thankYouSentDate || g.lastSentDate || (g.customFields as any)?.lastSentDate)
+        : (g.invitationSentDate || (g.customFields as any)?.invitationSentDate || g.lastSentDate || (g.customFields as any)?.lastSentDate);
 
     const activeSentTime = messageType === 'reminder'
-      ? (g.reminderSentTime || g.lastSentTime)
+      ? (g.reminderSentTime || (g.customFields as any)?.reminderSentTime || g.lastSentTime || (g.customFields as any)?.lastSentTime)
       : messageType === 'thank-you'
-        ? (g.thankYouSentTime || g.lastSentTime)
-        : (g.invitationSentTime || g.lastSentTime);
+        ? (g.thankYouSentTime || (g.customFields as any)?.thankYouSentTime || g.lastSentTime || (g.customFields as any)?.lastSentTime)
+        : (g.invitationSentTime || (g.customFields as any)?.invitationSentTime || g.lastSentTime || (g.customFields as any)?.lastSentTime);
 
     const activeSentAt = messageType === 'reminder'
-      ? (g.reminderSentAt || g.lastSentAt)
+      ? (g.reminderSentAt || (g.customFields as any)?.reminderSentAt || g.lastSentAt || (g.customFields as any)?.lastSentAt)
       : messageType === 'thank-you'
-        ? (g.thankYouSentAt || g.lastSentAt)
-        : (g.invitationSentAt || g.lastSentAt);
+        ? (g.thankYouSentAt || (g.customFields as any)?.thankYouSentAt || g.lastSentAt || (g.customFields as any)?.lastSentAt)
+        : (g.invitationSentAt || (g.customFields as any)?.invitationSentAt || g.lastSentAt || (g.customFields as any)?.lastSentAt);
 
     let displayTimestamp = "";
     if (activeSentDate && activeSentTime) {
@@ -2261,9 +2294,21 @@ Karibu sana!`);
       } catch {
         displayTimestamp = activeSentAt;
       }
+    } else if (activeSentDate) {
+      displayTimestamp = activeSentDate;
+    } else if (Array.isArray(g.messageHistory) && g.messageHistory.length > 0) {
+      const matchedHistory = g.messageHistory.find((m: any) => m.type === messageType) || g.messageHistory[0];
+      if (matchedHistory?.sentAt) {
+        try {
+          const d = new Date(matchedHistory.sentAt);
+          displayTimestamp = d.toLocaleDateString('sw-TZ') + ' ' + d.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' });
+        } catch {
+          displayTimestamp = matchedHistory.sentAt;
+        }
+      }
     }
 
-    const hasStoredMessage = !!(g.lastMessageText || (Array.isArray(g.messageHistory) && g.messageHistory.length > 0));
+    const hasStoredMessage = !!(g.lastMessageText || (g.customFields as any)?.lastMessageText || (Array.isArray(g.messageHistory) && g.messageHistory.length > 0));
 
     return (
       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
