@@ -118,20 +118,6 @@ export function EventCardProvider({ children }: { children: ReactNode }) {
             if (!localG) {
               return {
                 ...cg,
-                lastSentDate: cg.lastSentDate || cf.lastSentDate || null,
-                lastSentTime: cg.lastSentTime || cf.lastSentTime || null,
-                lastSentAt: cg.lastSentAt || cf.lastSentAt || null,
-                lastMessageText: cg.lastMessageText || cf.lastMessageText || null,
-                messageHistory: (Array.isArray(cg.messageHistory) && cg.messageHistory.length > 0) ? cg.messageHistory : (Array.isArray(cf.messageHistory) ? cf.messageHistory : []),
-                invitationSentDate: cg.invitationSentDate || cf.invitationSentDate || null,
-                invitationSentTime: cg.invitationSentTime || cf.invitationSentTime || null,
-                invitationSentAt: cg.invitationSentAt || cf.invitationSentAt || null,
-                reminderSentDate: cg.reminderSentDate || cf.reminderSentDate || null,
-                reminderSentTime: cg.reminderSentTime || cf.reminderSentTime || null,
-                reminderSentAt: cg.reminderSentAt || cf.reminderSentAt || null,
-                thankYouSentDate: cg.thankYouSentDate || cf.thankYouSentDate || null,
-                thankYouSentTime: cg.thankYouSentTime || cf.thankYouSentTime || null,
-                thankYouSentAt: cg.thankYouSentAt || cf.thankYouSentAt || null,
                 invitationSmsStatus: cg.invitationSmsStatus || cf.invitationSmsStatus || cg.smsStatus || "Sijatuma",
                 invitationWhatsappStatus: cg.invitationWhatsappStatus || cf.invitationWhatsappStatus || cg.whatsappStatus || "Sijatuma",
                 reminderSmsStatus: cg.reminderSmsStatus || cf.reminderSmsStatus || "Sijatuma",
@@ -155,52 +141,6 @@ export function EventCardProvider({ children }: { children: ReactNode }) {
             const mergedThkSms = isStatusSent(cg.thankYouSmsStatus) ? cg.thankYouSmsStatus : (isStatusSent(localG.thankYouSmsStatus) ? localG.thankYouSmsStatus : (cg.thankYouSmsStatus || cf.thankYouSmsStatus || localG.thankYouSmsStatus || localCf.thankYouSmsStatus || 'Sijatuma'));
             const mergedThkWa = isStatusSent(cg.thankYouWhatsappStatus) ? cg.thankYouWhatsappStatus : (isStatusSent(localG.thankYouWhatsappStatus) ? localG.thankYouWhatsappStatus : (cg.thankYouWhatsappStatus || cf.thankYouWhatsappStatus || localG.thankYouWhatsappStatus || localCf.thankYouWhatsappStatus || 'Sijatuma'));
 
-            // Safely merge date/time and message details so background sync never wipes them
-            const mergedLastSentDate = cg.lastSentDate || cf.lastSentDate || localG.lastSentDate || localCf.lastSentDate || null;
-            const mergedLastSentTime = cg.lastSentTime || cf.lastSentTime || localG.lastSentTime || localCf.lastSentTime || null;
-            const mergedLastSentAt = cg.lastSentAt || cf.lastSentAt || localG.lastSentAt || localCf.lastSentAt || null;
-            const mergedLastMessageText = cg.lastMessageText || cf.lastMessageText || localG.lastMessageText || localCf.lastMessageText || null;
-
-            // Merge message history so sent invitations/reminders are never lost
-            const serverHist = Array.isArray(cg.messageHistory) ? cg.messageHistory : (Array.isArray(cf.messageHistory) ? cf.messageHistory : []);
-            const localHist = Array.isArray(localG.messageHistory) ? localG.messageHistory : (Array.isArray(localCf.messageHistory) ? localCf.messageHistory : []);
-            const histMap = new Map<string, any>();
-            for (const h of [...localHist, ...serverHist]) {
-              if (h && (h.id || h.sentAt)) {
-                histMap.set(h.id || `${h.sentAt}-${h.channel}-${h.type}`, h);
-              }
-            }
-            const combinedHist = Array.from(histMap.values());
-
-            const mergedInvSentDate = cg.invitationSentDate || cf.invitationSentDate || localG.invitationSentDate || localCf.invitationSentDate || ((isStatusSent(mergedInvSms) || isStatusSent(mergedInvWa)) ? mergedLastSentDate : null);
-            const mergedInvSentTime = cg.invitationSentTime || cf.invitationSentTime || localG.invitationSentTime || localCf.invitationSentTime || ((isStatusSent(mergedInvSms) || isStatusSent(mergedInvWa)) ? mergedLastSentTime : null);
-            const mergedInvSentAt = cg.invitationSentAt || cf.invitationSentAt || localG.invitationSentAt || localCf.invitationSentAt || ((isStatusSent(mergedInvSms) || isStatusSent(mergedInvWa)) ? mergedLastSentAt : null);
-
-            const mergedRemSentDate = cg.reminderSentDate || cf.reminderSentDate || localG.reminderSentDate || localCf.reminderSentDate || null;
-            const mergedRemSentTime = cg.reminderSentTime || cf.reminderSentTime || localG.reminderSentTime || localCf.reminderSentTime || null;
-            const mergedRemSentAt = cg.reminderSentAt || cf.reminderSentAt || localG.reminderSentAt || localCf.reminderSentAt || null;
-
-            const mergedThkSentDate = cg.thankYouSentDate || cf.thankYouSentDate || localG.thankYouSentDate || localCf.thankYouSentDate || null;
-            const mergedThkSentTime = cg.thankYouSentTime || cf.thankYouSentTime || localG.thankYouSentTime || localCf.thankYouSentTime || null;
-            const mergedThkSentAt = cg.thankYouSentAt || cf.thankYouSentAt || localG.thankYouSentAt || localCf.thankYouSentAt || null;
-
-            const mergedCustomFields = {
-              ...localCf,
-              ...cf,
-              lastSentDate: mergedLastSentDate,
-              lastSentTime: mergedLastSentTime,
-              lastSentAt: mergedLastSentAt,
-              invitationSentDate: mergedInvSentDate,
-              invitationSentTime: mergedInvSentTime,
-              invitationSentAt: mergedInvSentAt,
-              reminderSentDate: mergedRemSentDate,
-              reminderSentTime: mergedRemSentTime,
-              reminderSentAt: mergedRemSentAt,
-              thankYouSentDate: mergedThkSentDate,
-              thankYouSentTime: mergedThkSentTime,
-              thankYouSentAt: mergedThkSentAt,
-            };
-
             return {
               ...cg,
               cardImageUrl: localG.cardImageUrl || cg.cardImageUrl,
@@ -216,21 +156,6 @@ export function EventCardProvider({ children }: { children: ReactNode }) {
               whatsappCount: Math.max(cg.whatsappCount || 0, localG.whatsappCount || 0),
               lastSentChannel: cg.lastSentChannel || localG.lastSentChannel,
               lastSentLang: cg.lastSentLang || localG.lastSentLang,
-              lastSentDate: mergedLastSentDate,
-              lastSentTime: mergedLastSentTime,
-              lastSentAt: mergedLastSentAt,
-              lastMessageText: mergedLastMessageText,
-              messageHistory: combinedHist.slice(0, 50),
-              invitationSentDate: mergedInvSentDate,
-              invitationSentTime: mergedInvSentTime,
-              invitationSentAt: mergedInvSentAt,
-              reminderSentDate: mergedRemSentDate,
-              reminderSentTime: mergedRemSentTime,
-              reminderSentAt: mergedRemSentAt,
-              thankYouSentDate: mergedThkSentDate,
-              thankYouSentTime: mergedThkSentTime,
-              thankYouSentAt: mergedThkSentAt,
-              customFields: mergedCustomFields,
             };
           });
 
@@ -400,8 +325,6 @@ export function EventCardProvider({ children }: { children: ReactNode }) {
         guests: merged,
         deletedGuestIds: deletedActiveIds.length > 0 ? deletedActiveIds : undefined 
       }, actionDesc || 'Amesasisha orodha ya wageni (Guests Updated)', `Tukio: ${eventDetails.name}`);
-    } else {
-      swrMutate((current: any) => current ? { ...current, guests: merged } : current, false);
     }
   };
 

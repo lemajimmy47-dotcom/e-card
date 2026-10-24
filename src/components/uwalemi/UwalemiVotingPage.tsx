@@ -18,9 +18,11 @@ import {
   Calendar,
   Phone,
   RefreshCw,
-  Award
+  Award,
+  Download
 } from 'lucide-react';
 import { UwalemiElection, UwalemiElectionPosition, UwalemiCandidate } from '../../types/uwalemi';
+import { generateElectionResultsPDF, generateVoterReceiptPDF, downloadPdfDocument, loadUwalemiLogoAsBase64 } from '../../services/uwalemiPdfGenerator';
 
 interface Props {
   token: string;
@@ -177,11 +179,47 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
   };
 
   const handleShareReceipt = () => {
-    const text = `UWALEMI: Kura yangu ya viongozi imerekodiwa kwa siri. Stakabadhi ya Ushiriki: ${submitSuccessReceipt?.receiptCode}.`;
+    const text = `UWALEMI: Matokeo ya uchaguzi na stakabadhi. Namba ya stakabadhi: ${submitSuccessReceipt?.receiptCode || voter?.receiptCode || 'UWL-VT'}.`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 3000);
+    }
+  };
+
+  const handleDownloadReceiptPdf = async () => {
+    const curReceipt = submitSuccessReceipt?.receiptCode || voter?.receiptCode;
+    const curVotedDate = submitSuccessReceipt?.votedAt || voter?.votedAt;
+    if (!curReceipt) return;
+    try {
+      const logoB64 = await loadUwalemiLogoAsBase64(groupSettings.logoUrl);
+      const doc = generateVoterReceiptPDF({
+        elections: [election]
+      } as any, {
+        fullName: voter?.fullName || 'Mwanachama',
+        memberNo: voter?.memberNo || 'UWL',
+        receiptCode: curReceipt,
+        votedAt: curVotedDate || new Date().toISOString(),
+        electionTitle: election?.title || 'Uchaguzi wa Viongozi'
+      }, logoB64);
+      downloadPdfDocument(doc, `UWALEMI_Stakabadhi_Kura_${curReceipt}.pdf`);
+    } catch (err: any) {
+      console.error('Error generating voter receipt PDF:', err);
+      alert('Imeshindwa kutengeneza PDF ya stakabadhi: ' + (err.message || 'Hitilafu'));
+    }
+  };
+
+  const handleDownloadOfficialPdf = async () => {
+    try {
+      const logoB64 = await loadUwalemiLogoAsBase64(groupSettings.logoUrl);
+      const doc = generateElectionResultsPDF({
+        elections: [election],
+        groupSettings
+      } as any, election.id, logoB64);
+      downloadPdfDocument(doc, `UWALEMI_Matokeo_Rasmi_${election.id}.pdf`);
+    } catch (err: any) {
+      console.error('Error generating election results PDF:', err);
+      alert('Imeshindwa kutengeneza PDF ya matokeo: ' + (err.message || 'Hitilafu'));
     }
   };
 
@@ -225,10 +263,12 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
     );
   }
 
-  // Already voted state - Show digital certificate receipt
-  if (submitSuccessReceipt || voter?.hasVoted) {
-    const receipt = submitSuccessReceipt?.receiptCode || voter?.receiptCode || 'UWL-VT-SUCCESS';
-    const votedDateStr = submitSuccessReceipt?.votedAt || voter?.votedAt || new Date().toISOString();
+  const isElectionFinished = timeStatus === 'ended' || election?.status === 'completed';
+
+  // Already voted state OR election ended/completed state -> Show digital receipt & official results with PDF download
+  if (submitSuccessReceipt || voter?.hasVoted || isElectionFinished) {
+    const receipt = submitSuccessReceipt?.receiptCode || voter?.receiptCode;
+    const votedDateStr = submitSuccessReceipt?.votedAt || voter?.votedAt;
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6">
@@ -246,66 +286,81 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
               />
             </div>
             <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
-              Kura Imepokelewa Kikamilifu
+              {voter?.hasVoted || receipt ? 'Kura Imepokelewa Kikamilifu' : 'Matokeo Rasmi ya Uchaguzi'}
             </span>
             <h2 className="text-2xl font-black text-white mt-3 mb-1">
-              Asante kwa Kushiriki!
+              {voter?.hasVoted || receipt ? 'Asante kwa Kushiriki!' : 'Matokeo Rasmi Yamefunguliwa'}
             </h2>
             <p className="text-xs text-slate-400 font-medium">
               {groupSettings.groupName} • {election?.title || 'Uchaguzi wa Viongozi'}
             </p>
           </div>
 
-          {/* Official Digital Certificate Box */}
-          <div className="bg-slate-950/80 border border-emerald-500/30 rounded-xl p-5 mb-6 text-left relative overflow-hidden">
-            <div className="absolute top-2 right-2 opacity-10">
-              <ShieldCheck className="w-24 h-24 text-emerald-400" />
-            </div>
+          {/* Official Digital Certificate Box (Only if voted) */}
+          {receipt && (
+            <div className="bg-slate-950/80 border border-emerald-500/30 rounded-xl p-5 mb-6 text-left relative overflow-hidden">
+              <div className="absolute top-2 right-2 opacity-10">
+                <ShieldCheck className="w-24 h-24 text-emerald-400" />
+              </div>
 
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Mpiga Kura Aliyeidhinishwa</p>
-                <p className="text-sm font-bold text-slate-200">{voter?.fullName}</p>
-                <p className="text-xs text-emerald-400 font-semibold">{voter?.memberNo}</p>
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Mpiga Kura Aliyeidhinishwa</p>
+                  <p className="text-sm font-bold text-slate-200">{voter?.fullName}</p>
+                  <p className="text-xs text-emerald-400 font-semibold">{voter?.memberNo}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Imethibitishwa
+                  </span>
+                </div>
               </div>
-              <div className="text-right">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Imethibitishwa
-                </span>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-slate-900">
+                  <span className="text-slate-400">Namba ya Stakabadhi:</span>
+                  <span className="font-mono font-bold text-emerald-400 tracking-wider text-sm">{receipt}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-900">
+                  <span className="text-slate-400">Tarehe na Saa:</span>
+                  <span className="text-slate-300 font-medium">
+                    {votedDateStr ? new Date(votedDateStr).toLocaleString('sw-TZ', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-900">
+                  <span className="text-slate-400">Hali ya Usiri:</span>
+                  <span className="text-emerald-400 font-medium flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Imelindwa 100% (Anonymous)
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 italic">
+                "Kura yako imehifadhiwa kwa siri bila kuambatanishwa na jina lako."
               </div>
             </div>
+          )}
 
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-900">
-                <span className="text-slate-400">Namba ya Stakabadhi:</span>
-                <span className="font-mono font-bold text-emerald-400 tracking-wider text-sm">{receipt}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-900">
-                <span className="text-slate-400">Tarehe na Saa:</span>
-                <span className="text-slate-300 font-medium">
-                  {new Date(votedDateStr).toLocaleString('sw-TZ', { dateStyle: 'medium', timeStyle: 'short' })}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-900">
-                <span className="text-slate-400">Hali ya Usiri:</span>
-                <span className="text-emerald-400 font-medium flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Imelindwa 100% (Anonymous)
-                </span>
-              </div>
+          {/* Election Ended Notice (If not voted yet but window closed) */}
+          {!receipt && isElectionFinished && (
+            <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-4 mb-6 text-left text-xs text-amber-200">
+              <p className="font-bold mb-1 flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-amber-400" />
+                Dirisha la Kupiga Kura Limefungwa
+              </p>
+              <p className="text-slate-300">
+                Muda uliopangwa wa uchaguzi umemalizika rasmi. Hapa chini ni matokeo rasmi ya mwisho. Unaweza kupakua ripoti ya matokeo katika mfumo wa PDF.
+              </p>
             </div>
+          )}
 
-            <div className="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 italic">
-              "Kura yako imehifadhiwa kwa siri bila kuambatanishwa na jina lako. Hakuna mtu au kiongozi yeyote anayeweza kuona nani umempigia kura."
-            </div>
-          </div>
-
-          {/* Live Election Results Panel */}
+          {/* Live / Final Election Results Panel */}
           {resultsTally && (
             <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4 mb-6 text-left">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
                 <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
                   <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                  Matokeo ya Moja kwa Moja (Live)
+                  {isElectionFinished ? 'Matokeo Rasmi ya Mwisho' : 'Matokeo ya Moja kwa Moja (Live)'}
                 </h3>
                 <span className="text-[10px] text-slate-400 font-medium font-mono">
                   Kura: <strong>{resultsTally.totalBallotsCast}</strong> / {resultsTally.totalEligibleVoters} ({resultsTally.turnoutPercentage}%)
@@ -330,6 +385,7 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
                               <div className="flex justify-between text-slate-400 mb-0.5">
                                 <span className="font-medium text-slate-300">
                                   {cand.candidateName} <span className="text-slate-500 font-mono text-[9px]">({cand.candidateNo})</span>
+                                  {cand.isWinner && <span className="ml-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded">Mshindi ✓</span>}
                                 </span>
                                 <span className="font-mono text-slate-200 font-bold">
                                   {cand.votesCount} <span className="text-slate-500 text-[9px]">({cand.percentage}%)</span>
@@ -356,21 +412,43 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
           )}
 
           {/* Action buttons */}
-          <div className="flex flex-col sm:flex-row items-center gap-2 mb-4">
+          <div className="space-y-2 mb-4">
+            {receipt && (
+              <button
+                onClick={handleDownloadReceiptPdf}
+                className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-emerald-950/50"
+              >
+                <Download className="w-4 h-4" />
+                Pakua Stakabadhi ya Kura kama PDF (Official Receipt)
+              </button>
+            )}
+
             <button
-              onClick={handlePrintReceipt}
-              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+              onClick={handleDownloadOfficialPdf}
+              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer border border-slate-700"
             >
-              <Printer className="w-4 h-4" />
-              Chapisha / Hifadhi PDF
+              <Download className="w-4 h-4" />
+              Pakua Matokeo Rasmi ya Uchaguzi (PDF)
             </button>
-            <button
-              onClick={handleShareReceipt}
-              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all cursor-pointer"
-            >
-              {copiedLink ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-              {copiedLink ? 'Imenakiliwa!' : 'Nakili Uthibitisho'}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePrintReceipt}
+                className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                Chapisha Kurasa
+              </button>
+              {receipt && (
+                <button
+                  onClick={handleShareReceipt}
+                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                >
+                  {copiedLink ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                  {copiedLink ? 'Imenakiliwa!' : 'Nakili Uthibitisho'}
+                </button>
+              )}
+            </div>
           </div>
 
           {onClose && (
@@ -415,24 +493,21 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
     );
   }
 
-  // Election paused or closed
-  if (election && (election.status === 'paused' || election.status === 'completed' || timeStatus !== 'open')) {
+  // Election paused or not started (ended is handled above for results view)
+  if (election && (election.status === 'paused' || timeStatus === 'not_started')) {
     const isPaused = election.status === 'paused';
-    const isEnded = election.status === 'completed' || timeStatus === 'ended';
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
         <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center mb-4 text-slate-300">
           <Clock className="w-8 h-8 text-emerald-400" />
         </div>
         <h2 className="text-xl font-bold text-white mb-2">
-          {isPaused ? 'Uchaguzi Umesitishwa kwa Muda' : isEnded ? 'Dirisha la Uchaguzi Limefungwa' : 'Uchaguzi Bado Haujaanza'}
+          {isPaused ? 'Uchaguzi Umesitishwa kwa Muda' : 'Uchaguzi Bado Haujaanza'}
         </h2>
         <p className="text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
           {isPaused 
             ? 'Kamati ya Uchaguzi ya UWALEMI imesitisha shughuli ya upigaji kura kwa muda kwa ajili ya mapitio ya kiufundi. Tafadhali tembelea tena baadae.'
-            : isEnded
-              ? 'Muda uliopangwa kikatiba wa kupiga kura umemalizika rasmi. Matokeo rasmi yatatangazwa na Kamati ya Uchaguzi punde baada ya majumuisho kukamilika.'
-              : `Upigaji kura utaanza rasmi tarehe ${election.startDate ? new Date(election.startDate).toLocaleString('sw-TZ') : 'hivi karibuni'}.`}
+            : `Upigaji kura utaanza rasmi tarehe ${election.startDate ? new Date(election.startDate).toLocaleString('sw-TZ') : 'hivi karibuni'}.`}
         </p>
         {onClose && (
           <button

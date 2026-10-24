@@ -3471,19 +3471,7 @@ export default function App() {
       </main>
 
       {/* Global Floating AI Chatbot Assistant */}
-      <AIChatbotWidget 
-        eventId={eventDetails?.id} 
-        eventsList={eventsList}
-        currentEvent={eventDetails}
-        onSelectEvent={(selectedId) => {
-          const matched = eventsList.find(e => e.id === selectedId);
-          if (matched) {
-            setEventDetails(matched);
-            saveState({ eventDetails: matched });
-          }
-        }}
-        language={language} 
-      />
+      <AIChatbotWidget eventId={eventDetails?.id} language={language} />
     </div>
   );
 }

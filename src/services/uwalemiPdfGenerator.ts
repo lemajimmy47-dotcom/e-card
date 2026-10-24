@@ -2600,3 +2600,75 @@ export const generateElectionResultsPDF = (
   return doc;
 };
 
+/**
+ * Generate Official Voter Receipt PDF with Letterhead Logo & Security Watermark
+ */
+export const generateVoterReceiptPDF = (
+  state: UwalemiState,
+  voterInfo: {
+    fullName: string;
+    memberNo: string;
+    receiptCode: string;
+    votedAt: string;
+    electionTitle: string;
+  },
+  logoBase64Override?: string
+): jsPDF => {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
+
+  const currentY = drawOfficialHeader(
+    doc,
+    state,
+    'STAKABADHI RASMI YA KURA YA USHIRIKI',
+    `Uchaguzi: ${voterInfo.electionTitle}`,
+    logoBase64Override
+  );
+
+  let nextY = currentY + 4;
+
+  autoTable(doc, {
+    startY: nextY,
+    head: [['TAARIFA ZA MPIGA KURA', 'MAELEZO']],
+    body: [
+      ['Jina la Mwanachama', voterInfo.fullName],
+      ['Namba ya Uanachama', voterInfo.memberNo],
+      ['Namba ya Stakabadhi', voterInfo.receiptCode],
+      ['Tarehe na Saa ya Kupiga Kura', new Date(voterInfo.votedAt).toLocaleString('sw-TZ', { dateStyle: 'medium', timeStyle: 'short' })],
+      ['Hali ya Usiri', 'Imelindwa 100% (Anonymous Secret Ballot)']
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    bodyStyles: { fontSize: 8 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 55 },
+      1: { cellWidth: 75, fontStyle: 'bold', textColor: [15, 23, 42] }
+    }
+  });
+
+  // @ts-ignore
+  nextY = doc.lastAutoTable.finalY + 10;
+
+  // Stamp Badge
+  doc.setDrawColor(5, 150, 105);
+  doc.setLineWidth(1.5);
+  doc.roundedRect(30, nextY, 88, 16, 3, 3, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(5, 150, 105);
+  doc.text('KURA IMEPOKELEWA • VOTED', 74, nextY + 7, { align: 'center' });
+  doc.setFontSize(6.5);
+  doc.text('IMETHIBITISHWA NA MFUMO WA ELEKTRONIKI WA UWALEMI', 74, nextY + 12, { align: 'center' });
+
+  nextY += 22;
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('"Kura yako imehifadhiwa kwa siri bila kuambatanishwa na jina lako."', 74, nextY, { align: 'center' });
+
+  addUwalemiReportWatermark(doc, logoBase64Override);
+  return doc;
+};
+
+

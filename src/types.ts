@@ -185,15 +185,6 @@ export interface Guest {
   lastSentAt?: string;
   lastSentDate?: string;
   lastSentTime?: string;
-  lastMessageText?: string;
-  messageHistory?: {
-    id: string;
-    channel: 'sms' | 'whatsapp';
-    type: string;
-    text: string;
-    sentAt: string;
-    status: 'sent' | 'delivered' | 'failed';
-  }[];
   invitationSentAt?: string;
   invitationSentDate?: string;
   invitationSentTime?: string;
@@ -209,35 +200,6 @@ export interface Guest {
   stdSentAt?: string;
   stdSentDate?: string;
   stdSentTime?: string;
-
-  // Dedicated Channel Sent Timestamps (Separate SMS vs WhatsApp)
-  whatsappSentDate?: string | null;
-  whatsappSentTime?: string | null;
-  whatsappSentAt?: string | null;
-  smsSentDate?: string | null;
-  smsSentTime?: string | null;
-  smsSentAt?: string | null;
-
-  invitationWhatsappSentDate?: string | null;
-  invitationWhatsappSentTime?: string | null;
-  invitationWhatsappSentAt?: string | null;
-  invitationSmsSentDate?: string | null;
-  invitationSmsSentTime?: string | null;
-  invitationSmsSentAt?: string | null;
-
-  reminderWhatsappSentDate?: string | null;
-  reminderWhatsappSentTime?: string | null;
-  reminderWhatsappSentAt?: string | null;
-  reminderSmsSentDate?: string | null;
-  reminderSmsSentTime?: string | null;
-  reminderSmsSentAt?: string | null;
-
-  thankYouWhatsappSentDate?: string | null;
-  thankYouWhatsappSentTime?: string | null;
-  thankYouWhatsappSentAt?: string | null;
-  thankYouSmsSentDate?: string | null;
-  thankYouSmsSentTime?: string | null;
-  thankYouSmsSentAt?: string | null;
 
   // Contribution Module Fields
   pledgeAmount?: number;

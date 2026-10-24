@@ -43,22 +43,16 @@ export const createPool = () => {
           keepAliveInitialDelayMillis: 10000,
         });
       } else {
-        console.warn("[Database] Both SQL_HOST and DATABASE_URL are missing — using mock pool.");
-        const mockPool: any = {
-          query: async () => ({ rows: [] }),
-          connect: async () => ({ query: async () => ({ rows: [] }), release: () => {} }),
-          on: () => {},
-          end: async () => {},
-        };
-        global._postgresPool = mockPool as unknown as Pool;
+        console.warn("[Database] Both SQL_HOST and DATABASE_URL are missing.");
+        global._postgresPool = new Pool({
+          connectionTimeoutMillis: 10000,
+        });
       }
     }
 
-    if (global._postgresPool && typeof global._postgresPool.on === "function") {
-      global._postgresPool.on("error", (err) => {
-        console.warn("[Database] Recoverable notification on idle SQL pool client:", err?.message || err);
-      });
-    }
+    global._postgresPool.on("error", (err) => {
+      console.warn("[Database] Recoverable notification on idle SQL pool client:", err?.message || err);
+    });
   }
 
   return global._postgresPool;
@@ -66,24 +60,6 @@ export const createPool = () => {
 
 const pool = createPool();
 
-let db: any;
-try {
-  db = drizzle(pool, { schema });
-} catch (e) {
-  console.warn("[AI Studio] Database not connected — using mock");
-  const noOp = {
-    findMany: async () => [],
-    findFirst: async () => null,
-    findUnique: async () => null,
-    create: async (d: any) => d?.data ?? {},
-    update: async (d: any) => d?.data ?? {},
-    delete: async () => ({}),
-  };
-  db = new Proxy({}, {
-    get: (_, prop) => prop === 'query'
-      ? new Proxy({}, { get: () => noOp }) : async () => [],
-  });
-}
-
-export { db, schema };
+export const db = drizzle(pool, { schema });
+export { schema };
 
