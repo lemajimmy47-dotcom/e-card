@@ -521,8 +521,27 @@ export const UwalemiElections: React.FC<Props> = ({
     }
   };
 
+  const checkCanExportResults = (): boolean => {
+    if (!activeElection) return false;
+    const isCompleted = activeElection.status === 'completed';
+    const isTimeEnded = activeElection.endDate && new Date() > new Date(activeElection.endDate);
+    if (!isCompleted && !isTimeEnded) {
+      alert("Zoezi la upigaji kura bado linaendelea! Ripoti rasmi ya matokeo haitolewi hadi uchaguzi utakapokamilika rasmi au muda uliopangwa kupiga kura uishe.");
+      return false;
+    }
+    return true;
+  };
+
+  const handleCompleteElectionWithConfirmation = async () => {
+    if (!activeElection) return;
+    if (window.confirm("Je, una uhakika unataka kukamilisha na kufunga rasmi uchaguzi huu? Baada ya kufunga, matokeo yatakuwa rasmi na ripoti rasmi itapatikana.")) {
+      await handleUpdateElectionStatus('completed');
+    }
+  };
+
   // Print/Export Official Results Report with Logo & Watermark
   const handlePrintResults = async () => {
+    if (!checkCanExportResults()) return;
     if (!activeElection || !tallyData) {
       alert("Hakuna matokeo ya kupakua kwa sasa.");
       return;
@@ -756,6 +775,7 @@ export const UwalemiElections: React.FC<Props> = ({
 
   // Download PDF Results
   const handleDownloadPDFResults = async () => {
+    if (!checkCanExportResults()) return;
     if (!activeElection || !tallyData) {
       alert("Hakuna matokeo ya kupakua kwa sasa.");
       return;
@@ -777,6 +797,7 @@ export const UwalemiElections: React.FC<Props> = ({
 
   // Interactive PDF Preview Modal
   const handlePreviewPDFResults = async () => {
+    if (!checkCanExportResults()) return;
     if (!activeElection || !tallyData) {
       alert("Hakuna matokeo ya kupakua kwa sasa.");
       return;
@@ -947,7 +968,7 @@ export const UwalemiElections: React.FC<Props> = ({
                   Sitisha
                 </button>
                 <button
-                  onClick={() => handleUpdateElectionStatus('completed')}
+                  onClick={handleCompleteElectionWithConfirmation}
                   disabled={activeElection.status === 'completed'}
                   className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                     activeElection.status === 'completed' 
