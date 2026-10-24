@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, X, Send, Sparkles, MessageSquare, RefreshCw, ChevronDown } from 'lucide-react';
+import { Bot, X, Send, Sparkles, MessageSquare, RefreshCw, ChevronDown, Calendar, MapPin } from 'lucide-react';
+import { EventDetails } from '../types';
 
 interface AIChatbotWidgetProps {
   eventId?: string;
+  eventsList?: EventDetails[];
+  currentEvent?: EventDetails | null;
+  onSelectEvent?: (eventId: string) => void;
   language?: 'sw' | 'en';
 }
 
@@ -13,17 +17,38 @@ interface Message {
   time: string;
 }
 
-export const AIChatbotWidget: React.FC<AIChatbotWidgetProps> = ({ eventId, language = 'sw' }) => {
+export const AIChatbotWidget: React.FC<AIChatbotWidgetProps> = ({ 
+  eventId, 
+  eventsList = [], 
+  currentEvent = null, 
+  onSelectEvent,
+  language = 'sw' 
+}) => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [inputMessage, setInputMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | undefined>(eventId || currentEvent?.id);
+  const [showEventPicker, setShowEventPicker] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (eventId) {
+      setSelectedEventId(eventId);
+    } else if (currentEvent?.id) {
+      setSelectedEventId(currentEvent.id);
+    }
+  }, [eventId, currentEvent?.id]);
+
+  const activeEvent = (eventsList && eventsList.length > 0)
+    ? (eventsList.find(e => String(e.id) === String(selectedEventId)) || currentEvent || eventsList[0])
+    : currentEvent;
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
       sender: 'bot',
       text: language === 'sw' 
-        ? "Habari! Mimi ni **Msaidizi wa AI wa EVENTCARD** 🤖.\n\nNinaweza kuwasaidia **Wageni Waalikwa** na **Wanakamati**:\n• **Kwa Mgeni:** Niulize ukumbi ulipo, tarehe, mchango au jinsi ya kuthibitisha RSVP.\n• **Kwa Kamati:** Niulize kuhusu orodha ya wageni, ahadi (pledges), au bajeti ya sherehe!" 
-        : "Hello! I am the **EVENTCARD AI Assistant** 🤖.\n\nI can assist both **Guests** and **Committee Members**:\n• **For Guests:** Ask about venue, date, contribution instructions, or RSVP.\n• **For Committee:** Ask about pledges, guest list, payments, or budget!",
+        ? "Habari! Mimi ni **Msaidizi wa AI wa EVENTCARD** 🤖.\n\nNinaweza kukusaidia kujua ukumbi, tarehe, orodha ya wageni, ahadi (pledges), au bajeti ya sherehe yako bila kuchanganya taarifa za sherehe yoyote!" 
+        : "Hello! I am the **EVENTCARD AI Assistant** 🤖.\n\nI can help you with venue details, dates, guest lists, pledges, or budget for your specific event without any mix-up!",
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -46,6 +71,25 @@ export const AIChatbotWidget: React.FC<AIChatbotWidgetProps> = ({ eventId, langu
     }
   }, [messages, isOpen]);
 
+  const handleSwitchEvent = (ev: EventDetails) => {
+    setSelectedEventId(ev.id);
+    setShowEventPicker(false);
+    if (onSelectEvent) {
+      onSelectEvent(ev.id);
+    }
+
+    const switchNotice: Message = {
+      id: 'switch-' + Date.now(),
+      sender: 'bot',
+      text: language === 'sw'
+        ? `📍 **Umebadilisha Sherehe:** Sasa ninaangazia **${ev.name || 'Sherehe'}**.\n• **Ukumbi:** ${ev.eventHallName || ev.venueLocation || 'Haijawekwa'}\n• **Tarehe:** ${ev.date || 'Haijawekwa'} (${ev.time || 'Jioni'})\n\nUnaweza kuniuliza chochote kuhusu ukumbi au michango ya sherehe hii!`
+        : `📍 **Switched Event:** Now focusing on **${ev.name || 'Event'}**.\n• **Venue:** ${ev.eventHallName || ev.venueLocation || 'Not set'}\n• **Date:** ${ev.date || 'Not set'} (${ev.time || 'Evening'})\n\nYou can ask me anything about this event!`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages((prev) => [...prev, switchNotice]);
+  };
+
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputMessage).trim();
     if (!text || loading) return;
@@ -65,7 +109,11 @@ export const AIChatbotWidget: React.FC<AIChatbotWidgetProps> = ({ eventId, langu
       const response = await fetch('/api/ai-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, eventId })
+        body: JSON.stringify({ 
+          message: text, 
+          eventId: activeEvent?.id || selectedEventId,
+          eventName: activeEvent?.name 
+        })
       });
 
       const data = await response.json();
@@ -183,13 +231,97 @@ export const AIChatbotWidget: React.FC<AIChatbotWidgetProps> = ({ eventId, langu
             </button>
           </div>
 
+          {/* Active Event Indicator & Selector Bar */}
+          <div className="bg-[#0b1328] px-3.5 py-2 border-b border-white/10 flex items-center justify-between gap-2 relative">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-[10px] font-bold text-amber-400 font-mono uppercase shrink-0">
+                {language === 'sw' ? 'Sherehe:' : 'Event:'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowEventPicker(!showEventPicker)}
+                className="flex items-center gap-1.5 text-xs font-bold text-white hover:text-blue-300 truncate transition cursor-pointer"
+                title={language === 'sw' ? 'Bofya kubadili sherehe' : 'Click to switch event'}
+              >
+                <span className="truncate max-w-[180px] sm:max-w-[220px]">
+                  {activeEvent?.name || (language === 'sw' ? 'Sherehe Yako' : 'My Event')}
+                </span>
+                {eventsList.length > 1 && (
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${showEventPicker ? 'rotate-180' : ''}`} />
+                )}
+              </button>
+            </div>
+
+            {/* Event Hall / Date Tag */}
+            {activeEvent?.eventHallName && (
+              <span className="text-[9.5px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md truncate max-w-[130px] shrink-0 flex items-center gap-1" title={activeEvent.eventHallName}>
+                <MapPin className="w-2.5 h-2.5 shrink-0" />
+                <span className="truncate">{activeEvent.eventHallName}</span>
+              </span>
+            )}
+
+            {/* Dropdown Menu for Switching Event */}
+            {showEventPicker && eventsList.length > 1 && (
+              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-slate-950 border border-white/10 rounded-2xl shadow-2xl p-2 space-y-1 backdrop-blur-xl animate-in fade-in duration-150">
+                <p className="text-[9px] uppercase tracking-wider font-mono text-slate-400 px-2 py-1 font-bold">
+                  {language === 'sw' ? 'Chagua Sherehe unayotaka kuulizia:' : 'Choose event to inquire about:'}
+                </p>
+                {eventsList.map((ev) => {
+                  const isCurrent = String(ev.id) === String(activeEvent?.id);
+                  return (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      onClick={() => handleSwitchEvent(ev)}
+                      className={`w-full text-left p-2 rounded-xl transition flex items-center justify-between text-xs cursor-pointer ${
+                        isCurrent 
+                          ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30 font-bold' 
+                          : 'hover:bg-white/5 text-slate-300'
+                      }`}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="font-extrabold truncate text-white">{ev.name}</p>
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                          🏛️ {ev.eventHallName || 'Ukumbi haujawekwa'} &bull; 🗓️ {ev.date || 'Tarehe haijawekwa'}
+                        </p>
+                      </div>
+                      {isCurrent && (
+                        <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">
+                          Active
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Quick Action Suggestion Chips */}
           <div className="bg-slate-950/60 p-2 border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto text-[11px] no-scrollbar">
+            <button
+              onClick={() => handleSendMessage(language === 'sw' ? 'Ukumbi wa sherehe hii uko wapi na unafanyikaje?' : 'Where is the event hall and how to get there?')}
+              className="px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 whitespace-nowrap transition font-medium text-[10px]"
+            >
+              🏛️ {language === 'sw' ? 'Ukumbi Uko Wapi?' : 'Where is Venue?'}
+            </button>
             <button
               onClick={() => handleSendMessage(language === 'sw' ? 'Muhtasari wa michango na bajeti' : 'Pledge and budget summary')}
               className="px-2.5 py-1 rounded-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 whitespace-nowrap transition font-medium text-[10px]"
             >
               📊 {language === 'sw' ? 'Michango & Bajeti' : 'Pledges & Budget'}
+            </button>
+            <button
+              onClick={() => handleSendMessage(language === 'sw' ? 'Tarehe, muda na mavazi (dress code)' : 'Date, time and dress code')}
+              className="px-2.5 py-1 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 whitespace-nowrap transition font-medium text-[10px]"
+            >
+              🗓️ {language === 'sw' ? 'Tarehe & Mavazi' : 'Date & Dress'}
+            </button>
+            <button
+              onClick={() => handleSendMessage(language === 'sw' ? 'Hali ya wageni na waliolipa' : 'Guest list and payment status')}
+              className="px-2.5 py-1 rounded-full bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 whitespace-nowrap transition font-medium text-[10px]"
+            >
+              👥 {language === 'sw' ? 'Wageni Waliolipa' : 'Guest Payments'}
             </button>
             <button
               onClick={() => handleSendMessage(language === 'sw' ? 'Hali ya wageni na waliolipa' : 'Guest list and payment status')}

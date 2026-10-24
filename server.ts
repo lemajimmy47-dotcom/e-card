@@ -3880,6 +3880,66 @@ async function startServer() {
               if (isSent(sg.thankYouWhatsappStatus) && !isSent(mergedThkWa)) mergedThkWa = sg.thankYouWhatsappStatus;
             }
 
+            const mergedLastSentDate = cg.lastSentDate || sg.lastSentDate || (cg.customFields as any)?.lastSentDate || (sg.customFields as any)?.lastSentDate || null;
+            const mergedLastSentTime = cg.lastSentTime || sg.lastSentTime || (cg.customFields as any)?.lastSentTime || (sg.customFields as any)?.lastSentTime || null;
+            const mergedLastSentAt = cg.lastSentAt || sg.lastSentAt || (cg.customFields as any)?.lastSentAt || (sg.customFields as any)?.lastSentAt || null;
+            const mergedLastMessageText = cg.lastMessageText || sg.lastMessageText || (cg.customFields as any)?.lastMessageText || (sg.customFields as any)?.lastMessageText || null;
+
+            // Merge message history so past sent logs are preserved
+            const serverHist = Array.isArray(sg.messageHistory) ? sg.messageHistory : ((sg.customFields as any)?.messageHistory || []);
+            const clientHist = Array.isArray(cg.messageHistory) ? cg.messageHistory : ((cg.customFields as any)?.messageHistory || []);
+            const histMap = new Map<string, any>();
+            for (const h of [...clientHist, ...serverHist]) {
+              if (h && (h.id || h.sentAt)) {
+                histMap.set(h.id || `${h.sentAt}-${h.channel}-${h.type}`, h);
+              }
+            }
+            const mergedMessageHistory = Array.from(histMap.values()).slice(0, 50);
+
+            const mergedInvSentAt = cg.invitationSentAt || sg.invitationSentAt || (cg.customFields as any)?.invitationSentAt || (sg.customFields as any)?.invitationSentAt || ((isSent(mergedInvSms) || isSent(mergedInvWa)) ? mergedLastSentAt : null);
+            const mergedInvSentDate = cg.invitationSentDate || sg.invitationSentDate || (cg.customFields as any)?.invitationSentDate || (sg.customFields as any)?.invitationSentDate || ((isSent(mergedInvSms) || isSent(mergedInvWa)) ? mergedLastSentDate : null);
+            const mergedInvSentTime = cg.invitationSentTime || sg.invitationSentTime || (cg.customFields as any)?.invitationSentTime || (sg.customFields as any)?.invitationSentTime || ((isSent(mergedInvSms) || isSent(mergedInvWa)) ? mergedLastSentTime : null);
+
+            const mergedRemSentAt = cg.reminderSentAt || sg.reminderSentAt || (cg.customFields as any)?.reminderSentAt || (sg.customFields as any)?.reminderSentAt || null;
+            const mergedRemSentDate = cg.reminderSentDate || sg.reminderSentDate || (cg.customFields as any)?.reminderSentDate || (sg.customFields as any)?.reminderSentDate || null;
+            const mergedRemSentTime = cg.reminderSentTime || sg.reminderSentTime || (cg.customFields as any)?.reminderSentTime || (sg.customFields as any)?.reminderSentTime || null;
+
+            const mergedThkSentAt = cg.thankYouSentAt || sg.thankYouSentAt || (cg.customFields as any)?.thankYouSentAt || (sg.customFields as any)?.thankYouSentAt || null;
+            const mergedThkSentDate = cg.thankYouSentDate || sg.thankYouSentDate || (cg.customFields as any)?.thankYouSentDate || (sg.customFields as any)?.thankYouSentDate || null;
+            const mergedThkSentTime = cg.thankYouSentTime || sg.thankYouSentTime || (cg.customFields as any)?.thankYouSentTime || (sg.customFields as any)?.thankYouSentTime || null;
+
+            const mergedWhatsappSentAt = cg.whatsappSentAt || sg.whatsappSentAt || (cg.customFields as any)?.whatsappSentAt || (sg.customFields as any)?.whatsappSentAt || null;
+            const mergedWhatsappSentDate = cg.whatsappSentDate || sg.whatsappSentDate || (cg.customFields as any)?.whatsappSentDate || (sg.customFields as any)?.whatsappSentDate || null;
+            const mergedWhatsappSentTime = cg.whatsappSentTime || sg.whatsappSentTime || (cg.customFields as any)?.whatsappSentTime || (sg.customFields as any)?.whatsappSentTime || null;
+
+            const mergedSmsSentAt = cg.smsSentAt || sg.smsSentAt || (cg.customFields as any)?.smsSentAt || (sg.customFields as any)?.smsSentAt || null;
+            const mergedSmsSentDate = cg.smsSentDate || sg.smsSentDate || (cg.customFields as any)?.smsSentDate || (sg.customFields as any)?.smsSentDate || null;
+            const mergedSmsSentTime = cg.smsSentTime || sg.smsSentTime || (cg.customFields as any)?.smsSentTime || (sg.customFields as any)?.smsSentTime || null;
+
+            const mergedInvWaSentDate = cg.invitationWhatsappSentDate || sg.invitationWhatsappSentDate || (cg.customFields as any)?.invitationWhatsappSentDate || (sg.customFields as any)?.invitationWhatsappSentDate || mergedWhatsappSentDate;
+            const mergedInvWaSentTime = cg.invitationWhatsappSentTime || sg.invitationWhatsappSentTime || (cg.customFields as any)?.invitationWhatsappSentTime || (sg.customFields as any)?.invitationWhatsappSentTime || mergedWhatsappSentTime;
+            const mergedInvWaSentAt = cg.invitationWhatsappSentAt || sg.invitationWhatsappSentAt || (cg.customFields as any)?.invitationWhatsappSentAt || (sg.customFields as any)?.invitationWhatsappSentAt || mergedWhatsappSentAt;
+
+            const mergedInvSmsSentDate = cg.invitationSmsSentDate || sg.invitationSmsSentDate || (cg.customFields as any)?.invitationSmsSentDate || (sg.customFields as any)?.invitationSmsSentDate || mergedSmsSentDate;
+            const mergedInvSmsSentTime = cg.invitationSmsSentTime || sg.invitationSmsSentTime || (cg.customFields as any)?.invitationSmsSentTime || (sg.customFields as any)?.invitationSmsSentTime || mergedSmsSentTime;
+            const mergedInvSmsSentAt = cg.invitationSmsSentAt || sg.invitationSmsSentAt || (cg.customFields as any)?.invitationSmsSentAt || (sg.customFields as any)?.invitationSmsSentAt || mergedSmsSentAt;
+
+            const mergedRemWaSentDate = cg.reminderWhatsappSentDate || sg.reminderWhatsappSentDate || (cg.customFields as any)?.reminderWhatsappSentDate || (sg.customFields as any)?.reminderWhatsappSentDate || null;
+            const mergedRemWaSentTime = cg.reminderWhatsappSentTime || sg.reminderWhatsappSentTime || (cg.customFields as any)?.reminderWhatsappSentTime || (sg.customFields as any)?.reminderWhatsappSentTime || null;
+            const mergedRemWaSentAt = cg.reminderWhatsappSentAt || sg.reminderWhatsappSentAt || (cg.customFields as any)?.reminderWhatsappSentAt || (sg.customFields as any)?.reminderWhatsappSentAt || null;
+
+            const mergedRemSmsSentDate = cg.reminderSmsSentDate || sg.reminderSmsSentDate || (cg.customFields as any)?.reminderSmsSentDate || (sg.customFields as any)?.reminderSmsSentDate || null;
+            const mergedRemSmsSentTime = cg.reminderSmsSentTime || sg.reminderSmsSentTime || (cg.customFields as any)?.reminderSmsSentTime || (sg.customFields as any)?.reminderSmsSentTime || null;
+            const mergedRemSmsSentAt = cg.reminderSmsSentAt || sg.reminderSmsSentAt || (cg.customFields as any)?.reminderSmsSentAt || (sg.customFields as any)?.reminderSmsSentAt || null;
+
+            const mergedThkWaSentDate = cg.thankYouWhatsappSentDate || sg.thankYouWhatsappSentDate || (cg.customFields as any)?.thankYouWhatsappSentDate || (sg.customFields as any)?.thankYouWhatsappSentDate || null;
+            const mergedThkWaSentTime = cg.thankYouWhatsappSentTime || sg.thankYouWhatsappSentTime || (cg.customFields as any)?.thankYouWhatsappSentTime || (sg.customFields as any)?.thankYouWhatsappSentTime || null;
+            const mergedThkWaSentAt = cg.thankYouWhatsappSentAt || sg.thankYouWhatsappSentAt || (cg.customFields as any)?.thankYouWhatsappSentAt || (sg.customFields as any)?.thankYouWhatsappSentAt || null;
+
+            const mergedThkSmsSentDate = cg.thankYouSmsSentDate || sg.thankYouSmsSentDate || (cg.customFields as any)?.thankYouSmsSentDate || (sg.customFields as any)?.thankYouSmsSentDate || null;
+            const mergedThkSmsSentTime = cg.thankYouSmsSentTime || sg.thankYouSmsSentTime || (cg.customFields as any)?.thankYouSmsSentTime || (sg.customFields as any)?.thankYouSmsSentTime || null;
+            const mergedThkSmsSentAt = cg.thankYouSmsSentAt || sg.thankYouSmsSentAt || (cg.customFields as any)?.thankYouSmsSentAt || (sg.customFields as any)?.thankYouSmsSentAt || null;
+
             const mergedCustomFields = {
               ...(sg.customFields || {}),
               ...(cg.customFields || {}),
@@ -3891,6 +3951,43 @@ async function startServer() {
               thankYouWhatsappStatus: mergedThkWa || "Sijatuma",
               lastSentChannel: cg.lastSentChannel || sg.lastSentChannel,
               lastSentLang: cg.lastSentLang || sg.lastSentLang,
+              lastSentDate: mergedLastSentDate,
+              lastSentTime: mergedLastSentTime,
+              lastSentAt: mergedLastSentAt,
+              lastMessageText: mergedLastMessageText,
+              invitationSentDate: mergedInvSentDate,
+              invitationSentTime: mergedInvSentTime,
+              invitationSentAt: mergedInvSentAt,
+              reminderSentDate: mergedRemSentDate,
+              reminderSentTime: mergedRemSentTime,
+              reminderSentAt: mergedRemSentAt,
+              thankYouSentDate: mergedThkSentDate,
+              thankYouSentTime: mergedThkSentTime,
+              thankYouSentAt: mergedThkSentAt,
+              whatsappSentDate: mergedWhatsappSentDate,
+              whatsappSentTime: mergedWhatsappSentTime,
+              whatsappSentAt: mergedWhatsappSentAt,
+              smsSentDate: mergedSmsSentDate,
+              smsSentTime: mergedSmsSentTime,
+              smsSentAt: mergedSmsSentAt,
+              invitationWhatsappSentDate: mergedInvWaSentDate,
+              invitationWhatsappSentTime: mergedInvWaSentTime,
+              invitationWhatsappSentAt: mergedInvWaSentAt,
+              invitationSmsSentDate: mergedInvSmsSentDate,
+              invitationSmsSentTime: mergedInvSmsSentTime,
+              invitationSmsSentAt: mergedInvSmsSentAt,
+              reminderWhatsappSentDate: mergedRemWaSentDate,
+              reminderWhatsappSentTime: mergedRemWaSentTime,
+              reminderWhatsappSentAt: mergedRemWaSentAt,
+              reminderSmsSentDate: mergedRemSmsSentDate,
+              reminderSmsSentTime: mergedRemSmsSentTime,
+              reminderSmsSentAt: mergedRemSmsSentAt,
+              thankYouWhatsappSentDate: mergedThkWaSentDate,
+              thankYouWhatsappSentTime: mergedThkWaSentTime,
+              thankYouWhatsappSentAt: mergedThkWaSentAt,
+              thankYouSmsSentDate: mergedThkSmsSentDate,
+              thankYouSmsSentTime: mergedThkSmsSentTime,
+              thankYouSmsSentAt: mergedThkSmsSentAt,
             };
 
             let mergedHasWhatsApp = cg.hasWhatsApp !== undefined ? cg.hasWhatsApp : sg.hasWhatsApp;
@@ -3918,6 +4015,46 @@ async function startServer() {
               thankYouWhatsappStatus: mergedThkWa || "Sijatuma",
               lastSentChannel: cg.lastSentChannel || sg.lastSentChannel,
               lastSentLang: cg.lastSentLang || sg.lastSentLang,
+              lastSentAt: mergedLastSentAt,
+              lastSentDate: mergedLastSentDate,
+              lastSentTime: mergedLastSentTime,
+              lastMessageText: mergedLastMessageText,
+              messageHistory: mergedMessageHistory,
+              invitationSentAt: mergedInvSentAt,
+              invitationSentDate: mergedInvSentDate,
+              invitationSentTime: mergedInvSentTime,
+              reminderSentAt: mergedRemSentAt,
+              reminderSentDate: mergedRemSentDate,
+              reminderSentTime: mergedRemSentTime,
+              thankYouSentAt: mergedThkSentAt,
+              thankYouSentDate: mergedThkSentDate,
+              thankYouSentTime: mergedThkSentTime,
+              whatsappSentDate: mergedWhatsappSentDate,
+              whatsappSentTime: mergedWhatsappSentTime,
+              whatsappSentAt: mergedWhatsappSentAt,
+              smsSentDate: mergedSmsSentDate,
+              smsSentTime: mergedSmsSentTime,
+              smsSentAt: mergedSmsSentAt,
+              invitationWhatsappSentDate: mergedInvWaSentDate,
+              invitationWhatsappSentTime: mergedInvWaSentTime,
+              invitationWhatsappSentAt: mergedInvWaSentAt,
+              invitationSmsSentDate: mergedInvSmsSentDate,
+              invitationSmsSentTime: mergedInvSmsSentTime,
+              invitationSmsSentAt: mergedInvSmsSentAt,
+              reminderWhatsappSentDate: mergedRemWaSentDate,
+              reminderWhatsappSentTime: mergedRemWaSentTime,
+              reminderWhatsappSentAt: mergedRemWaSentAt,
+              reminderSmsSentDate: mergedRemSmsSentDate,
+              reminderSmsSentTime: mergedRemSmsSentTime,
+              reminderSmsSentAt: mergedRemSmsSentAt,
+              thankYouWhatsappSentDate: mergedThkWaSentDate,
+              thankYouWhatsappSentTime: mergedThkWaSentTime,
+              thankYouWhatsappSentAt: mergedThkWaSentAt,
+              thankYouSmsSentDate: mergedThkSmsSentDate,
+              thankYouSmsSentTime: mergedThkSmsSentTime,
+              thankYouSmsSentAt: mergedThkSmsSentAt,
+              pledgeSentAt: cg.pledgeSentAt || sg.pledgeSentAt,
+              stdSentAt: cg.stdSentAt || sg.stdSentAt,
               hasWhatsApp: mergedHasWhatsApp,
               waStatusDetail: mergedWaStatusDetail,
               waCheckedAt: mergedWaCheckedAt,
@@ -6759,33 +6896,85 @@ Lema, Nguvu Moja!`;
             task.log = result;
 
             if (task.guestId && freshDb.guests) {
+              const qNow = new Date();
+              const qNowIso = qNow.toISOString();
+              const qNowDate = qNow.toLocaleDateString('sw-TZ');
+              const qNowTime = qNow.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' });
+
               freshDb.guests = freshDb.guests.map((g: any) => {
                 if (g.id === task.guestId) {
                   const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
                   const msgType = task.messageType || 'invitation';
+                  const histItem = {
+                    id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+                    channel: usedChannel,
+                    type: msgType,
+                    text: task.text,
+                    sentAt: qNowIso,
+                    status: 'sent'
+                  };
+                  const updatedHist = [histItem, ...(Array.isArray(g.messageHistory) ? g.messageHistory : [])].slice(0, 50);
+
+                  cf.lastSentChannel = usedChannel;
+                  cf.lastSentLang = task.lang || "sw";
+                  cf.lastSentAt = qNowIso;
+                  cf.lastSentDate = qNowDate;
+                  cf.lastSentTime = qNowTime;
+                  cf.lastMessageText = task.text;
+
+                  const baseUpdates = {
+                    ...g,
+                    customFields: cf,
+                    lastSentChannel: usedChannel,
+                    lastSentLang: task.lang || "sw",
+                    lastSentAt: qNowIso,
+                    lastSentDate: qNowDate,
+                    lastSentTime: qNowTime,
+                    lastMessageText: task.text,
+                    messageHistory: updatedHist
+                  };
+
                   if (usedChannel === 'whatsapp') {
                     const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                     if (msgType === 'reminder') {
                       cf.reminderWhatsappStatus = 'Imetumia';
-                      return { ...g, customFields: cf, reminderWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
+                      cf.reminderSentAt = qNowIso;
+                      cf.reminderSentDate = qNowDate;
+                      cf.reminderSentTime = qNowTime;
+                      return { ...baseUpdates, reminderWhatsappStatus: "Imetumia", reminderSentAt: qNowIso, reminderSentDate: qNowDate, reminderSentTime: qNowTime, whatsappCount: currentCount + 1 };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouWhatsappStatus = 'Imetumia';
-                      return { ...g, customFields: cf, thankYouWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
+                      cf.thankYouSentAt = qNowIso;
+                      cf.thankYouSentDate = qNowDate;
+                      cf.thankYouSentTime = qNowTime;
+                      return { ...baseUpdates, thankYouWhatsappStatus: "Imetumia", thankYouSentAt: qNowIso, thankYouSentDate: qNowDate, thankYouSentTime: qNowTime, whatsappCount: currentCount + 1 };
                     } else {
                       cf.invitationWhatsappStatus = 'Imetumia';
-                      return { ...g, customFields: cf, whatsappStatus: "Imetumia", invitationWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
+                      cf.invitationSentAt = qNowIso;
+                      cf.invitationSentDate = qNowDate;
+                      cf.invitationSentTime = qNowTime;
+                      return { ...baseUpdates, whatsappStatus: "Imetumia", invitationWhatsappStatus: "Imetumia", invitationSentAt: qNowIso, invitationSentDate: qNowDate, invitationSentTime: qNowTime, whatsappCount: currentCount + 1 };
                     }
                   } else {
                     const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
                     if (msgType === 'reminder') {
                       cf.reminderSmsStatus = 'Imetumia';
-                      return { ...g, customFields: cf, reminderSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
+                      cf.reminderSentAt = qNowIso;
+                      cf.reminderSentDate = qNowDate;
+                      cf.reminderSentTime = qNowTime;
+                      return { ...baseUpdates, reminderSmsStatus: "Imetumia", reminderSentAt: qNowIso, reminderSentDate: qNowDate, reminderSentTime: qNowTime, smsCount: currentCount + 1 };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouSmsStatus = 'Imetumia';
-                      return { ...g, customFields: cf, thankYouSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
+                      cf.thankYouSentAt = qNowIso;
+                      cf.thankYouSentDate = qNowDate;
+                      cf.thankYouSentTime = qNowTime;
+                      return { ...baseUpdates, thankYouSmsStatus: "Imetumia", thankYouSentAt: qNowIso, thankYouSentDate: qNowDate, thankYouSentTime: qNowTime, smsCount: currentCount + 1 };
                     } else {
                       cf.invitationSmsStatus = 'Imetumia';
-                      return { ...g, customFields: cf, smsStatus: "Imetumia", invitationSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
+                      cf.invitationSentAt = qNowIso;
+                      cf.invitationSentDate = qNowDate;
+                      cf.invitationSentTime = qNowTime;
+                      return { ...baseUpdates, smsStatus: "Imetumia", invitationSmsStatus: "Imetumia", invitationSentAt: qNowIso, invitationSentDate: qNowDate, invitationSentTime: qNowTime, smsCount: currentCount + 1 };
                     }
                   }
                 }
@@ -7063,33 +7252,85 @@ Lema, Nguvu Moja!`;
             deliveredCount++;
 
             if (task.guestId && db.guests) {
+              const dNow = new Date();
+              const dNowIso = dNow.toISOString();
+              const dNowDate = dNow.toLocaleDateString('sw-TZ');
+              const dNowTime = dNow.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' });
+
               db.guests = db.guests.map((g: any) => {
                 if (g.id === task.guestId) {
                   const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
                   const msgType = task.messageType || 'invitation';
+                  const histItem = {
+                    id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+                    channel,
+                    type: msgType,
+                    text: task.text,
+                    sentAt: dNowIso,
+                    status: 'sent'
+                  };
+                  const updatedHist = [histItem, ...(Array.isArray(g.messageHistory) ? g.messageHistory : [])].slice(0, 50);
+
+                  cf.lastSentChannel = channel;
+                  cf.lastSentLang = task.lang || "sw";
+                  cf.lastSentAt = dNowIso;
+                  cf.lastSentDate = dNowDate;
+                  cf.lastSentTime = dNowTime;
+                  cf.lastMessageText = task.text;
+
+                  const baseUpdates = {
+                    ...g,
+                    customFields: cf,
+                    lastSentChannel: channel,
+                    lastSentLang: task.lang || "sw",
+                    lastSentAt: dNowIso,
+                    lastSentDate: dNowDate,
+                    lastSentTime: dNowTime,
+                    lastMessageText: task.text,
+                    messageHistory: updatedHist
+                  };
+
                   if (channel === 'whatsapp') {
                     const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                     if (msgType === 'reminder') {
                       cf.reminderWhatsappStatus = 'Imetumia';
-                      return { ...g, customFields: cf, reminderWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
+                      cf.reminderSentAt = dNowIso;
+                      cf.reminderSentDate = dNowDate;
+                      cf.reminderSentTime = dNowTime;
+                      return { ...baseUpdates, reminderWhatsappStatus: "Imetumia", reminderSentAt: dNowIso, reminderSentDate: dNowDate, reminderSentTime: dNowTime, whatsappCount: currentCount + 1 };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouWhatsappStatus = 'Imetumia';
-                      return { ...g, customFields: cf, thankYouWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
+                      cf.thankYouSentAt = dNowIso;
+                      cf.thankYouSentDate = dNowDate;
+                      cf.thankYouSentTime = dNowTime;
+                      return { ...baseUpdates, thankYouWhatsappStatus: "Imetumia", thankYouSentAt: dNowIso, thankYouSentDate: dNowDate, thankYouSentTime: dNowTime, whatsappCount: currentCount + 1 };
                     } else {
                       cf.invitationWhatsappStatus = 'Imetumia';
-                      return { ...g, customFields: cf, whatsappStatus: "Imetumia", invitationWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
+                      cf.invitationSentAt = dNowIso;
+                      cf.invitationSentDate = dNowDate;
+                      cf.invitationSentTime = dNowTime;
+                      return { ...baseUpdates, whatsappStatus: "Imetumia", invitationWhatsappStatus: "Imetumia", invitationSentAt: dNowIso, invitationSentDate: dNowDate, invitationSentTime: dNowTime, whatsappCount: currentCount + 1 };
                     }
                   } else {
                     const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
                     if (msgType === 'reminder') {
                       cf.reminderSmsStatus = 'Imetumia';
-                      return { ...g, customFields: cf, reminderSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
+                      cf.reminderSentAt = dNowIso;
+                      cf.reminderSentDate = dNowDate;
+                      cf.reminderSentTime = dNowTime;
+                      return { ...baseUpdates, reminderSmsStatus: "Imetumia", reminderSentAt: dNowIso, reminderSentDate: dNowDate, reminderSentTime: dNowTime, smsCount: currentCount + 1 };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouSmsStatus = 'Imetumia';
-                      return { ...g, customFields: cf, thankYouSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
+                      cf.thankYouSentAt = dNowIso;
+                      cf.thankYouSentDate = dNowDate;
+                      cf.thankYouSentTime = dNowTime;
+                      return { ...baseUpdates, thankYouSmsStatus: "Imetumia", thankYouSentAt: dNowIso, thankYouSentDate: dNowDate, thankYouSentTime: dNowTime, smsCount: currentCount + 1 };
                     } else {
                       cf.invitationSmsStatus = 'Imetumia';
-                      return { ...g, customFields: cf, smsStatus: "Imetumia", invitationSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
+                      cf.invitationSentAt = dNowIso;
+                      cf.invitationSentDate = dNowDate;
+                      cf.invitationSentTime = dNowTime;
+                      return { ...baseUpdates, smsStatus: "Imetumia", invitationSmsStatus: "Imetumia", invitationSentAt: dNowIso, invitationSentDate: dNowDate, invitationSentTime: dNowTime, smsCount: currentCount + 1 };
                     }
                   }
                 }
@@ -7288,127 +7529,209 @@ Lema, Nguvu Moja!`;
       const activeMsgType = msgType || req.body.messageType || (templateName === 'ukumbusho' ? 'reminder' : ((templateName === 'asante_kushiriki' || templateName === 'shukrani') ? 'thanks' : 'invitation'));
 
       if (guestId) {
+        const sNow = new Date();
+        const sNowIso = sNow.toISOString();
+        const sNowDate = sNow.toLocaleDateString('sw-TZ');
+        const sNowTime = sNow.toLocaleTimeString('sw-TZ', { hour: '2-digit', minute: '2-digit' });
+
         db.guests = (db.guests || []).map((g: any) => {
           if (g.id === guestId) {
             const customFields = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+            const histItem = {
+              id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+              channel: usedChannel,
+              type: activeMsgType,
+              text: text,
+              sentAt: sNowIso,
+              status: 'sent'
+            };
+            const updatedHist = [histItem, ...(Array.isArray(g.messageHistory) ? g.messageHistory : [])].slice(0, 50);
+
+            customFields.lastSentChannel = usedChannel;
+            customFields.lastSentLang = lang || "sw";
+            customFields.lastSentAt = sNowIso;
+            customFields.lastSentDate = sNowDate;
+            customFields.lastSentTime = sNowTime;
+            customFields.lastMessageText = text;
+
+            const baseUpdates = {
+              ...g,
+              customFields,
+              lastSentChannel: usedChannel,
+              lastSentLang: lang || "sw",
+              lastSentAt: sNowIso,
+              lastSentDate: sNowDate,
+              lastSentTime: sNowTime,
+              lastMessageText: text,
+              messageHistory: updatedHist
+            };
+
             if (activeMsgType === 'save_the_date') {
               customFields.std_sent_channel = usedChannel;
               customFields.std_sent_lang = lang || "sw";
+              customFields.stdSentAt = sNowIso;
+              customFields.stdSentDate = sNowDate;
+              customFields.stdSentTime = sNowTime;
               return {
-                ...g,
-                customFields,
+                ...baseUpdates,
                 stdSent: true,
                 stdSentChannel: usedChannel,
-                stdSentLang: lang || "sw"
+                stdSentLang: lang || "sw",
+                stdSentAt: sNowIso,
+                stdSentDate: sNowDate,
+                stdSentTime: sNowTime
               };
             } else if (activeMsgType === 'pledge') {
               customFields.pledge_sent_channel = usedChannel;
               customFields.pledge_sent_lang = lang || "sw";
+              customFields.pledgeSentAt = sNowIso;
+              customFields.pledgeSentDate = sNowDate;
+              customFields.pledgeSentTime = sNowTime;
               return {
-                ...g,
-                customFields,
+                ...baseUpdates,
                 pledgeSent: true,
                 pledgeSentChannel: usedChannel,
-                pledgeSentLang: lang || "sw"
+                pledgeSentLang: lang || "sw",
+                pledgeSentAt: sNowIso,
+                pledgeSentDate: sNowDate,
+                pledgeSentTime: sNowTime
               };
             } else if (activeMsgType === 'reminder') {
               customFields.reminder_sent_channel = usedChannel;
               customFields.reminder_sent_lang = lang || "sw";
+              customFields.reminderSentAt = sNowIso;
+              customFields.reminderSentDate = sNowDate;
+              customFields.reminderSentTime = sNowTime;
               if (usedChannel === 'whatsapp') {
                 const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                 customFields.reminderWhatsappStatus = 'Imetumia';
                 return {
-                  ...g,
-                  customFields,
+                  ...baseUpdates,
                   reminderSent: true,
                   reminderSentChannel: usedChannel,
                   reminderSentLang: lang || "sw",
                   reminderWhatsappStatus: 'Imetumia',
-                  whatsappCount: currentCount + 1,
-                  lastSentChannel: 'whatsapp',
-                  lastSentLang: lang || "sw"
+                  reminderSentAt: sNowIso,
+                  reminderSentDate: sNowDate,
+                  reminderSentTime: sNowTime,
+                  whatsappCount: currentCount + 1
                 };
               } else {
                 const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
                 customFields.reminderSmsStatus = 'Imetumia';
                 return {
-                  ...g,
-                  customFields,
+                  ...baseUpdates,
                   reminderSent: true,
                   reminderSentChannel: usedChannel,
                   reminderSentLang: lang || "sw",
                   reminderSmsStatus: 'Imetumia',
-                  smsCount: currentCount + 1,
-                  lastSentChannel: 'sms',
-                  lastSentLang: lang || "sw"
+                  reminderSentAt: sNowIso,
+                  reminderSentDate: sNowDate,
+                  reminderSentTime: sNowTime,
+                  smsCount: currentCount + 1
                 };
               }
             } else if (activeMsgType === 'thanks' || activeMsgType === 'thank-you') {
               customFields.thanks_sent_channel = usedChannel;
               customFields.thanks_sent_lang = lang || "sw";
+              customFields.thankYouSentAt = sNowIso;
+              customFields.thankYouSentDate = sNowDate;
+              customFields.thankYouSentTime = sNowTime;
               if (usedChannel === 'whatsapp') {
                 const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                 customFields.thankYouWhatsappStatus = 'Imetumia';
                 return {
-                  ...g,
-                  customFields,
+                  ...baseUpdates,
                   thanksSent: true,
                   thanksSentChannel: usedChannel,
                   thanksSentLang: lang || "sw",
                   thankYouWhatsappStatus: 'Imetumia',
-                  whatsappCount: currentCount + 1,
-                  lastSentChannel: 'whatsapp',
-                  lastSentLang: lang || "sw"
+                  thankYouSentAt: sNowIso,
+                  thankYouSentDate: sNowDate,
+                  thankYouSentTime: sNowTime,
+                  whatsappCount: currentCount + 1
                 };
               } else {
                 const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
                 customFields.thankYouSmsStatus = 'Imetumia';
                 return {
-                  ...g,
-                  customFields,
+                  ...baseUpdates,
                   thanksSent: true,
                   thanksSentChannel: usedChannel,
                   thanksSentLang: lang || "sw",
                   thankYouSmsStatus: 'Imetumia',
-                  smsCount: currentCount + 1,
-                  lastSentChannel: 'sms',
-                  lastSentLang: lang || "sw"
+                  thankYouSentAt: sNowIso,
+                  thankYouSentDate: sNowDate,
+                  thankYouSentTime: sNowTime,
+                  smsCount: currentCount + 1
                 };
               }
             } else {
               // Default to invitation
               customFields.invite_sent_channel = usedChannel;
               customFields.invite_sent_lang = lang || "sw";
+              customFields.invitationSentAt = sNowIso;
+              customFields.invitationSentDate = sNowDate;
+              customFields.invitationSentTime = sNowTime;
               if (usedChannel === 'whatsapp') {
                 const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
                 customFields.invitationWhatsappStatus = 'Imetumia';
                 return { 
-                  ...g, 
-                  customFields,
+                  ...baseUpdates,
                   whatsappStatus: "Imetumia",
                   invitationWhatsappStatus: "Imetumia",
-                  whatsappCount: currentCount + 1,
-                  lastSentChannel: "whatsapp",
-                  lastSentLang: lang || "sw"
+                  invitationSentAt: sNowIso,
+                  invitationSentDate: sNowDate,
+                  invitationSentTime: sNowTime,
+                  whatsappCount: currentCount + 1
                 };
               } else {
                 const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
                 customFields.invitationSmsStatus = 'Imetumia';
                 return { 
-                  ...g, 
-                  customFields,
+                  ...baseUpdates,
                   smsStatus: "Imetumia",
                   invitationSmsStatus: "Imetumia",
-                  smsCount: currentCount + 1,
-                  lastSentChannel: "sms",
-                  lastSentLang: lang || "sw"
+                  invitationSentAt: sNowIso,
+                  invitationSentDate: sNowDate,
+                  invitationSentTime: sNowTime,
+                  smsCount: currentCount + 1
                 };
               }
             }
           }
           return g;
         });
+
+        // Also append to db.messageLogs for global persistence
+        if (!Array.isArray(db.messageLogs)) db.messageLogs = [];
+        const targetGuest = (db.guests || []).find((g: any) => g.id === guestId);
+        db.messageLogs.unshift({
+          id: 'mlog-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          guestId,
+          guestName: targetGuest ? targetGuest.name : phone,
+          phone,
+          type: usedChannel === 'whatsapp' ? 'WhatsApp' : 'SMS',
+          templateUsed: templateName || activeMsgType,
+          messageText: text,
+          sentAt: sNowIso,
+          status: 'sent'
+        });
+        if (db.messageLogs.length > 500) {
+          db.messageLogs = db.messageLogs.slice(0, 500);
+        }
+
         await writeDB(db);
+
+        const updatedGuestObj = (db.guests || []).find((g: any) => g.id === guestId);
+        return res.json({ 
+          success: true, 
+          log: failoverLog + result, 
+          batchId, 
+          usedChannel, 
+          failoverAttempted, 
+          updatedGuest: updatedGuestObj 
+        });
       }
       
       res.json({ success: true, log: failoverLog + result, batchId, usedChannel, failoverAttempted });
@@ -8409,23 +8732,73 @@ Lema, Nguvu Moja!`;
   // AI Assistant Chatbot API Endpoint
   app.post("/api/ai-assistant", async (req, res) => {
     try {
-      const { message, eventId } = req.body;
+      const { message, eventId, eventName } = req.body;
       if (!message || typeof message !== 'string') {
         return res.status(400).json({ error: "Ujumbe unahitajika (Message is required)" });
       }
 
       const db = await readDBLatest();
-      // Find event by eventId or fallback to db.eventDetails
-      let event = db.eventDetails || {};
-      if (eventId && Array.isArray(db.eventsList)) {
-        const found = db.eventsList.find((e: any) => String(e.id) === String(eventId));
-        if (found) event = found;
+      const allEvents: any[] = Array.isArray(db.eventsList) && db.eventsList.length > 0
+        ? db.eventsList
+        : (db.eventDetails ? [db.eventDetails] : []);
+
+      const lowerMsg = message.toLowerCase().trim();
+
+      // 1. Intelligent Event Matching:
+      // First, check if the user specifically mentioned any event's name, couple name, ID, or hall in their message text
+      let matchedEvent = allEvents.find((e: any) => {
+        if (!e) return false;
+        // Direct ID match
+        if (e.id && lowerMsg.includes(String(e.id).toLowerCase())) return true;
+
+        // Full event name match
+        if (e.name) {
+          const cleanName = String(e.name).toLowerCase();
+          if (lowerMsg.includes(cleanName)) return true;
+
+          // Keyword match of meaningful names (e.g. "Manase", "Winfrida", "Neema", "Amina", etc.)
+          const stopWords = new Set(['sherehe', 'harusi', 'sendoff', 'kadi', 'kuhusu', 'katika', 'kwenye', 'yake', 'yako', 'ya', 'wa', 'na', 'kwa', 'mwaliko', 'ukumbi', 'venue', 'tarehe', 'muda']);
+          const keywords = cleanName
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter((w: string) => w.length >= 3 && !stopWords.has(w));
+
+          if (keywords.length > 0 && keywords.some((kw: string) => lowerMsg.includes(kw))) {
+            return true;
+          }
+        }
+
+        // Direct hall name check (e.g., if asking "hivi Naeda Social Hall ni ya sherehe gani?")
+        if (e.eventHallName && e.eventHallName.length >= 4) {
+          const cleanHall = e.eventHallName.toLowerCase();
+          if (lowerMsg.includes(cleanHall)) return true;
+        }
+
+        return false;
+      });
+
+      // 2. If no event mentioned in the text, use explicitly passed eventId
+      if (!matchedEvent && eventId && allEvents.length > 0) {
+        matchedEvent = allEvents.find((e: any) => String(e.id) === String(eventId));
       }
 
+      // 3. If still not matched, check explicitly passed eventName
+      if (!matchedEvent && eventName && allEvents.length > 0) {
+        const cleanPassedName = String(eventName).toLowerCase();
+        matchedEvent = allEvents.find((e: any) => String(e.name || '').toLowerCase().includes(cleanPassedName));
+      }
+
+      // 4. Default fallback to db.eventDetails or the first event in allEvents
+      if (!matchedEvent) {
+        matchedEvent = db.eventDetails || allEvents[0] || {};
+      }
+
+      const event = matchedEvent;
+
       let guests = db.guests || [];
-      // Filter by eventId if provided and present on guests
-      if (eventId && guests.some((g: any) => g.eventId)) {
-        guests = guests.filter((g: any) => String(g.eventId) === String(eventId));
+      // Filter by matchedEvent.id if present on guests
+      if (event.id && guests.some((g: any) => g.eventId)) {
+        guests = guests.filter((g: any) => String(g.eventId) === String(event.id));
       }
 
       const totalGuests = guests.length;
@@ -8434,7 +8807,12 @@ Lema, Nguvu Moja!`;
       
       const targetAmount = Number(event.fundraisingGoal || event.targetAmount) || 0;
       const remainingTarget = Math.max(0, targetAmount - totalPaid);
-      const venueName = event.eventHallName || event.venue || 'Haijawekwa';
+      const venueName = event.eventHallName || event.venueLocation || 'Haijawekwa';
+      const venueLocation = event.venueLocation || '';
+      const eventDate = event.date || 'Haijawekwa';
+      const eventTime = event.time ? `${event.time} (${event.period || 'Jioni'})` : (event.period || 'Haijawekwa');
+      const dressCode = event.dressCode || 'Hakuna maelekezo maalum ya mavazi';
+      const mapLink = event.mapsLink || (event.coordinates ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.coordinates)}` : '');
 
       const rsvpAttending = guests.filter((g: any) => g.rsvpStatus === 'Atahudhuria' || g.rsvpStatus === 'Attending').length;
       const rsvpNotAttending = guests.filter((g: any) => g.rsvpStatus === 'Hatahudhuria' || g.rsvpStatus === 'Not Attending').length;
@@ -8445,29 +8823,48 @@ Lema, Nguvu Moja!`;
       const noPledge = guests.filter((g: any) => !g.pledgeAmount || Number(g.pledgeAmount) === 0).length;
 
       const pledgedGuests = guests.filter((g: any) => (Number(g.pledgeAmount) || 0) > 0);
-      const pledgedGuestsSummary = pledgedGuests.map((g: any, i: number) => {
+      const pledgedGuestsSummary = pledgedGuests.slice(0, 30).map((g: any) => {
         const pledge = Number(g.pledgeAmount) || 0;
         const paid = Number(g.paidAmount) || 0;
-        return `• **${g.name}** (${g.phone || 'Hana namba'}): Ahadi TZS ${pledge.toLocaleString()} | Amelipa TZS ${paid.toLocaleString()}`;
+        return `• **${g.name}** (${g.phone || 'Hana simu'}): Ahadi TZS ${pledge.toLocaleString()} | Amelipa TZS ${paid.toLocaleString()}`;
       }).join('\n');
 
-      const guestDetailsList = guests.slice(0, 50).map((g: any, i: number) => {
+      const guestDetailsList = guests.slice(0, 40).map((g: any, i: number) => {
         const pledge = Number(g.pledgeAmount) || 0;
         const paid = Number(g.paidAmount) || 0;
-        return `${i + 1}. ${g.name} (${g.phone || 'Hana simu'}): Ahadi TZS ${pledge.toLocaleString()}, Amelipa TZS ${paid.toLocaleString()}, Status RSVP: ${g.rsvpStatus || 'Bado'}`;
+        return `${i + 1}. ${g.name} (${g.phone || 'Hana simu'}): Ahadi TZS ${pledge.toLocaleString()}, Amelipa TZS ${paid.toLocaleString()}, RSVP: ${g.rsvpStatus || 'Bado'}`;
       }).join('\n');
+
+      // Build structured summary of all registered events to prevent cross-event hallucinations
+      const allEventsSummary = allEvents.map((ev: any, idx: number) => {
+        const isCurrent = event.id && String(ev.id) === String(event.id);
+        const evHall = ev.eventHallName || ev.venueLocation || 'Haijawekwa';
+        const evDate = ev.date || 'Haijawekwa';
+        const evTime = ev.time ? `${ev.time} (${ev.period || ''})` : '';
+        return `${idx + 1}. ${isCurrent ? '👉 [SHEREHE INAYOLENGWA SASA / ACTIVE EVENT]: ' : ''}Jina: "${ev.name || 'Sherehe'}" (ID: ${ev.id || 'N/A'}, Aina: ${ev.senderId || 'SHEREHE'})
+   - Ukumbi: ${evHall}${ev.venueLocation ? ` (${ev.venueLocation})` : ''}
+   - Tarehe na Muda: ${evDate} ${evTime}
+   - Waandaji: ${ev.hostName || 'Kamati'}${ev.mapsLink ? `\n   - Ramani/Maps: ${ev.mapsLink}` : ''}`;
+      }).join('\n\n');
 
       const eventContext = `
-Tukio: ${event.name || 'Harusi / Sherehe'}
-Waandaji: ${event.hostName || 'Kamati ya Sherehe'}
-Tarehe ya Sherehe: ${event.date || 'Haijawekwa'}
-Mahali / Ukumbi: ${venueName}
+SHEREHE KUU INAYOZUNGUMZIWA (PRIMARY TARGET EVENT):
+Jina la Sherehe: ${event.name || 'Harusi / Sherehe'} (ID: ${event.id || 'N/A'})
+Aina ya Sherehe: ${event.senderId || 'HARUSI'}
+Waandaji / Familia: ${event.hostName || 'Kamati ya Sherehe'}
+Tarehe ya Sherehe: ${eventDate}
+Muda wa Sherehe: ${eventTime}
+Mahali / Ukumbi: ${venueName}${venueLocation ? ` (${venueLocation})` : ''}
+Mavazi (Dress Code): ${dressCode}
+Kiungo cha Ramani (Maps Link): ${mapLink || 'Hakijawekwa'}
+Mawasiliano: Simu 1: ${event.contact1 || 'N/A'} (${event.contact1Name || 'Mwanakamati'}), Simu 2: ${event.contact2 || 'N/A'} (${event.contact2Name || ''})
+
+TAKWIMU ZA MICHANGO NA WAGENI KWA SHEREHE HII:
 Lengo la Michango (Target Goal): TZS ${targetAmount.toLocaleString()}
 Jumla ya Ahadi / Pledges Zote: TZS ${totalPledged.toLocaleString()}
 Jumla Iliyokusanywa / Iliyolipwa (Paid): TZS ${totalPaid.toLocaleString()}
 Kiasi Kilichobaki Kufikia Lengo: TZS ${remainingTarget.toLocaleString()}
 Jumla ya Wageni Waalikwa: ${totalGuests}
-Wageni Walioahidi (Pledged Guests): ${pledgedGuests.length} wageni
 Waliothibitisha Kuhudhuria (RSVP Attending): ${rsvpAttending}
 Wasioweza Kuhudhuria (Not Attending): ${rsvpNotAttending}
 Bado Hawajajibu RSVP (Undecided): ${rsvpUndecided}
@@ -8475,11 +8872,11 @@ Wageni Waliolipa Yote (Fully Paid): ${fullyPaid}
 Wageni Waliolipa Nusu (Partial Paid): ${partialPaid}
 Wageni Wasioweka Ahadi Bado (No Pledge): ${noPledge}
 
+ORODHA YA SHEREHE ZOTE ZILIZO KWENYE MFUMO:
+${allEventsSummary || 'Hakuna sherehe nyingine.'}
+
 ORODHA YA WAGENI WALIOAHIDI MICHANGO (PLEDGES):
 ${pledgedGuestsSummary || 'Hakuna mgeni aliyeahidi mchango bado.'}
-
-ORODHA KAMILI YA WAGENI NA MICHANGO ZAO:
-${guestDetailsList || 'Hakuna wageni waliosajiliwa bado.'}
 `;
 
       const ai = getGenAI();
@@ -8487,37 +8884,101 @@ ${guestDetailsList || 'Hakuna wageni waliosajiliwa bado.'}
         try {
           const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `Wewe ni Msaidizi wa AI wa Mfumo wa EVENTCARD (EVENTCARD AI Assistant). Unasaidia Wanakamati wa Sherehe PAMOJA na Wageni Waalikwa.
+            contents: `Wewe ni Msaidizi Rasmi wa AI wa Mfumo wa EVENTCARD (EVENTCARD AI Assistant). Unasaidia Wanakamati wa Sherehe PAMOJA na Wageni Waalikwa.
 
-TAARIFA HALISI ZA SHEREHE HII:
+TAARIFA HALISI ZA SHEREHE:
 ${eventContext}
 
 Swali la Mtumiaji: ${message}
 
-MWAZO NA MWONGOZO WA KUJIBU:
-1. Ikiwa swali linatoka kwa MGENI WAALIKWA (mfano: anauliza ukumbi uko wapi, tarehe, mchango unalipwaje, RSVP, nguo/dress code):
-   - Mjibu kwa ukarimu na heshima kama mgeni rasmi wa sherehe.
-   - Mpe maelekezo ya ukumbi (${venueName}), tarehe ya sherehe (${event.date || 'Iliyoainishwa'}), na jinsi ya kuthibitisha RSVP au kutoa mchango.
-
-2. Ikiwa swali linatoka kwa WANAKAMATI / WAANDAJI (mfano: maendeleo ya michango, walioahidi, bajeti, vikumbusho):
-   - Toa majibu ya kitaalamu yenye takwimu halisi za ahadi, kiasi kilichokusanywa, na orodha ya walioahidi kutoka kwenye data hapo juu.
-
-Tumia Kiswahili fasaha, mpangilio mzuri wa vitone (bullet points) na lugha yenye staha.`,
+KANUNI KUU ZA KUZINGATIA ILI KUTOKUCHANGANYA TAARIFA ZA SHEREHE (STRICT ANTI-CONFUSION RULES):
+1. **USICHANGANYE KABISA** taarifa za sherehe moja na nyingine! Kila sherehe ina jina lake, ukumbi wake, tarehe yake na wageni wake.
+2. Unapojibu swali kuhusu UKUMBI, TAREHE, au MUDA, anza daima kwa kutaja kwa uwazi JINA LA SHEREHE unayoijibu. Mfano:
+   - "Ukumbi wa sherehe ya **${event.name || 'sherehe hii'}** ni **${venueName}**${venueLocation ? ` (${venueLocation})` : ''}."
+3. Ikiwa mtumiaji ametaja jina la sherehe nyingine katika orodha ya sherehe zote, mpe taarifa sahihi kabisa za sherehe hiyo aliyoitaja na usimpe taarifa za sherehe tofauti.
+4. Ikiwa mtumiaji anaulizia ukumbi, mpe:
+   - Jina kamili la ukumbi
+   - Eneo lilipo (Location)
+   - Kiungo cha Google Maps kama kipo (${mapLink || 'Hakijawekwa'})
+   - Tarehe na muda wa kuanza sherehe ukumbini.
+5. Tumia Kiswahili safi na fasaha, mpangilio mzuri wenye vitone (bullet points) na heshima ya hali ya juu.`,
           });
 
           if (response && response.text) {
-            return res.json({ reply: response.text, source: 'gemini' });
+            return res.json({ reply: response.text, source: 'gemini', eventId: event.id, eventName: event.name });
           }
         } catch (geminiErr: any) {
           console.error("[AI Assistant] Gemini call error:", geminiErr?.message || geminiErr);
         }
       }
 
-      // Smart Swahili NLP Fallback
+      // Smart Swahili NLP Fallback (High Accuracy, Event-Aware)
       const query = message.toLowerCase();
       let reply = "";
 
+      // 1. UKUMBI / VENUE / LOCATION / MAHALI / WAPI
       if (
+        query.includes("ukumbi") || 
+        query.includes("hall") || 
+        query.includes("venue") || 
+        query.includes("mahali") || 
+        query.includes("wapi") || 
+        query.includes("location") || 
+        query.includes("eneo") || 
+        query.includes("map") || 
+        query.includes("ramani")
+      ) {
+        reply = `🏛️ **Taarifa za Ukumbi wa Sherehe:**\n\n` +
+          `• **Sherehe:** ${event.name || 'Harusi / Sherehe'}\n` +
+          `• **Jina la Ukumbi:** ${venueName}\n` +
+          (venueLocation ? `• **Eneo:** ${venueLocation}\n` : '') +
+          `• **Tarehe & Muda:** ${eventDate} saa ${eventTime}\n` +
+          (mapLink ? `• **Ramani ya Google Maps:** ${mapLink}\n` : '') +
+          (event.contact1 ? `• **Mawasiliano ya Kamati:** ${event.contact1} (${event.contact1Name || 'Kamati'})\n` : '');
+
+        // If there are other events in the account, show their venues too so the user is never confused
+        if (allEvents.length > 1) {
+          const otherEvents = allEvents.filter((e: any) => String(e.id) !== String(event.id));
+          if (otherEvents.length > 0) {
+            reply += `\n📌 **Kumbi za Sherehe Zako Nyingine:**\n` +
+              otherEvents.map((e: any) => `• **${e.name}**: ${e.eventHallName || 'Haijawekwa'}${e.venueLocation ? ` (${e.venueLocation})` : ''} - Tarehe ${e.date || ''}`).join('\n');
+          }
+        }
+      } 
+      // 2. TAREHE / DATE / MUDA / SAA / TIME / SIKU
+      else if (
+        query.includes("tarehe") || 
+        query.includes("date") || 
+        query.includes("muda") || 
+        query.includes("saa") || 
+        query.includes("time") || 
+        query.includes("siku") || 
+        query.includes("lini")
+      ) {
+        reply = `🗓️ **Tarehe na Muda wa Sherehe:**\n\n` +
+          `• **Sherehe:** ${event.name || 'Harusi / Sherehe'}\n` +
+          `• **Tarehe:** ${eventDate}\n` +
+          `• **Muda wa Kuanza:** ${eventTime}\n` +
+          `• **Ukumbi:** ${venueName}\n` +
+          (allEvents.length > 1 ? `\n💡 *Kumbuka:* Hizi ni taarifa mahususi za **${event.name}**.` : '');
+      }
+      // 3. MAVAZI / DRESS CODE / RANGI / THEME
+      else if (
+        query.includes("mavazi") || 
+        query.includes("dress") || 
+        query.includes("rangi") || 
+        query.includes("nguo") || 
+        query.includes("code") || 
+        query.includes("theme")
+      ) {
+        reply = `👔 **Muongozo wa Mavazi (Dress Code):**\n\n` +
+          `• **Sherehe:** ${event.name || 'Harusi / Sherehe'}\n` +
+          `• **Mavazi Rasmi / Rangi:** ${dressCode}\n` +
+          `• **Ukumbi:** ${venueName}\n` +
+          `• **Tarehe:** ${eventDate}`;
+      }
+      // 4. MICHANGO / PLEDGES / BAJETI / AHADI
+      else if (
         query.includes("mchango") || 
         query.includes("pesa") || 
         query.includes("fedha") || 
@@ -8527,52 +8988,74 @@ Tumia Kiswahili fasaha, mpangilio mzuri wa vitone (bullet points) na lugha yenye
         query.includes("bajeti") ||
         query.includes("pledge") ||
         query.includes("ahadi") ||
-        query.includes("walioahidi") ||
-        query.includes("250") ||
-        query.includes("jimson") ||
-        query.includes("lema")
+        query.includes("walioahidi")
       ) {
-        reply = `📊 **Muhtasari wa Michango & Ahadi (Pledges):**\n\n` +
+        reply = `📊 **Muhtasari wa Michango & Ahadi (${event.name || 'Sherehe'}):**\n\n` +
           `• **Lengo Kuu la Michango:** TZS ${targetAmount.toLocaleString()}\n` +
-          `• **Jumla ya Ahadi Zilizowekwa (Pledges):** TZS ${totalPledged.toLocaleString()} (${pledgedGuests.length} mgeni/wageni)\n` +
+          `• **Jumla ya Ahadi Zilizowekwa (Pledges):** TZS ${totalPledged.toLocaleString()} (${pledgedGuests.length} wageni)\n` +
           `• **Jumla Iliyolipwa Sasa (Paid):** TZS ${totalPaid.toLocaleString()}\n` +
           `• **Kiasi Kilichobaki Kufikia Lengo:** TZS ${remainingTarget.toLocaleString()}\n\n` +
-          `👥 **Orodha ya Wageni Walioahidi:**\n` +
+          `👥 **Wageni Walioahidi:**\n` +
           `${pledgedGuestsSummary || '• Hakuna ahadi zilizorekodiwa bado.'}\n\n` +
-          `💡 *Ushauri:* Unaweza kuwatumia vikumbusho wageni hawa kupitia sehemu ya **'Tuma Ujumbe'** au **WhatsApp** ili watimize ahadi zao.`;
-      } else if (query.includes("mgeni") || query.includes("wageni") || query.includes("guest") || query.includes("idadi") || query.includes("waalikwa")) {
-        reply = `👥 **Taarifa za Waalikwa / Wageni:**\n\n` +
+          `💡 *Ushauri:* Unaweza kuwatumia vikumbusho wageni kupitia tab ya **'Tuma Ujumbe'** au **WhatsApp**.`;
+      } 
+      // 5. WAGENI / GUESTS
+      else if (
+        query.includes("mgeni") || 
+        query.includes("wageni") || 
+        query.includes("guest") || 
+        query.includes("idadi") || 
+        query.includes("waalikwa")
+      ) {
+        reply = `👥 **Taarifa za Waalikwa (${event.name || 'Sherehe'}):**\n\n` +
           `• **Jumla ya Wageni Registered:** ${totalGuests}\n` +
-          `• **Waliotimiza Ahadi zote (Fully Paid):** ${fullyPaid}\n` +
+          `• **Waliotimiza Ahadi (Fully Paid):** ${fullyPaid}\n` +
           `• **Waliolipa kiasi (Partial):** ${partialPaid}\n` +
-          `• **Wenye Ahadi Zisizolipwa (Pledged):** ${pledgedGuests.length}\n` +
+          `• **Wenye Ahadi Zisizolipwa:** ${pledgedGuests.length}\n` +
           `• **Hawajaweka Ahadi Bado:** ${noPledge}\n\n` +
-          `💡 Unaweza kukagua au kupakua orodha kamili kupitia sehemu ya **'Usimamizi wa Wageni'** au **'Ripoti'**.`;
-      } else if (query.includes("rsvp") || query.includes("kuhudhuria") || query.includes("mwaliko") || query.includes("kadi")) {
-        reply = `📩 **Hali ya Majibu ya Kadi & RSVP:**\n\n` +
+          `💡 Fungua sehemu ya **'Usimamizi wa Wageni'** kwa orodha kamili.`;
+      } 
+      // 6. RSVP
+      else if (
+        query.includes("rsvp") || 
+        query.includes("kuhudhuria") || 
+        query.includes("mwaliko") || 
+        query.includes("kadi")
+      ) {
+        reply = `📩 **Hali ya Majibu ya Kadi & RSVP (${event.name || 'Sherehe'}):**\n\n` +
           `• **Watahudhuria:** ${rsvpAttending} wageni\n` +
           `• **Hawatahudhuria:** ${rsvpNotAttending} wageni\n` +
           `• **Hawajajibu RSVP:** ${rsvpUndecided} wageni\n\n` +
-          `💡 Mfumo unaweza kutuma vikumbusho vya kiotomatiki vya RSVP kupitia WhatsApp au SMS.`;
-      } else if (query.includes("sms") || query.includes("whatsapp") || query.includes("ujumbe") || query.includes("gateway")) {
-        reply = `💬 **Ujumbe & Mfumo wa Mawasiliano:**\n\n` +
-          `Mfumo wa EVENTCARD unasaidia kutuma Kadi za Digitali na Risiti za Michango kupitia **SMS** na **WhatsApp Cloud API** au Direct WhatsApp Link.\n\n` +
-          `Unganisha SMS Gateway (k.m. Beem, Meseji, Notify, au eHub) kutoka tab ya **'SMS Gateway'** kuanza kutuma jumbe!`;
-      } else {
+          `💡 Unaweza kutuma vikumbusho vya RSVP kupitia tab ya **'Tuma Ujumbe'**.`;
+      } 
+      // 7. SMS / GATEWAY / WHATSAPP
+      else if (
+        query.includes("sms") || 
+        query.includes("whatsapp") || 
+        query.includes("ujumbe") || 
+        query.includes("gateway")
+      ) {
+        reply = `💬 **Mawasiliano na Utumaji wa Kadi:**\n\n` +
+          `Mfumo wa EVENTCARD unasaidia kutuma Kadi za Digitali na Risiti za Michango kupitia **SMS** na **WhatsApp**.\n\n` +
+          `Unaweza kuunganisha SMS Gateway (k.m. Beem, Meseji, Notify, au eHub) kutoka tab ya **'SMS Gateway'**.`;
+      } 
+      // 8. DEFAULT GREETING
+      else {
         reply = `Habari! Mimi ni **Msaidizi wa AI wa EVENTCARD** 🤖.\n\n` +
-          `Takwimu za hivi punde za sherehe yako:\n` +
-          `• **Waalikwa Registered:** ${totalGuests} wageni\n` +
-          `• **Jumla ya Ahadi (Pledges):** TZS ${totalPledged.toLocaleString()} (${pledgedGuests.length} walioweka ahadi)\n` +
-          `• **Michango Iliyopatikana (Paid):** TZS ${totalPaid.toLocaleString()} (Kati ya TZS ${targetAmount.toLocaleString()})\n` +
-          `• **Waliothibitisha RSVP:** ${rsvpAttending} wageni\n\n` +
-          `Unaweza kuniuliza chochote kuhusu:\n` +
-          `1. *Hali ya ahadi (pledges) & michango ya sherehe*\n` +
-          `2. *Orodha ya wageni & waliolipa ahadi*\n` +
-          `3. *Majibu ya kadi & RSVP status*\n` +
-          `4. *Jinsi ya kutuma jumbe za SMS au WhatsApp*`;
+          `Sasa hivi ninaangazia sherehe ya: **${event.name || 'Sherehe Yako'}**\n` +
+          `• **Ukumbi:** ${venueName}${venueLocation ? ` (${venueLocation})` : ''}\n` +
+          `• **Tarehe:** ${eventDate} (${eventTime})\n` +
+          `• **Waalikwa:** ${totalGuests} wageni\n` +
+          `• **Michango:** TZS ${totalPaid.toLocaleString()} / ${targetAmount.toLocaleString()}\n\n` +
+          (allEvents.length > 1 ? `💡 *Ukitaka kuulizia sherehe nyingine, unaweza kutaja jina lake au kuibadili juu kwenye kisanduku cha sherehe!*\n\n` : '') +
+          `Unaweza kuniuliza kuhusu:\n` +
+          `1. *Ukumbi ulipo & ramani ya Google Maps*\n` +
+          `2. *Tarehe, muda, na muongozo wa mavazi (dress code)*\n` +
+          `3. *Hali ya michango & wageni walioahidi*\n` +
+          `4. *Majibu ya RSVP & idadi ya wageni*`;
       }
 
-      return res.json({ reply, source: 'fallback' });
+      return res.json({ reply, source: 'fallback', eventId: event.id, eventName: event.name });
     } catch (error: any) {
       console.error("[AI Assistant Endpoint Error]:", error);
       return res.status(500).json({ error: "Imeshindwa kuchakata majibu ya AI: " + error.message });
