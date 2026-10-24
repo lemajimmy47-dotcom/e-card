@@ -230,13 +230,6 @@ export const UwalemiElections: React.FC<Props> = ({
         description: 'Msaidizi wa Mweka Hazina',
         maxWinners: 1,
         candidates: []
-      },
-      {
-        id: `pos-${Date.now()}-7`,
-        title: 'Wajumbe wa Kamati Kuu',
-        description: 'Wawakilishi wa Wanachama kwenye Kamati ya Uendeshaji',
-        maxWinners: 3,
-        candidates: []
       }
     ];
 
