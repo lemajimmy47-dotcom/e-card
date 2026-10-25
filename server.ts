@@ -5290,20 +5290,11 @@ Lema, Nguvu Moja!`;
         personalizedMsg = personalizedMsg.replace(/ {2,}/g, ' ').trim();
 
         try {
-          if (effectiveProvider !== 'simulation' && activeApiKey) {
-            await fetch(`http://localhost:3000/api/uwalemi/send-sms`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                recipients: [{ name: voter.fullName, phone: voter.phone, memberNo: voter.memberNo }],
-                message: personalizedMsg,
-                messageType: 'broadcast'
-              })
-            });
-          }
+          await dispatchSMS(voter.phone, personalizedMsg, 'sms', globalSmsSettings);
           voter.smsSentAt = nowStr;
           sentCount++;
         } catch (e: any) {
+          console.error(`[UWALEMI ELECTION] Error sending SMS to ${voter.phone}:`, e);
           failedCount++;
         }
       }
