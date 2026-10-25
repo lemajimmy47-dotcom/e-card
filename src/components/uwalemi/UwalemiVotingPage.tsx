@@ -294,24 +294,21 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
     );
   }
 
-  // Election paused, draft, or not started
-  if (election && (election.status === 'paused' || election.status === 'draft' || timeStatus === 'not_started')) {
+  // Election explicitly paused or not yet started
+  if (election && (election.status === 'paused' || (timeStatus === 'not_started' && election.status !== 'active'))) {
     const isPaused = election.status === 'paused';
-    const isDraft = election.status === 'draft';
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center">
         <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center mb-4 text-slate-300">
           <Clock className="w-8 h-8 text-emerald-400" />
         </div>
         <h2 className="text-xl font-bold text-white mb-2">
-          {isPaused ? 'Uchaguzi Umesitishwa kwa Muda' : isDraft ? 'Uchaguzi Bado Haujaanza (Maandalizi)' : 'Uchaguzi Bado Haujaanza'}
+          {isPaused ? 'Uchaguzi Umesitishwa kwa Muda' : 'Uchaguzi Bado Haujaanza'}
         </h2>
         <p className="text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
           {isPaused 
             ? 'Kamati ya Uchaguzi ya UWALEMI imesitisha shughuli ya upigaji kura kwa muda kwa ajili ya mapitio ya kiufundi. Tafadhali tembelea tena baadae.'
-            : isDraft
-              ? 'Uchaguzi huu bado uko katika hatua ya maandalizi ya awali ya Kamati ya Uchaguzi (Draft). Zoezi la kura halijafunguliwa rasmi bado.'
-              : `Upigaji kura utaanza rasmi tarehe ${election.startDate ? new Date(election.startDate).toLocaleString('sw-TZ') : 'hivi karibuni'}.`}
+            : `Upigaji kura utaanza rasmi tarehe ${election.startDate ? new Date(election.startDate).toLocaleString('sw-TZ') : 'hivi karibuni'}.`}
         </p>
       </div>
     );

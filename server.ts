@@ -5241,6 +5241,53 @@ Lema, Nguvu Moja!`;
     };
   }
 
+  function parseElectionDate(dateStr: any, isEnd = false): Date | null {
+    if (!dateStr) return null;
+    const str = String(dateStr).trim();
+    if (!str) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return new Date(isEnd ? `${str}T23:59:59.999` : `${str}T00:00:00.000`);
+    }
+    const parsed = new Date(str);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  function getElectionTimeStatus(election: any): { timeStatus: 'not_started' | 'open' | 'ended'; isConcluded: boolean } {
+    if (!election) return { timeStatus: 'not_started', isConcluded: false };
+
+    const now = new Date();
+    const startDate = parseElectionDate(election.startDate, false);
+    const endDate = parseElectionDate(election.endDate, true);
+
+    // 1. Officially completed by admin
+    if (election.status === 'completed') {
+      return { timeStatus: 'ended', isConcluded: true };
+    }
+
+    // 2. Explicitly paused by admin
+    if (election.status === 'paused') {
+      return { timeStatus: 'not_started', isConcluded: false };
+    }
+
+    // 3. Automatic End: Time passed endDate
+    if (endDate && now > endDate) {
+      return { timeStatus: 'ended', isConcluded: false };
+    }
+
+    // 4. Manual Active: Admin explicitly activated live (status === 'active')
+    if (election.status === 'active') {
+      return { timeStatus: 'open', isConcluded: false };
+    }
+
+    // 5. Automatic Start: Time reached or passed startDate (now >= startDate)
+    if (startDate && now >= startDate) {
+      return { timeStatus: 'open', isConcluded: false };
+    }
+
+    // 6. Otherwise not started
+    return { timeStatus: 'not_started', isConcluded: false };
+  }
+
   // --- GET ELECTION BALLOT ---
   app.get("/api/uwalemi/election-ballot/:token", async (req, res) => {
     try {
@@ -5290,31 +5337,8 @@ Lema, Nguvu Moja!`;
         return res.status(403).json({ error: "Kiungo chako cha kura kimekwisha muda wake wa matumizi." });
       }
 
-      // Time and election status
-      const now = new Date();
-      const startDate = matchedElection.startDate ? new Date(matchedElection.startDate) : null;
-      const endDate = matchedElection.endDate ? new Date(matchedElection.endDate) : null;
-
-      let timeStatus: 'not_started' | 'open' | 'ended' = 'open';
-      if (matchedElection.status === 'completed') {
-        timeStatus = 'ended';
-      } else if (matchedElection.status === 'active') {
-        if (endDate && now > endDate) {
-          timeStatus = 'ended';
-        } else if (startDate && now < startDate) {
-          timeStatus = 'not_started';
-        } else {
-          timeStatus = 'open';
-        }
-      } else if (matchedElection.status === 'paused' || matchedElection.status === 'draft') {
-        timeStatus = 'not_started';
-      } else {
-        if (startDate && now < startDate) {
-          timeStatus = 'not_started';
-        } else if (endDate && now > endDate) {
-          timeStatus = 'ended';
-        }
-      }
+      // Time and election status (Manual & Automatic)
+      const { timeStatus, isConcluded: autoIsConcluded } = getElectionTimeStatus(matchedElection);
 
       // Return ONLY sanitized voter status (no secret token, no ballot linkage)
       const voterSafe = {
@@ -5414,13 +5438,16 @@ Lema, Nguvu Moja!`;
 
         const election = elections[elecIndex];
 
-        // Check election status - MUST BE ACTIVE
-        if (election.status !== 'active') {
+        // Check election status - Allow voting if timeStatus is 'open' OR election.status is 'active'
+        const { timeStatus: currentVoteTimeStatus } = getElectionTimeStatus(election);
+        if (currentVoteTimeStatus !== 'open' && election.status !== 'active') {
           const statusMsg = election.status === 'completed' 
             ? "Uchaguzi umeshakamilika na kufungwa rasmi."
             : election.status === 'paused'
               ? "Uchaguzi umesitishwa kwa muda na Kamati ya Uchaguzi."
-              : "Uchaguzi bado haujaanza rasmi (Hali: Matayarisho).";
+              : currentVoteTimeStatus === 'ended'
+                ? "Muda uliopangwa wa upigaji kura umemalizika kwa mujibu wa ratiba."
+                : "Uchaguzi bado haujaanza rasmi.";
           return { status: 400, data: { error: statusMsg } };
         }
 
