@@ -868,14 +868,24 @@ export const UwalemiElections: React.FC<Props> = ({
                       <Send className="w-4 h-4" />
                       Tuma Viungo kwa SMS
                     </button>
-                    <button
-                      onClick={() => setShowDeleteElectionModal(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/30 transition-all cursor-pointer"
-                      title="Futa Uchaguzi Huu"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Futa Uchaguzi
-                    </button>
+                    {activeElection.status !== 'completed' ? (
+                      <button
+                        onClick={() => setShowDeleteElectionModal(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/30 transition-all cursor-pointer"
+                        title="Futa Uchaguzi Huu"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Futa Uchaguzi
+                      </button>
+                    ) : (
+                      <span 
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 text-slate-400 text-xs font-semibold border border-slate-700/80 cursor-not-allowed opacity-80"
+                        title="Uchaguzi uliokamilika na kuthibitishwa umefungwa na hauwezi kufutwa ili kulinda kumbukumbu rasmi za kikatiba."
+                      >
+                        <Lock className="w-3.5 h-3.5 text-blue-400" />
+                        Umekamilika (Umefungwa 🔒)
+                      </span>
+                    )}
                     <button
                       onClick={handleOpenEditElection}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"

@@ -4490,6 +4490,15 @@ async function startServer() {
 
           return inElec;
         });
+
+        // ENFORCE IMMUTABILITY: Completed elections can NEVER be deleted or wiped from state
+        const existingCompletedElections = existingElections.filter((e: any) => e.status === 'completed');
+        for (const completedElec of existingCompletedElections) {
+          const existsInIncoming = incomingState.elections.some((e: any) => e.id === completedElec.id);
+          if (!existsInIncoming) {
+            incomingState.elections.push(completedElec);
+          }
+        }
       }
 
       // Preserve admin PIN hash from existing database
