@@ -38,12 +38,16 @@ export const formatTZS = (amount: number): string => {
 export const downloadPdfDocument = (doc: jsPDF, fileName: string): string => {
   const safeName = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
   try {
+    const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      doc.save(safeName);
+      return '';
+    }
     const blob = doc.output('blob');
     const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = blobUrl;
     link.download = safeName;
-    link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     setTimeout(() => {
@@ -53,7 +57,7 @@ export const downloadPdfDocument = (doc: jsPDF, fileName: string): string => {
     }, 500);
     return blobUrl;
   } catch (err) {
-    console.warn('Blob download failed, using doc.save()', err);
+    console.warn('Blob download fallback, using doc.save()', err);
     doc.save(safeName);
     return '';
   }
@@ -2471,7 +2475,8 @@ export const generatePaymentReceiptPDF = (receiptData: {
 export const generateElectionResultsPDF = (
   state: UwalemiState,
   electionId?: string,
-  logoBase64Override?: string
+  logoBase64Override?: string,
+  precalculatedTally?: any
 ): jsPDF => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const election = electionId 
@@ -2488,8 +2493,8 @@ export const generateElectionResultsPDF = (
     throw new Error('Zoezi la upigaji kura bado linaendelea! Ripoti rasmi ya matokeo inatolewa TU baada ya uchaguzi kukamilika rasmi au muda uliopangwa kupiga kura kufika mwisho.');
   }
 
-  const totalMembersCount = (state.members || []).length || (election.voters || []).length;
-  const tallyData = calculateElectionTally(election, totalMembersCount);
+  const totalMembersCount = (state.members || []).length || (election.voters || []).length || (election as any).totalGroupMembers || precalculatedTally?.totalEligibleVoters || 0;
+  const tallyData = precalculatedTally || calculateElectionTally(election, totalMembersCount);
   const term = election.termYears ? `${election.termYears} (Miaka ${election.termYears})` : '-';
 
   const currentY = drawOfficialHeader(

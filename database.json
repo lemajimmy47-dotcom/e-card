@@ -11685,7 +11685,7 @@
       {
         "id": "elec-1790252496480",
         "title": "Uchaguzi Mkuu wa Viongozi wa UWALEMI 2026/2029",
-        "status": "draft",
+        "status": "active",
         "voters": [
           {
             "phone": "+255653578184",
@@ -12050,7 +12050,7 @@
           }
         ],
         "ballots": [],
-        "endDate": "2026-09-27T12:18",
+        "endDate": "2026-10-31T20:00",
         "createdAt": "2026-09-24T12:21:36.480Z",
         "positions": [
           {
@@ -12100,33 +12100,101 @@
           {
             "id": "pos-1790252496480-3",
             "title": "Katibu Mkuu",
-            "candidates": [],
+            "candidates": [
+              {
+                "id": "cand-1792921323776-UWL-005",
+                "memberId": "uwl-mem-1787319591013-246",
+                "memberNo": "UWL-005",
+                "fullName": "Joachim Shekiel Tarimo",
+                "phone": "+255653792361",
+                "slogan": "Uongozi Bora na Uwazi"
+              },
+              {
+                "id": "cand-1792921323777-UWL-006",
+                "memberId": "uwl-mem-1787324532702-435",
+                "memberNo": "UWL-006",
+                "fullName": "Adonica Onesmo Lema",
+                "phone": "+255764366142",
+                "slogan": "Mshikamano na Maendeleo"
+              }
+            ],
             "maxWinners": 1,
             "description": "Msimamizi wa Shughuli za Kila Siku na Kumbukumbu"
           },
           {
             "id": "pos-1790252496480-4",
             "title": "Katibu Msaidizi",
-            "candidates": [],
+            "candidates": [
+              {
+                "id": "cand-1792921323776-UWL-007",
+                "memberId": "uwl-mem-1787328526107-729",
+                "memberNo": "UWL-007",
+                "fullName": "Agness R Lema",
+                "phone": "+255781643211",
+                "slogan": "Uongozi Bora na Uwazi"
+              },
+              {
+                "id": "cand-1792921323777-UWL-008",
+                "memberId": "uwl-mem-1787329676844-332",
+                "memberNo": "UWL-008",
+                "fullName": "Ainess Paradiso Lema",
+                "phone": "+255688190948",
+                "slogan": "Mshikamano na Maendeleo"
+              }
+            ],
             "maxWinners": 1,
             "description": "Msaidizi wa Katibu Mkuu"
           },
           {
             "id": "pos-1790252496480-5",
             "title": "Mweka Hazina",
-            "candidates": [],
+            "candidates": [
+              {
+                "id": "cand-1792921323776-UWL-009",
+                "memberId": "uwl-mem-1787330141225-180",
+                "memberNo": "UWL-009",
+                "fullName": "Alfande Erasto Lema",
+                "phone": "+255717390079",
+                "slogan": "Uongozi Bora na Uwazi"
+              },
+              {
+                "id": "cand-1792921323777-UWL-010",
+                "memberId": "uwl-mem-1787331038053-53",
+                "memberNo": "UWL-010",
+                "fullName": "Aneth Shisarandumi Lema",
+                "phone": "+255773101102",
+                "slogan": "Mshikamano na Maendeleo"
+              }
+            ],
             "maxWinners": 1,
             "description": "Msimamizi Mkuu wa Fedha na Akaunti za UWALEMI"
           },
           {
             "id": "pos-1790252496480-6",
             "title": "Mweka Hazina Msaidizi",
-            "candidates": [],
+            "candidates": [
+              {
+                "id": "cand-1792921323776-UWL-011",
+                "memberId": "uwl-mem-1787477004725-876",
+                "memberNo": "UWL-011",
+                "fullName": "Beliam Pendaeli Lema",
+                "phone": "+255738069363",
+                "slogan": "Uongozi Bora na Uwazi"
+              },
+              {
+                "id": "cand-1792921323777-UWL-012",
+                "memberId": "uwl-mem-1787509180794-227",
+                "memberNo": "UWL-012",
+                "fullName": "Clara Fanuel Lema",
+                "phone": "+255677575431",
+                "slogan": "Mshikamano na Maendeleo"
+              }
+            ],
             "maxWinners": 1,
             "description": "Msaidizi wa Mweka Hazina"
           }
         ],
-        "startDate": "2026-09-24T12:18",
+        "startDate": "2026-10-24T08:00",
         "termYears": "2026 - 2028",
         "eligibilityCriteria": {
           "activeMembersOnly": true,

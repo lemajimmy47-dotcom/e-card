@@ -5299,8 +5299,14 @@ Lema, Nguvu Moja!`;
       if (matchedElection.status === 'completed') {
         timeStatus = 'ended';
       } else if (matchedElection.status === 'active') {
-        timeStatus = 'open';
-      } else if (matchedElection.status === 'paused') {
+        if (endDate && now > endDate) {
+          timeStatus = 'ended';
+        } else if (startDate && now < startDate) {
+          timeStatus = 'not_started';
+        } else {
+          timeStatus = 'open';
+        }
+      } else if (matchedElection.status === 'paused' || matchedElection.status === 'draft') {
         timeStatus = 'not_started';
       } else {
         if (startDate && now < startDate) {
@@ -5319,7 +5325,8 @@ Lema, Nguvu Moja!`;
         ineligibilityReason: matchedVoter.ineligibilityReason,
         hasVoted: !!matchedVoter.hasVoted,
         votedDate: matchedVoter.votedDate || (matchedVoter.votedAt ? matchedVoter.votedAt.slice(0, 10) : undefined),
-        acknowledgmentCode: matchedVoter.acknowledgmentCode || matchedVoter.receiptCode
+        acknowledgmentCode: matchedVoter.acknowledgmentCode || matchedVoter.receiptCode,
+        receiptCode: matchedVoter.acknowledgmentCode || matchedVoter.receiptCode
       };
 
       // STRICT RESULTS DISCLOSURE: Results are disclosed ONLY when election status is 'completed'
