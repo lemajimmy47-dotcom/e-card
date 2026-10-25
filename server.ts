@@ -5103,12 +5103,9 @@ Lema, Nguvu Moja!`;
         return res.status(400).json({ error: statusMsg });
       }
 
-      // Check time window
+      // Check time window (If election status is active, skip startDate future block to prevent timezone/UTC skew)
       const now = new Date();
-      if (election.startDate && new Date(election.startDate) > now) {
-        return res.status(400).json({ error: `Muda wa kuanza kupiga kura bado haujafika (${new Date(election.startDate).toLocaleString('sw-TZ')}).` });
-      }
-      if (election.endDate && new Date(election.endDate) < now) {
+      if (election.endDate && new Date(election.endDate) < now && election.status !== 'active') {
         return res.status(400).json({ error: `Dirisha la kupiga kura limefungwa rasmi tarehe ${new Date(election.endDate).toLocaleString('sw-TZ')}.` });
       }
 
