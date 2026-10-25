@@ -4924,16 +4924,24 @@ Lema, Nguvu Moja!`;
         });
       }
 
-      // Check date validity
+      // Check date validity & election status override
       const now = new Date();
       const startDate = matchedElection.startDate ? new Date(matchedElection.startDate) : null;
       const endDate = matchedElection.endDate ? new Date(matchedElection.endDate) : null;
 
       let timeStatus: 'not_started' | 'open' | 'ended' = 'open';
-      if (startDate && now < startDate) {
-        timeStatus = 'not_started';
-      } else if (endDate && now > endDate) {
+      if (matchedElection.status === 'completed') {
         timeStatus = 'ended';
+      } else if (matchedElection.status === 'active') {
+        timeStatus = 'open';
+      } else if (matchedElection.status === 'paused') {
+        timeStatus = 'not_started';
+      } else {
+        if (startDate && now < startDate) {
+          timeStatus = 'not_started';
+        } else if (endDate && now > endDate) {
+          timeStatus = 'ended';
+        }
       }
 
       // Sanitize voter info (return only their personal status)

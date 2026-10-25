@@ -259,15 +259,7 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
           <p className="font-semibold text-slate-200 mb-1">Unahitaji Msaada?</p>
           <p>Wasiliana na Kamati ya Uchaguzi ya UWALEMI au Katibu Mkuu kupitia simu yako ya mwanachama ili upate kiungo sahihi.</p>
         </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition-all cursor-pointer"
-          >
-            Rudi Nyuma
-          </button>
-        )}
-      </div>
+        </div>
     );
   }
 
@@ -541,14 +533,6 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
         <p className="text-xs text-slate-400 max-w-md mb-6">
           Ikiwa unaona kuna makosa, tafadhali wasiliana na Kamati ya Uchaguzi au Mweka Hazina wa UWALEMI ili kurekebisha taarifa zako.
         </p>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition-all cursor-pointer"
-          >
-            Rudi Nyuma
-          </button>
-        )}
       </div>
     );
   }
@@ -569,14 +553,6 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
             ? 'Kamati ya Uchaguzi ya UWALEMI imesitisha shughuli ya upigaji kura kwa muda kwa ajili ya mapitio ya kiufundi. Tafadhali tembelea tena baadae.'
             : `Upigaji kura utaanza rasmi tarehe ${election.startDate ? new Date(election.startDate).toLocaleString('sw-TZ') : 'hivi karibuni'}.`}
         </p>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition-all cursor-pointer"
-          >
-            Rudi Nyuma
-          </button>
-        )}
       </div>
     );
   }
