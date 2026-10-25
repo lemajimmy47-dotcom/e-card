@@ -129,6 +129,15 @@ export const UwalemiElections: React.FC<Props> = ({
   const [showReportLockedModal, setShowReportLockedModal] = useState<boolean>(false);
   const [confirmDeletePosModal, setConfirmDeletePosModal] = useState<{ posId: string; posTitle: string } | null>(null);
   const [confirmRemoveCandModal, setConfirmRemoveCandModal] = useState<{ posId: string; candId: string; candName: string } | null>(null);
+  const [showDeleteElectionModal, setShowDeleteElectionModal] = useState<boolean>(false);
+  const [showEditElectionModal, setShowEditElectionModal] = useState<boolean>(false);
+  const [editElectionTitle, setEditElectionTitle] = useState<string>('');
+  const [editElectionTerm, setEditElectionTerm] = useState<string>('');
+  const [editElectionStartDate, setEditElectionStartDate] = useState<string>('');
+  const [editElectionEndDate, setEditElectionEndDate] = useState<string>('');
+  const [editRequireActiveOnly, setEditRequireActiveOnly] = useState<boolean>(true);
+  const [editRequireRegFeePaid, setEditRequireRegFeePaid] = useState<boolean>(false);
+  const [editMaxDebtMonths, setEditMaxDebtMonths] = useState<number>(99);
 
   // Add candidate form
   const [candMemberId, setCandMemberId] = useState<string>('');
@@ -433,6 +442,64 @@ export const UwalemiElections: React.FC<Props> = ({
     setConfirmRemoveCandModal(null);
   };
 
+  // Delete Election
+  const handleDeleteElection = async () => {
+    if (readOnly || !activeElection) return;
+    const updatedElections = elections.filter(e => e.id !== activeElection.id);
+    await onSaveState({
+      ...state,
+      elections: updatedElections
+    });
+    if (updatedElections.length > 0) {
+      setSelectedElectionId(updatedElections[0].id);
+    } else {
+      setSelectedElectionId('');
+    }
+    setShowDeleteElectionModal(false);
+  };
+
+  const handleOpenEditElection = () => {
+    if (!activeElection) return;
+    setEditElectionTitle(activeElection.title || '');
+    setEditElectionTerm(activeElection.termYears || '');
+    setEditElectionStartDate(activeElection.startDate || new Date().toISOString().slice(0, 16));
+    setEditElectionEndDate(activeElection.endDate || new Date().toISOString().slice(0, 16));
+    setEditRequireActiveOnly(activeElection.eligibilityCriteria?.activeMembersOnly ?? true);
+    setEditRequireRegFeePaid(activeElection.eligibilityCriteria?.requireRegistrationFeePaid ?? false);
+    setEditMaxDebtMonths(activeElection.eligibilityCriteria?.maxAllowedFeeDebtMonths ?? 99);
+    setShowEditElectionModal(true);
+  };
+
+  const handleSaveEditElection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (readOnly || !activeElection || !editElectionTitle.trim()) return;
+
+    const updatedElections = elections.map(elec => {
+      if (elec.id === activeElection.id) {
+        return {
+          ...elec,
+          title: editElectionTitle.trim(),
+          termYears: editElectionTerm.trim(),
+          startDate: editElectionStartDate,
+          endDate: editElectionEndDate,
+          eligibilityCriteria: {
+            activeMembersOnly: editRequireActiveOnly,
+            requireRegistrationFeePaid: editRequireRegFeePaid,
+            maxAllowedFeeDebtMonths: editMaxDebtMonths
+          }
+        };
+      }
+      return elec;
+    });
+
+    await onSaveState({
+      ...state,
+      elections: updatedElections
+    });
+
+    setShowEditElectionModal(false);
+  };
+
   // Send SMS Links to voters
   const handleDispatchSmsLinks = async () => {
     if (readOnly || !activeElection || isSendingSms) return;
@@ -716,13 +783,31 @@ export const UwalemiElections: React.FC<Props> = ({
                 </button>
 
                 {activeElection && (
-                  <button
-                    onClick={() => setShowSendSmsModal(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-950/40"
-                  >
-                    <Send className="w-4 h-4" />
-                    Tuma Viungo kwa SMS
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowSendSmsModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-950/40"
+                    >
+                      <Send className="w-4 h-4" />
+                      Tuma Viungo kwa SMS
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteElectionModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/30 transition-all cursor-pointer"
+                      title="Futa Uchaguzi Huu"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Futa Uchaguzi
+                    </button>
+                    <button
+                      onClick={handleOpenEditElection}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                      title="Hariri Uchaguzi Huu"
+                    >
+                      <Edit3 className="w-4 h-4 text-teal-400" />
+                      Hariri
+                    </button>
+                  </>
                 )}
               </>
             ) : (
@@ -2160,6 +2245,188 @@ export const UwalemiElections: React.FC<Props> = ({
                 Ndio, Ondoa Mgombea
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Election Confirmation Modal */}
+      {showDeleteElectionModal && activeElection && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-11 h-11 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  Futa Uchaguzi Huu?
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {activeElection.title}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
+              Je, una uhakika unataka kufuta uchaguzi huu wa mfano <strong className="text-white">"{activeElection.title}"</strong>? Hatua hii itaondoa uchaguzi huu na takwimu zake zote kabisa kwenye mfumo.
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteElectionModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Ghairi
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteElection}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                Ndio, Futa Uchaguzi Huu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Election Modal */}
+      {showEditElectionModal && activeElection && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200 my-8">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Hariri Taarifa za Uchaguzi</h3>
+                  <p className="text-xs text-slate-400">Badili vichwa, muda, au vigezo vya uchaguzi</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowEditElectionModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditElection} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Jina la Uchaguzi
+                </label>
+                <input
+                  type="text"
+                  value={editElectionTitle}
+                  onChange={(e) => setEditElectionTitle(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
+                  placeholder="Mf. Uchaguzi Mkuu wa Viongozi 2026"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Kipindi cha Uongozi (Term)
+                  </label>
+                  <input
+                    type="text"
+                    value={editElectionTerm}
+                    onChange={(e) => setEditElectionTerm(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
+                    placeholder="Mf. 2026 - 2028"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Tarehe ya Kuanza
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editElectionStartDate}
+                    onChange={(e) => setEditElectionStartDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Tarehe na Wakati wa Kufunga Kura
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editElectionEndDate}
+                  onChange={(e) => setEditElectionEndDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Vigezo vya Mpigaji Kura (Eligibility)
+                </div>
+
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={editRequireActiveOnly}
+                    onChange={(e) => setEditRequireActiveOnly(e.target.checked)}
+                    className="rounded bg-slate-900 border-slate-700 text-teal-600 focus:ring-0"
+                  />
+                  <span>Lazima awe Mwanachama Hai (Active)</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={editRequireRegFeePaid}
+                    onChange={(e) => setEditRequireRegFeePaid(e.target.checked)}
+                    className="rounded bg-slate-900 border-slate-700 text-teal-600 focus:ring-0"
+                  />
+                  <span>Lazima amelipa Ada ya Kiingilio (Registration Fee)</span>
+                </label>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    Kikomo cha Miezi ya Deni la Michango ya Kila Mwezi
+                  </label>
+                  <select
+                    value={editMaxDebtMonths}
+                    onChange={(e) => setEditMaxDebtMonths(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
+                  >
+                    <option value={0}>Hana deni kabisa (Miezi 0 ya nyuma)</option>
+                    <option value={1}>Deni lisizidi miezi 1</option>
+                    <option value={3}>Deni lisizidi miezi 3</option>
+                    <option value={6}>Deni lisizidi miezi 6</option>
+                    <option value={99}>Ruhusu wote (Bila kujali deni)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditElectionModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Ghairi
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-all shadow-lg shadow-teal-950/50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  Hifadhi Mabadiliko
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
