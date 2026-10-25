@@ -163,12 +163,17 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
       const data = await res.json();
       if (res.ok && data.success) {
         setSubmitSuccessReceipt({
-          receiptCode: data.receiptCode,
-          votedAt: data.votedAt
+          receiptCode: data.ballotVerificationCode || data.acknowledgmentCode || data.receiptCode,
+          votedAt: data.votedDate || data.votedAt || new Date().toISOString().slice(0, 10)
         });
         setShowReviewModal(false);
-        setVoter(prev => prev ? { ...prev, hasVoted: true, receiptCode: data.receiptCode, votedAt: data.votedAt } : null);
-        // Load fresh tally and state
+        setVoter(prev => prev ? { 
+          ...prev, 
+          hasVoted: true, 
+          receiptCode: data.acknowledgmentCode || data.receiptCode,
+          votedAt: data.votedDate || data.votedAt 
+        } : null);
+        // Load fresh turnout and status
         fetchBallot();
       } else {
         setError(data.error || 'Imeshindwa kurekodi kura yako.');

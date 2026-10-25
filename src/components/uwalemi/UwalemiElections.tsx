@@ -167,13 +167,32 @@ export const UwalemiElections: React.FC<Props> = ({
   // Handle status toggle
   const handleUpdateElectionStatus = async (newStatus: 'draft' | 'active' | 'paused' | 'completed') => {
     if (readOnly || !activeElection) return;
+
+    // PROTECTION: Completed election is sealed and can never be reopened to draft or active
+    if (activeElection.status === 'completed' && newStatus !== 'completed') {
+      alert('Uchaguzi uliothibitishwa na kufungwa hauwezi kufunguliwa tena ili kulinda uadilifu wa matokeo.');
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
     const updatedElections = elections.map(e => {
       if (e.id === activeElection.id) {
+        const currentAudit = Array.isArray(e.auditTrail) ? e.auditTrail : [];
+        const newAuditEntry = {
+          id: `aud-${Date.now()}`,
+          timestamp: nowIso,
+          action: `Hali ya uchaguzi imebadilishwa kuwa "${newStatus.toUpperCase()}"`,
+          performedBy: newStatus === 'completed' ? 'Kiongozi Mkuu / Kamati ya Uchaguzi' : 'Kiongozi wa Mfumo',
+          details: newStatus === 'completed' ? 'Matokeo yamethibitishwa rasmi na uchaguzi kufungwa.' : undefined
+        };
+
         return {
           ...e,
           status: newStatus,
-          certifiedAt: newStatus === 'completed' ? new Date().toISOString() : e.certifiedAt,
-          certifiedBy: newStatus === 'completed' ? 'Kamati ya Uchaguzi' : e.certifiedBy
+          isStructureLocked: newStatus === 'active' || newStatus === 'completed',
+          certifiedAt: newStatus === 'completed' ? nowIso : e.certifiedAt,
+          certifiedBy: newStatus === 'completed' ? (e.certifiedBy || 'Kamati Kuu ya Uchaguzi') : e.certifiedBy,
+          auditTrail: [newAuditEntry, ...currentAudit]
         };
       }
       return e;
@@ -185,9 +204,13 @@ export const UwalemiElections: React.FC<Props> = ({
     });
   };
 
-  // Recompute voter eligibility
+  // Recompute voter eligibility (allowed only when draft)
   const handleRecomputeVoters = async () => {
     if (readOnly || !activeElection) return;
+    if (activeElection.status === 'active' || activeElection.status === 'completed') {
+      alert('Hauruhusiwi kubadilisha au kuhesabu upya daftari la wapiga kura wakati uchaguzi unaendelea (active) au umeshakamilika (completed).');
+      return;
+    }
     const refreshedVoters = recomputeElectionVoters(activeElection, state.members, state.monthlyPayments);
     const updatedElections = elections.map(e => {
       if (e.id === activeElection.id) {
@@ -293,6 +316,10 @@ export const UwalemiElections: React.FC<Props> = ({
   const handleAddPosition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (readOnly || !activeElection || !newPosTitle.trim()) return;
+    if (activeElection.status === 'active' || activeElection.status === 'completed' || activeElection.isStructureLocked) {
+      alert('Muundo wa uchaguzi umefungwa. Huwezi kuongeza nafasi wakati uchaguzi unaendelea au umekamilika.');
+      return;
+    }
 
     const newPosition: UwalemiElectionPosition = {
       id: `pos-${Date.now()}`,
@@ -326,6 +353,10 @@ export const UwalemiElections: React.FC<Props> = ({
   // Delete Position
   const handleDeletePosition = (posId: string) => {
     if (readOnly || !activeElection) return;
+    if (activeElection.status === 'active' || activeElection.status === 'completed' || activeElection.isStructureLocked) {
+      alert('Muundo wa uchaguzi umefungwa. Huwezi kufuta nafasi wakati uchaguzi unaendelea au umekamilika.');
+      return;
+    }
     const targetPos = activeElection.positions.find(p => p.id === posId);
     setConfirmDeletePosModal({
       posId,
@@ -335,6 +366,10 @@ export const UwalemiElections: React.FC<Props> = ({
 
   const executeDeletePosition = async (posId: string) => {
     if (readOnly || !activeElection) return;
+    if (activeElection.status === 'active' || activeElection.status === 'completed' || activeElection.isStructureLocked) {
+      alert('Muundo wa uchaguzi umefungwa.');
+      return;
+    }
     const updatedElections = elections.map(elec => {
       if (elec.id === activeElection.id) {
         return {
@@ -356,6 +391,10 @@ export const UwalemiElections: React.FC<Props> = ({
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (readOnly || !activeElection || !showAddCandidateModal || !candMemberId) return;
+    if (activeElection.status === 'active' || activeElection.status === 'completed' || activeElection.isStructureLocked) {
+      alert('Muundo wa uchaguzi umefungwa. Huwezi kuongeza mgombea wakati uchaguzi unaendelea au umekamilika.');
+      return;
+    }
 
     const member = state.members.find(m => m.id === candMemberId);
     if (!member) return;
@@ -406,6 +445,10 @@ export const UwalemiElections: React.FC<Props> = ({
   // Remove Candidate
   const handleRemoveCandidate = (posId: string, candidateId: string) => {
     if (readOnly || !activeElection) return;
+    if (activeElection.status === 'active' || activeElection.status === 'completed' || activeElection.isStructureLocked) {
+      alert('Muundo wa uchaguzi umefungwa. Huwezi kuondoa mgombea wakati uchaguzi unaendelea au umekamilika.');
+      return;
+    }
     const pos = activeElection.positions.find(p => p.id === posId);
     const cand = pos?.candidates.find(c => c.id === candidateId);
     setConfirmRemoveCandModal({
@@ -417,6 +460,10 @@ export const UwalemiElections: React.FC<Props> = ({
 
   const executeRemoveCandidate = async (posId: string, candidateId: string) => {
     if (readOnly || !activeElection) return;
+    if (activeElection.status === 'active' || activeElection.status === 'completed' || activeElection.isStructureLocked) {
+      alert('Muundo wa uchaguzi umefungwa.');
+      return;
+    }
     const updatedElections = elections.map(elec => {
       if (elec.id === activeElection.id) {
         return {
@@ -445,6 +492,10 @@ export const UwalemiElections: React.FC<Props> = ({
   // Delete Election
   const handleDeleteElection = async () => {
     if (readOnly || !activeElection) return;
+    if (activeElection.status === 'completed') {
+      alert('Uchaguzi uliothibitishwa na kukamilika hauwezi kufutwa kwa kuwa ni rekodi rasmi ya kihistoria ya kikundi.');
+      return;
+    }
     const updatedElections = elections.filter(e => e.id !== activeElection.id);
     await onSaveState({
       ...state,
@@ -468,6 +519,10 @@ export const UwalemiElections: React.FC<Props> = ({
 
   const handleOpenEditElection = () => {
     if (!activeElection) return;
+    if (activeElection.status === 'completed') {
+      alert('Uchaguzi uliokamilika na kuthibitishwa hauwezi kubadilishwa tena.');
+      return;
+    }
     setEditElectionTitle(activeElection.title || '');
     setEditElectionTerm(activeElection.termYears || '');
     setEditElectionStartDate(new Date().toISOString().slice(0, 16));
@@ -481,7 +536,12 @@ export const UwalemiElections: React.FC<Props> = ({
   const handleSaveEditElection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (readOnly || !activeElection || !editElectionTitle.trim()) return;
+    if (activeElection.status === 'completed') {
+      alert('Uchaguzi uliokamilika hauwezi kuhaririwa.');
+      return;
+    }
 
+    const isOngoing = activeElection.status === 'active';
     const updatedElections = elections.map(elec => {
       if (elec.id === activeElection.id) {
         return {
@@ -490,7 +550,8 @@ export const UwalemiElections: React.FC<Props> = ({
           termYears: editElectionTerm.trim(),
           startDate: editElectionStartDate,
           endDate: editElectionEndDate,
-          eligibilityCriteria: {
+          // When active, preserve existing eligibility criteria to avoid invalidating live voters
+          eligibilityCriteria: isOngoing ? elec.eligibilityCriteria : {
             activeMembersOnly: editRequireActiveOnly,
             requireRegistrationFeePaid: editRequireRegFeePaid,
             maxAllowedFeeDebtMonths: editMaxDebtMonths
@@ -524,9 +585,13 @@ export const UwalemiElections: React.FC<Props> = ({
         targetTokens = voters.filter(v => v.isEligible).map(v => v.voterToken);
       }
 
+      const adminToken = sessionStorage.getItem('uwalemi_admin_token') || '';
       const res = await fetch('/api/uwalemi/election/send-voter-links', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {})
+        },
         body: JSON.stringify({
           electionId: activeElection.id,
           voterTokens: targetTokens,
@@ -591,9 +656,13 @@ export const UwalemiElections: React.FC<Props> = ({
     setSendingIndividualSmsToken(voter.voterToken);
 
     try {
+      const adminToken = sessionStorage.getItem('uwalemi_admin_token') || '';
       const res = await fetch('/api/uwalemi/election/send-voter-links', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {})
+        },
         body: JSON.stringify({
           electionId: activeElection.id,
           voterTokens: [voter.voterToken],
@@ -1321,7 +1390,7 @@ export const UwalemiElections: React.FC<Props> = ({
                         <th className="py-3 px-4">Simu</th>
                         <th className="py-3 px-4">Sifa ya Kura</th>
                         <th className="py-3 px-4">Hali ya Kura</th>
-                        <th className="py-3 px-4">Stakabadhi</th>
+                        <th className="py-3 px-4" title="Stakabadhi ya Mjumbe (ACK) - Haina uhusiano na namba ya kura ili kulinda siri ya kura">Stakabadhi (ACK)</th>
                         <th className="py-3 px-4 text-right">Hatua & Kiungo</th>
                       </tr>
                     </thead>
@@ -1379,7 +1448,7 @@ export const UwalemiElections: React.FC<Props> = ({
                                 </div>
                               </td>
                               <td className="py-3 px-4 font-mono text-[11px] text-slate-400">
-                                {voter.receiptCode || '-'}
+                                {voter.acknowledgmentCode || voter.receiptCode || '-'}
                               </td>
                               <td className="py-3 px-4 text-right">
                                 <div className="inline-flex items-center gap-1.5 justify-end">
@@ -1441,6 +1510,19 @@ export const UwalemiElections: React.FC<Props> = ({
           {/* SUB-TAB 3: POSITIONS & CANDIDATES */}
           {subTab === 'positions' && (
             <div className="space-y-4">
+              {/* Structure Lock Banner */}
+              {(activeElection.status === 'active' || activeElection.status === 'completed' || activeElection.isStructureLocked) && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="font-bold text-amber-200">Muundo wa Wagombea na Nafasi Umefungwa (Locked)</h5>
+                    <p className="text-amber-300/80 mt-0.5 leading-relaxed">
+                      Kwa sababu uchaguzi huu uko katika hali ya <strong>"{activeElection.status.toUpperCase()}"</strong>, hakuna marekebisho ya wagombea wala nafasi yanayoruhusiwa ili kulinda uadilifu na usahihi wa kura zote zilizopigwa.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-bold text-white">Nafasi za Uongozi na Wagombea</h3>
@@ -1448,18 +1530,26 @@ export const UwalemiElections: React.FC<Props> = ({
                 </div>
 
                 {!readOnly && (
-                  <button
-                    onClick={() => setShowNewPositionModal(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4 text-emerald-400" />
-                    Ongeza Nafasi Mpya
-                  </button>
+                  (activeElection.status === 'draft' || activeElection.status === 'paused') ? (
+                    <button
+                      onClick={() => setShowNewPositionModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4 text-emerald-400" />
+                      Ongeza Nafasi Mpya
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-400 text-xs font-medium">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      Imezuiwa (Uchaguzi Unaendelea)
+                    </span>
+                  )
                 )}
               </div>
 
               <div className="space-y-4">
                 {activeElection.positions.map((pos, idx) => {
+                  const isLocked = activeElection.status === 'active' || activeElection.status === 'completed' || activeElection.isStructureLocked;
                   return (
                     <div key={pos.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800 mb-4">
@@ -1480,7 +1570,7 @@ export const UwalemiElections: React.FC<Props> = ({
                           </div>
                         </div>
 
-                        {!readOnly && (
+                        {!readOnly && !isLocked && (
                           <div className="flex items-center gap-2 self-start sm:self-auto">
                             <button
                               onClick={() => setShowAddCandidateModal(pos.id)}
@@ -1527,7 +1617,7 @@ export const UwalemiElections: React.FC<Props> = ({
                                   </div>
                                 </div>
 
-                                {!readOnly && (
+                                {!readOnly && !isLocked && (
                                   <button
                                     onClick={() => handleRemoveCandidate(pos.id, cand.id)}
                                     className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer"
@@ -1550,51 +1640,124 @@ export const UwalemiElections: React.FC<Props> = ({
 
           {/* SUB-TAB 4: AUDIT LOG */}
           {subTab === 'audit' && (
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Privacy Architecture Notice */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-white">Daftari la Ukaguzi wa Usalama (Ballot Audit Log)</h3>
+                    <h3 className="text-base font-bold text-white">Usalama na Siri ya Kura (Decoupled Zero-Knowledge Architecture)</h3>
                     <p className="text-xs text-slate-400">
-                      Kila kura iliyopigwa inarekodiwa na muhuri wa wakati (Timestamp) na Stakabadhi ya Siri (Receipt Code).
+                      Ulinzi madhubuti wa kuzuia mtu yeyote (hata viongozi na seva) kujua nani amempigia kura nani.
                     </p>
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-xs text-slate-400 mb-4 leading-relaxed">
-                  <strong className="text-slate-200">Uthibitisho wa Uadilifu:</strong> Jumla ya kura zilizorekodiwa ({activeElection.ballots?.length || 0}) inalingana sawasawa na idadi ya wanachama waliopiga kura ({activeElection.voters?.filter(v => v.hasVoted).length || 0}), bila kuweka utambulisho wa nani amempigia nani.
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 my-3">
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                    <div className="font-bold text-slate-200 mb-1">1. Stakabadhi ya Mjumbe (ACK)</div>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      Mpiga kura hupewa namba ya uthibitisho (UWL-ACK-...) inayothibitisha kura imepokelewa bila kurekodi mgombea aliyempigia.
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                    <div className="font-bold text-slate-200 mb-1">2. Kura ya Siri (BLT-...)</div>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      Kura huhifadhiwa na Namba ya Kura isiyoweza kuunganishwa (Decoupled) na mpiga kura yeyote.
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                    <div className="font-bold text-slate-200 mb-1">3. Mchanganyo (Shuffling)</div>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      Kura zote huchanganywa kiotomatiki mara kwa mara bila mpangilio wa muda ili kuzuia kufuatilia mtiririko.
+                    </p>
+                  </div>
                 </div>
 
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-xs text-slate-400 leading-relaxed flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <strong className="text-slate-200">Uthibitisho wa Ulingano:</strong> Jumla ya kura zilizorekodiwa (<strong>{activeElection.ballots?.length || 0}</strong>) inalingana sawasawa na idadi ya wanachama waliopiga kura (<strong>{activeElection.voters?.filter(v => v.hasVoted).length || 0}</strong>).
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-[11px] font-bold">
+                    100% Cryptographically Decoupled
+                  </span>
+                </div>
+              </div>
+
+              {/* Administrative Activity Audit Trail */}
+              {Array.isArray(activeElection.auditTrail) && activeElection.auditTrail.length > 0 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                  <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-emerald-400" />
+                    Kumbukumbu ya Vitendo vya Utawala (Admin Audit Trail)
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-950 text-slate-400 font-bold uppercase tracking-wider">
+                        <tr>
+                          <th className="py-2.5 px-3">Muda</th>
+                          <th className="py-2.5 px-3">Kitendo</th>
+                          <th className="py-2.5 px-3">Mtekelezaji</th>
+                          <th className="py-2.5 px-3">Maelezo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {activeElection.auditTrail.map((entry) => (
+                          <tr key={entry.id} className="hover:bg-slate-800/30">
+                            <td className="py-2.5 px-3 text-slate-400 font-mono whitespace-nowrap">
+                              {new Date(entry.timestamp).toLocaleString('sw-TZ')}
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold text-slate-200">
+                              {entry.action}
+                            </td>
+                            <td className="py-2.5 px-3 text-emerald-400 font-mono">
+                              {entry.performedBy}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400">
+                              {entry.details || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Ballot Audit Log Table */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                  <Vote className="w-4 h-4 text-emerald-400" />
+                  Kura Zilizopigwa Bila Majina (Anonymized & Shuffled Ballots)
+                </h4>
+
                 {activeElection.ballots?.length === 0 ? (
-                  <p className="text-center py-8 text-xs text-slate-500 italic">Bado hakuna kura iliyorekodiwa.</p>
+                  <p className="text-center py-8 text-xs text-slate-500 italic">Bado hakuna kura iliyorekodiwa kwenye uchaguzi huu.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-950 text-slate-400 font-bold uppercase tracking-wider">
                         <tr>
-                          <th className="py-2.5 px-3">#</th>
-                          <th className="py-2.5 px-3">Namba ya Stakabadhi</th>
-                          <th className="py-2.5 px-3">Tarehe na Saa</th>
+                          <th className="py-2.5 px-3">Namba ya Kura</th>
+                          <th className="py-2.5 px-3">Tarehe</th>
                           <th className="py-2.5 px-3">Nafasi Zilizopigiwa Kura</th>
-                          <th className="py-2.5 px-3 text-right">Hali ya Usalama</th>
+                          <th className="py-2.5 px-3 text-right">Uthibitisho wa Siri</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/50 font-mono">
-                        {activeElection.ballots?.slice().reverse().map((b, i) => (
+                        {activeElection.ballots?.map((b) => (
                           <tr key={b.id} className="hover:bg-slate-800/30">
-                            <td className="py-2.5 px-3 text-slate-500">#{activeElection.ballots.length - i}</td>
                             <td className="py-2.5 px-3 text-emerald-400 font-bold">{b.receiptCode}</td>
                             <td className="py-2.5 px-3 text-slate-300 font-sans">
-                              {new Date(b.timestamp).toLocaleString('sw-TZ', { dateStyle: 'short', timeStyle: 'medium' })}
+                              {b.timestamp ? new Date(b.timestamp).toLocaleDateString('sw-TZ', { dateStyle: 'medium' }) : 'Imerekodiwa'}
                             </td>
                             <td className="py-2.5 px-3 font-sans text-slate-400">
                               {Object.keys(b.votes || {}).length} Nafasi
                             </td>
-                            <td className="py-2.5 px-3 text-right text-emerald-400 font-sans text-[11px]">
-                              ✓ Siri 100%
+                            <td className="py-2.5 px-3 text-right text-emerald-400 font-sans text-[11px] font-semibold">
+                              ✓ Imetenganishwa (Decoupled)
                             </td>
                           </tr>
                         ))}

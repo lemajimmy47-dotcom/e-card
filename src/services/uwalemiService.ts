@@ -134,7 +134,24 @@ export const INITIAL_UWALEMI_STATE: UwalemiState & { initialized: boolean } = {
 
 const LOCAL_STORAGE_KEY = 'uwalemi_standalone_state_v1';
 
-export async function fetchUwalemiState(): Promise<UwalemiState> {
+export function stripSensitiveElectionData(s: UwalemiState): UwalemiState {
+  if (!s || !Array.isArray(s.elections)) return s;
+  return {
+    ...s,
+    elections: s.elections.map(e => ({
+      ...e,
+      ballots: [], // Never store anonymous ballots in browser localStorage
+      voters: (e.voters || []).map(v => {
+        // Omit secret tokens and direct receipts from localStorage
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { voterToken, voterTokenHash, ...rest } = v;
+        return rest as any;
+      })
+    }))
+  };
+}
+
+export async function fetchUwalemiState(explicitAdminToken?: string): Promise<UwalemiState> {
   const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
   let localState: (UwalemiState & { initialized?: boolean }) | null = null;
   if (cached) {
@@ -237,12 +254,19 @@ export async function fetchUwalemiState(): Promise<UwalemiState> {
   };
 
   try {
-    const res = await fetch('/api/uwalemi/state');
+    const adminToken = explicitAdminToken || (typeof window !== 'undefined' ? sessionStorage.getItem('uwalemi_admin_token') : null);
+    const headers: Record<string, string> = {};
+    if (adminToken) {
+      headers['Authorization'] = `Bearer ${adminToken}`;
+      headers['x-uwalemi-admin-token'] = adminToken;
+    }
+    const res = await fetch('/api/uwalemi/state', { headers });
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data === 'object' && data.initialized !== false && Array.isArray(data.members)) {
         const cleanData = sanitizeState(data);
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleanData));
+        const safeCached = stripSensitiveElectionData(cleanData);
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(safeCached));
         return cleanData;
       } else if (localState && Array.isArray(localState.members)) {
         // If server had no initialized state yet but local has state, preserve and sync local to server
@@ -367,15 +391,24 @@ export function autoAccrueLateFeeFines(s: UwalemiState, activeUntickedMonth?: { 
   return s;
 }
 
-export async function saveUwalemiState(state: UwalemiState): Promise<boolean> {
+export async function saveUwalemiState(state: UwalemiState, explicitAdminToken?: string): Promise<boolean> {
   const reconciledState = autoAccrueLateFeeFines(state);
   const updatedState = { ...reconciledState, initialized: true, lastUpdated: new Date().toISOString() };
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedState));
+  
+  // Sanitize cached copy to ensure ballots and voter tokens are never stored in localStorage
+  const safeStateToCache = stripSensitiveElectionData(updatedState);
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(safeStateToCache));
 
   try {
+    const adminToken = explicitAdminToken || (typeof window !== 'undefined' ? sessionStorage.getItem('uwalemi_admin_token') : null);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminToken) {
+      headers['Authorization'] = `Bearer ${adminToken}`;
+      headers['x-uwalemi-admin-token'] = adminToken;
+    }
     const res = await fetch('/api/uwalemi/state', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(updatedState)
     });
     return res.ok;
@@ -1739,18 +1772,31 @@ export async function triggerMonthlyAutoRemindersApi(forceNow = false): Promise<
 // UWALEMI DIGITAL ELECTION (E-VOTING) UTILS
 // ==========================================
 
-export function generateVoterToken(memberNo: string, electionId: string): string {
-  const cleanMNo = (memberNo || 'MEM').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const timePart = Date.now().toString(36).slice(-4).toUpperCase();
-  return `VT-${cleanMNo}-${rand}${timePart}`;
+export function generateVoterToken(): string {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    return 'VTOK_' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return 'VTOK_' + Array.from({ length: 48 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 }
 
-export function generateVoteReceiptCode(): string {
+// 1. Voter acknowledgment receipt (proves member fulfilled voting, has NO link to ballot)
+export function generateVoterAcknowledgmentCode(): string {
   const randNum = Math.floor(10000 + Math.random() * 90000);
   const letterCode = Math.random().toString(36).substring(2, 5).toUpperCase();
-  return `UWL-VT-${letterCode}${randNum}`;
+  return `UWL-ACK-${letterCode}${randNum}`;
 }
+
+// 2. Cryptographic ballot verification code (attached ONLY to anonymous ballot)
+export function generateBallotReceiptCode(): string {
+  const randNum = Math.floor(10000 + Math.random() * 90000);
+  const letterCode = Math.random().toString(36).substring(2, 5).toUpperCase();
+  return `BLT-${letterCode}${randNum}`;
+}
+
+// Legacy alias for backward compatibility
+export const generateVoteReceiptCode = generateBallotReceiptCode;
 
 export function recomputeElectionVoters(
   election: Partial<UwalemiElection>,
@@ -1758,6 +1804,11 @@ export function recomputeElectionVoters(
   payments: UwalemiMonthlyPayment[]
 ): UwalemiVoterRecord[] {
   if (!Array.isArray(members)) return [];
+  // Cannot mutate voter roll if election is already active or concluded
+  if (election.status === 'active' || election.status === 'completed') {
+    return (election.voters || []) as UwalemiVoterRecord[];
+  }
+
   const criteria = election.eligibilityCriteria || {
     activeMembersOnly: true,
     requireRegistrationFeePaid: false,
@@ -1796,7 +1847,8 @@ export function recomputeElectionVoters(
       }
     }
 
-    const token = existing?.voterToken || generateVoterToken(m.memberNo, election.id || 'ELEC');
+    // Preserve existing token or generate high-entropy secure token with NO member identifier
+    const token = existing?.voterToken || generateVoterToken();
 
     return {
       voterToken: token,
@@ -1807,7 +1859,9 @@ export function recomputeElectionVoters(
       isEligible,
       ineligibilityReason: reason || undefined,
       hasVoted: existing?.hasVoted || false,
+      votedDate: existing?.votedDate || (existing?.votedAt ? existing.votedAt.slice(0, 10) : undefined),
       votedAt: existing?.votedAt,
+      acknowledgmentCode: existing?.acknowledgmentCode || existing?.receiptCode,
       receiptCode: existing?.receiptCode,
       smsSentAt: existing?.smsSentAt
     };
@@ -1834,18 +1888,13 @@ export interface ElectionPositionTally {
 }
 
 /**
- * Checks if an election is officially concluded (completed or past its scheduled end date)
+ * Checks if an election is officially concluded.
+ * STRICT RULE: Results are disclosed ONLY when officially certified (status === 'completed').
+ * Passing the scheduled end date while still 'active' or 'paused' does NOT leak results prematurely.
  */
 export function isElectionConcluded(election: UwalemiElection | null | undefined): boolean {
   if (!election) return false;
-  if (election.status === 'completed') return true;
-  if (election.endDate) {
-    const end = new Date(election.endDate);
-    if (!isNaN(end.getTime()) && new Date() >= end) {
-      return true;
-    }
-  }
-  return false;
+  return election.status === 'completed';
 }
 
 export function calculateElectionTally(
@@ -1869,7 +1918,7 @@ export function calculateElectionTally(
   const rawTurnout = totalEligibleVoters > 0 
     ? (totalBallotsCast / totalEligibleVoters) * 100 
     : 0;
-  // Format to 1 decimal place if not a whole number (e.g. 2.5%, 64%)
+  // Format to 1 decimal place (e.g. 64.5%)
   const turnoutPercentage = Math.round(rawTurnout * 10) / 10;
 
   const positionsTally: ElectionPositionTally[] = (election.positions || []).map(pos => {
@@ -1884,7 +1933,9 @@ export function calculateElectionTally(
     ballots.forEach(ballot => {
       const chosenCandidateIds = ballot.votes?.[pos.id];
       if (Array.isArray(chosenCandidateIds)) {
-        chosenCandidateIds.forEach(cId => {
+        // Enforce deduplicated candidate choices per ballot to prevent duplicate counts
+        const uniqueChosen = Array.from(new Set(chosenCandidateIds));
+        uniqueChosen.forEach(cId => {
           if (voteCountMap.has(cId)) {
             voteCountMap.set(cId, (voteCountMap.get(cId) || 0) + 1);
             totalVotesForPosition += 1;
@@ -1915,25 +1966,47 @@ export function calculateElectionTally(
     // Sort descending by votes
     results.sort((a, b) => b.votesCount - a.votesCount);
 
-    // Identify winners based on maxWinners
+    // Identify winners & handle ties fairly based on maxWinners
     if (totalVotesForPosition > 0 && results.length > 0) {
       const maxW = Math.max(1, pos.maxWinners || 1);
-      const topVotes = results[0].votesCount;
       
       if (maxW === 1) {
         // Single winner position: Check if tie for 1st place
-        if (results.length > 1 && results[1].votesCount === topVotes && topVotes > 0) {
-          results[0].isTie = true;
-          results[1].isTie = true;
-        } else if (topVotes > 0) {
-          results[0].isWinner = true;
+        const topVotes = results[0].votesCount;
+        if (topVotes > 0) {
+          const tiedTop = results.filter(r => r.votesCount === topVotes);
+          if (tiedTop.length > 1) {
+            tiedTop.forEach(r => { r.isTie = true; r.isWinner = false; });
+          } else {
+            results[0].isWinner = true;
+          }
         }
       } else {
         // Multi-winner position
-        for (let i = 0; i < Math.min(maxW, results.length); i++) {
-          if (results[i].votesCount > 0) {
-            results[i].isWinner = true;
+        const cutoffIdx = Math.min(maxW - 1, results.length - 1);
+        const cutoffVotes = results[cutoffIdx].votesCount;
+
+        if (cutoffVotes > 0) {
+          const tiedAtCutoff = results.filter(r => r.votesCount === cutoffVotes);
+          const candidatesAboveCutoff = results.filter(r => r.votesCount > cutoffVotes);
+
+          // Candidates strictly above cutoff are definite winners
+          candidatesAboveCutoff.forEach(r => { r.isWinner = true; });
+
+          // If candidates at or above cutoff exceed maxW, the boundary candidates are tied
+          const totalAtOrAbove = candidatesAboveCutoff.length + tiedAtCutoff.length;
+          if (totalAtOrAbove > maxW) {
+            // Cutoff tie exists: neither boundary candidate is declared winner
+            tiedAtCutoff.forEach(r => { r.isTie = true; r.isWinner = false; });
+          } else {
+            // All boundary candidates fit within maxW slots
+            tiedAtCutoff.forEach(r => { r.isWinner = true; });
           }
+        } else {
+          // If cutoff is 0, only candidates with > 0 votes can win
+          results.slice(0, maxW).forEach(r => {
+            if (r.votesCount > 0) r.isWinner = true;
+          });
         }
       }
     }
