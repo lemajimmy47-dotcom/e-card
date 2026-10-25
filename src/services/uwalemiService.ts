@@ -1833,19 +1833,44 @@ export interface ElectionPositionTally {
   }[];
 }
 
-export function calculateElectionTally(election: UwalemiElection): {
+/**
+ * Checks if an election is officially concluded (completed or past its scheduled end date)
+ */
+export function isElectionConcluded(election: UwalemiElection | null | undefined): boolean {
+  if (!election) return false;
+  if (election.status === 'completed') return true;
+  if (election.endDate) {
+    const end = new Date(election.endDate);
+    if (!isNaN(end.getTime()) && new Date() >= end) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function calculateElectionTally(
+  election: UwalemiElection,
+  totalGroupMembersCount?: number
+): {
+  totalGroupMembers: number;
   totalEligibleVoters: number;
   totalBallotsCast: number;
   turnoutPercentage: number;
   positionsTally: ElectionPositionTally[];
 } {
-  const eligibleVoters = (election.voters || []).filter(v => v.isEligible);
-  const totalEligibleVoters = eligibleVoters.length;
+  const voters = election.voters || [];
   const ballots = election.ballots || [];
+  const eligibleVoters = voters.filter(v => v.isEligible);
+  const totalEligibleVoters = eligibleVoters.length;
   const totalBallotsCast = ballots.length;
-  const turnoutPercentage = totalEligibleVoters > 0 
-    ? Math.round((totalBallotsCast / totalEligibleVoters) * 100) 
+  const totalGroupMembers = typeof totalGroupMembersCount === 'number' && totalGroupMembersCount > 0
+    ? totalGroupMembersCount
+    : Math.max(voters.length, totalEligibleVoters);
+  const rawTurnout = totalEligibleVoters > 0 
+    ? (totalBallotsCast / totalEligibleVoters) * 100 
     : 0;
+  // Format to 1 decimal place if not a whole number (e.g. 2.5%, 64%)
+  const turnoutPercentage = Math.round(rawTurnout * 10) / 10;
 
   const positionsTally: ElectionPositionTally[] = (election.positions || []).map(pos => {
     // Count votes per candidate
@@ -1923,6 +1948,7 @@ export function calculateElectionTally(election: UwalemiElection): {
   });
 
   return {
+    totalGroupMembers,
     totalEligibleVoters,
     totalBallotsCast,
     turnoutPercentage,

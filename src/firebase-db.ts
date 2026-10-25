@@ -351,11 +351,11 @@ export function startKeepAliveInterval() {
   
   // Run an immediate ping at startup (delayed slightly to allow server setup to breathe)
   setTimeout(() => {
-    pingPostgresKeepAlive();
+    pingPostgresKeepAlive().catch(e => console.warn("[Postgres Keep-Alive] Initial ping caught:", e?.message || e));
   }, 8000);
 
   // Interval trigger every 10 minutes (10 * 60 * 1000 = 600,000 milliseconds)
   setInterval(() => {
-    pingPostgresKeepAlive();
+    pingPostgresKeepAlive().catch(e => console.warn("[Postgres Keep-Alive] Interval ping caught:", e?.message || e));
   }, 10 * 60 * 1000);
 }

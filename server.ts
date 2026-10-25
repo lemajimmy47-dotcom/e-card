@@ -4,6 +4,15 @@ try {
 } catch {
   // Ignore in production where environment variables are injected directly
 }
+
+process.on("uncaughtException", (err) => {
+  console.error("[Server UncaughtException]:", err?.message || err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.warn("[Server UnhandledRejection]:", (reason as any)?.message || reason);
+});
+
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -3547,7 +3556,7 @@ async function startServer() {
   await performSelfCleaningAndMigration(initData);
   
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Start the cron service
   startPaymentRemindersCron();
@@ -4939,15 +4948,29 @@ Lema, Nguvu Moja!`;
         receiptCode: matchedVoter.receiptCode
       };
 
-      // Compute simple, safe aggregate results tally if voter has voted or election ended/completed
-      let resultsTally: any = null;
-      if (matchedVoter.hasVoted || timeStatus === 'ended' || matchedElection.status === 'completed') {
-        const ballots = matchedElection.ballots || [];
-        const voters = matchedElection.voters || [];
-        const totalEligible = voters.filter((v: any) => v.isEligible).length;
-        const totalCast = ballots.length;
-        const turnoutPercent = totalEligible > 0 ? Math.round((totalCast / totalEligible) * 100) : 0;
+      // Check if election is concluded (completed or past end date)
+      const isConcluded = matchedElection.status === 'completed' || timeStatus === 'ended';
 
+      const ballots = matchedElection.ballots || [];
+      const voters = matchedElection.voters || [];
+      const totalEligible = voters.filter((v: any) => v.isEligible).length;
+      const totalCast = ballots.length;
+      const rawTurnout = totalEligible > 0 ? (totalCast / totalEligible) * 100 : 0;
+      const turnoutPercent = Math.round(rawTurnout * 10) / 10;
+      const totalGroupMembers = (state.members || []).length || voters.length;
+
+      // Live turnout monitoring (safe to show to members during voting)
+      const liveTurnout = {
+        totalGroupMembers,
+        totalEligibleVoters: totalEligible,
+        totalBallotsCast: totalCast,
+        turnoutPercentage: turnoutPercent,
+        isConcluded
+      };
+
+      // Candidate votes breakdown ONLY generated and returned when election is officially concluded
+      let resultsTally: any = null;
+      if (isConcluded) {
         const positionsTally = (matchedElection.positions || []).map((pos: any) => {
           const candidateVotes: Record<string, number> = {};
           (pos.candidates || []).forEach((c: any) => {
@@ -4965,7 +4988,7 @@ Lema, Nguvu Moja!`;
 
           const results = (pos.candidates || []).map((c: any) => {
             const count = candidateVotes[c.id] || 0;
-            const pct = totalCast > 0 ? Math.round((count / totalCast) * 100) : 0;
+            const pct = totalCast > 0 ? Math.round((count / totalCast) * 1000) / 10 : 0;
             return {
               candidateId: c.id,
               candidateName: c.fullName,
@@ -5004,6 +5027,7 @@ Lema, Nguvu Moja!`;
         });
 
         resultsTally = {
+          totalGroupMembers,
           totalEligibleVoters: totalEligible,
           totalBallotsCast: totalCast,
           turnoutPercentage: turnoutPercent,
@@ -5023,11 +5047,14 @@ Lema, Nguvu Moja!`;
           endDate: matchedElection.endDate,
           status: matchedElection.status,
           positions: matchedElection.positions || [],
-          totalEligibleCount: (matchedElection.voters || []).filter((v: any) => v.isEligible).length,
-          totalVotesCast: (matchedElection.ballots || []).length
+          totalEligibleCount: totalEligible,
+          totalVotesCast: totalCast,
+          totalGroupMembers
         },
         voter: voterSafe,
         timeStatus,
+        isConcluded,
+        liveTurnout,
         resultsTally,
         groupSettings: {
           groupName: state.groupSettings?.groupName || 'UWALEMI',
@@ -8821,6 +8848,23 @@ Tafadhali toa majibu kwenye mfumo wa JSON pekee wenye muundo ufuatao bila maelez
       appType: "spa",
     });
     app.use(vite.middlewares);
+
+    app.use("*", async (req, res, next) => {
+      if (req.method !== "GET" || res.headersSent) return next();
+      const url = req.originalUrl;
+      try {
+        const indexPath = path.resolve(process.cwd(), "index.html");
+        if (fs.existsSync(indexPath)) {
+          let template = fs.readFileSync(indexPath, "utf-8");
+          template = await vite.transformIndexHtml(url, template);
+          res.status(200).set({ "Content-Type": "text/html" }).end(template);
+        } else {
+          next();
+        }
+      } catch (e: any) {
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));

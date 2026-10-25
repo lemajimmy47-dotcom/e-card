@@ -59,6 +59,13 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
   } | null>(null);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [resultsTally, setResultsTally] = useState<any | null>(null);
+  const [liveTurnout, setLiveTurnout] = useState<{
+    totalGroupMembers?: number;
+    totalEligibleVoters?: number;
+    totalBallotsCast?: number;
+    turnoutPercentage?: number;
+    isConcluded?: boolean;
+  } | null>(null);
 
   const fetchBallot = async () => {
     setLoading(true);
@@ -71,6 +78,7 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
         setVoter(data.voter);
         setTimeStatus(data.timeStatus || 'open');
         setResultsTally(data.resultsTally || null);
+        setLiveTurnout(data.liveTurnout || null);
         if (data.groupSettings) {
           setGroupSettings(data.groupSettings);
         }
@@ -263,7 +271,7 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
     );
   }
 
-  const isElectionFinished = timeStatus === 'ended' || election?.status === 'completed';
+  const isElectionFinished = timeStatus === 'ended' || election?.status === 'completed' || (election?.endDate && new Date() >= new Date(election.endDate));
 
   // Already voted state OR election ended/completed state -> Show digital receipt & official results with PDF download
   if (submitSuccessReceipt || voter?.hasVoted || isElectionFinished) {
@@ -341,6 +349,51 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
             </div>
           )}
 
+          {/* Live Voter Turnout Panel (When election is active & in progress) */}
+          {!isElectionFinished && (
+            <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-4 mb-6 text-left">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
+                <h3 className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                  Ufuatiliaji wa Kura Moja kwa Moja (Live)
+                </h3>
+                <span className="text-[10px] text-emerald-300 font-mono font-bold">
+                  {liveTurnout?.turnoutPercentage || 0}% Ushiriki
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                  <span className="text-[9px] text-slate-500 uppercase block font-semibold">Wenye Sifa</span>
+                  <span className="text-sm font-black text-white">{liveTurnout?.totalEligibleVoters || election?.totalEligibleCount || 0}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                  <span className="text-[9px] text-slate-500 uppercase block font-semibold">Kura Zilizopigwa</span>
+                  <span className="text-sm font-black text-emerald-400">{liveTurnout?.totalBallotsCast || election?.totalVotesCast || 0}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                  <span className="text-[9px] text-slate-500 uppercase block font-semibold">Asilimia</span>
+                  <span className="text-sm font-black text-teal-300">{liveTurnout?.turnoutPercentage || 0}%</span>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mb-2.5">
+                <div 
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, liveTurnout?.turnoutPercentage || 0)}%` }}
+                />
+              </div>
+
+              <p className="text-[10px] text-slate-400 italic">
+                Zoezi la upigaji kura bado linaendelea. Kura zote zinapokelewa na kulindwa kwa siri. Matokeo rasmi ya washindi na ripoti yatapatikana mara baada ya uchaguzi kukamilika.
+              </p>
+            </div>
+          )}
+
           {/* Election Ended Notice (If not voted yet but window closed) */}
           {!receipt && isElectionFinished && (
             <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-4 mb-6 text-left text-xs text-amber-200">
@@ -349,18 +402,18 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
                 Dirisha la Kupiga Kura Limefungwa
               </p>
               <p className="text-slate-300">
-                Muda uliopangwa wa uchaguzi umemalizika rasmi. Hapa chini ni matokeo rasmi ya mwisho. Unaweza kupakua ripoti ya matokeo katika mfumo wa PDF.
+                Muda uliopangwa wa uchaguzi umemalizika rasmi. Hapa chini ni matokeo rasmi ya mwisho yaliyothibitishwa. Unaweza kupakua ripoti ya matokeo katika mfumo wa PDF.
               </p>
             </div>
           )}
 
-          {/* Live / Final Election Results Panel */}
-          {resultsTally && (
+          {/* Final Election Results Panel (Only shown when election is concluded!) */}
+          {isElectionFinished && resultsTally && (
             <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4 mb-6 text-left">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
                 <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                  {isElectionFinished ? 'Matokeo Rasmi ya Mwisho' : 'Matokeo ya Moja kwa Moja (Live)'}
+                  <Award className="w-3.5 h-3.5 text-emerald-400" />
+                  Matokeo Rasmi ya Mwisho
                 </h3>
                 <span className="text-[10px] text-slate-400 font-medium font-mono">
                   Kura: <strong>{resultsTally.totalBallotsCast}</strong> / {resultsTally.totalEligibleVoters} ({resultsTally.turnoutPercentage}%)
@@ -423,13 +476,25 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
               </button>
             )}
 
-            <button
-              onClick={handleDownloadOfficialPdf}
-              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer border border-slate-700"
-            >
-              <Download className="w-4 h-4" />
-              Pakua Matokeo Rasmi ya Uchaguzi (PDF)
-            </button>
+            {isElectionFinished ? (
+              <button
+                onClick={handleDownloadOfficialPdf}
+                className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer border border-slate-700"
+              >
+                <Download className="w-4 h-4" />
+                Pakua Matokeo Rasmi ya Uchaguzi (PDF)
+              </button>
+            ) : (
+              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 text-left">
+                <div className="flex items-center gap-1.5 text-amber-400 font-bold text-xs mb-1">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Ripoti Rasmi ya Matokeo (Haijatolewa Bado)</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Ripoti rasmi ya matokeo ya uchaguzi itazalishwa mara tu baada ya muda uliopangwa kupiga kura kufika mwisho {election?.endDate ? `(${new Date(election.endDate).toLocaleString('sw-TZ')})` : ''} au Kamati itakapokamilisha uchaguzi.
+                </p>
+              </div>
+            )}
 
             <div className="flex items-center gap-2">
               <button
