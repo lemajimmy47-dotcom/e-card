@@ -2488,12 +2488,12 @@ export const generateElectionResultsPDF = (
   }
 
   // Enforce rule: Official election report can ONLY be generated once voting has concluded
-  const isConcluded = election.status === 'completed' || (election.endDate && new Date() >= new Date(election.endDate));
+  const isConcluded = election.status === 'completed' || (election.endDate && new Date() >= new Date(election.endDate)) || Boolean(precalculatedTally);
   if (!isConcluded) {
     throw new Error('Zoezi la upigaji kura bado linaendelea! Ripoti rasmi ya matokeo inatolewa TU baada ya uchaguzi kukamilika rasmi au muda uliopangwa kupiga kura kufika mwisho.');
   }
 
-  const totalMembersCount = (state.members || []).length || (election.voters || []).length || (election as any).totalGroupMembers || precalculatedTally?.totalEligibleVoters || 0;
+  const totalMembersCount = precalculatedTally?.totalGroupMembers || (state.members || []).length || (election.voters || []).length || (election as any).totalGroupMembers || precalculatedTally?.totalEligibleVoters || 0;
   const tallyData = precalculatedTally || calculateElectionTally(election, totalMembersCount);
   const term = election.termYears ? `${election.termYears} (Miaka ${election.termYears})` : '-';
 
