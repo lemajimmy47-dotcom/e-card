@@ -458,11 +458,19 @@ export const UwalemiElections: React.FC<Props> = ({
     setShowDeleteElectionModal(false);
   };
 
+  const handleOpenNewElectionModal = () => {
+    setNewElectionStartDate(new Date().toISOString().slice(0, 16));
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    setNewElectionEndDate(d.toISOString().slice(0, 16));
+    setShowNewElectionModal(true);
+  };
+
   const handleOpenEditElection = () => {
     if (!activeElection) return;
     setEditElectionTitle(activeElection.title || '');
     setEditElectionTerm(activeElection.termYears || '');
-    setEditElectionStartDate(activeElection.startDate || new Date().toISOString().slice(0, 16));
+    setEditElectionStartDate(new Date().toISOString().slice(0, 16));
     setEditElectionEndDate(activeElection.endDate || new Date().toISOString().slice(0, 16));
     setEditRequireActiveOnly(activeElection.eligibilityCriteria?.activeMembersOnly ?? true);
     setEditRequireRegFeePaid(activeElection.eligibilityCriteria?.requireRegistrationFeePaid ?? false);
@@ -775,7 +783,7 @@ export const UwalemiElections: React.FC<Props> = ({
             {!readOnly ? (
               <>
                 <button
-                  onClick={() => setShowNewElectionModal(true)}
+                  onClick={handleOpenNewElectionModal}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4 text-emerald-400" />
@@ -886,7 +894,7 @@ export const UwalemiElections: React.FC<Props> = ({
           </p>
           {!readOnly && (
             <button
-              onClick={() => setShowNewElectionModal(true)}
+              onClick={handleOpenNewElectionModal}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-emerald-950/50"
             >
               <Plus className="w-4 h-4" />
