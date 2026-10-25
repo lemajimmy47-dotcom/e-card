@@ -516,14 +516,9 @@ export const UwalemiVotingPage: React.FC<Props> = ({ token, onClose }) => {
             </div>
           </div>
 
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="w-full py-2 text-center text-xs text-slate-400 hover:text-slate-200 font-medium cursor-pointer"
-            >
-              Funga Ukurasa
-            </button>
-          )}
+          <div className="mt-3 text-center text-[11px] text-slate-400">
+            Kura yako imerekodiwa kwa usalama. Unaweza kufunga dirisha hili.
+          </div>
         </div>
       </div>
     );

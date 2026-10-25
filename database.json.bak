@@ -5530,6 +5530,40 @@
       "cardTypeSize": 14,
       "cardTypeColor": "#000000"
     },
+    "contrib-709857": {
+      "imageUrl": "",
+      "textColor": "#333333",
+      "fontFamily": "Inter",
+      "guestNameX": 50,
+      "guestNameY": 34,
+      "guestNameSize": 22,
+      "guestNameColor": "#FFFFFF",
+      "qrCodeX": 80,
+      "qrCodeY": 80,
+      "qrCodeSize": 15,
+      "qrCodeColor": "#FFFFFF",
+      "cardTypeX": 20,
+      "cardTypeY": 20,
+      "cardTypeSize": 12,
+      "cardTypeColor": "#fbbf24"
+    },
+    "contrib-647776": {
+      "imageUrl": "",
+      "textColor": "#333333",
+      "fontFamily": "Inter",
+      "guestNameX": 50,
+      "guestNameY": 34,
+      "guestNameSize": 22,
+      "guestNameColor": "#FFFFFF",
+      "qrCodeX": 80,
+      "qrCodeY": 80,
+      "qrCodeSize": 15,
+      "qrCodeColor": "#FFFFFF",
+      "cardTypeX": 20,
+      "cardTypeY": 20,
+      "cardTypeSize": 12,
+      "cardTypeColor": "#fbbf24"
+    },
     "contrib-undefined": {
       "imageUrl": "",
       "textColor": "#333333",
@@ -5645,40 +5679,6 @@
       "cardTypeX": 50,
       "cardTypeY": 25,
       "cardTypeSize": 16
-    },
-    "contrib-709857": {
-      "imageUrl": "",
-      "textColor": "#333333",
-      "fontFamily": "Inter",
-      "guestNameX": 50,
-      "guestNameY": 34,
-      "guestNameSize": 22,
-      "guestNameColor": "#FFFFFF",
-      "qrCodeX": 80,
-      "qrCodeY": 80,
-      "qrCodeSize": 15,
-      "qrCodeColor": "#FFFFFF",
-      "cardTypeX": 20,
-      "cardTypeY": 20,
-      "cardTypeSize": 12,
-      "cardTypeColor": "#fbbf24"
-    },
-    "contrib-647776": {
-      "imageUrl": "",
-      "textColor": "#333333",
-      "fontFamily": "Inter",
-      "guestNameX": 50,
-      "guestNameY": 34,
-      "guestNameSize": 22,
-      "guestNameColor": "#FFFFFF",
-      "qrCodeX": 80,
-      "qrCodeY": 80,
-      "qrCodeSize": 15,
-      "qrCodeColor": "#FFFFFF",
-      "cardTypeX": 20,
-      "cardTypeY": 20,
-      "cardTypeSize": 12,
-      "cardTypeColor": "#fbbf24"
     }
   },
   "smsGatewaySettings": {
@@ -12124,13 +12124,6 @@
             "candidates": [],
             "maxWinners": 1,
             "description": "Msaidizi wa Mweka Hazina"
-          },
-          {
-            "id": "pos-1790252496480-7",
-            "title": "Wajumbe wa Kamati Kuu",
-            "candidates": [],
-            "maxWinners": 3,
-            "description": "Wawakilishi wa Wanachama kwenye Kamati ya Uendeshaji"
           }
         ],
         "startDate": "2026-09-24T12:18",

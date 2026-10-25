@@ -127,6 +127,8 @@ export const UwalemiElections: React.FC<Props> = ({
   // Confirmation & Report Protection Modals
   const [showCompleteConfirmModal, setShowCompleteConfirmModal] = useState<boolean>(false);
   const [showReportLockedModal, setShowReportLockedModal] = useState<boolean>(false);
+  const [confirmDeletePosModal, setConfirmDeletePosModal] = useState<{ posId: string; posTitle: string } | null>(null);
+  const [confirmRemoveCandModal, setConfirmRemoveCandModal] = useState<{ posId: string; candId: string; candName: string } | null>(null);
 
   // Add candidate form
   const [candMemberId, setCandMemberId] = useState<string>('');
@@ -313,10 +315,17 @@ export const UwalemiElections: React.FC<Props> = ({
   };
 
   // Delete Position
-  const handleDeletePosition = async (posId: string) => {
+  const handleDeletePosition = (posId: string) => {
     if (readOnly || !activeElection) return;
-    if (!confirm('Je, una uhakika unataka kufuta nafasi hii ya uongozi?')) return;
+    const targetPos = activeElection.positions.find(p => p.id === posId);
+    setConfirmDeletePosModal({
+      posId,
+      posTitle: targetPos?.title || 'Nafasi hii'
+    });
+  };
 
+  const executeDeletePosition = async (posId: string) => {
+    if (readOnly || !activeElection) return;
     const updatedElections = elections.map(elec => {
       if (elec.id === activeElection.id) {
         return {
@@ -331,6 +340,7 @@ export const UwalemiElections: React.FC<Props> = ({
       ...state,
       elections: updatedElections
     });
+    setConfirmDeletePosModal(null);
   };
 
   // Add Candidate to Position
@@ -360,7 +370,6 @@ export const UwalemiElections: React.FC<Props> = ({
             if (pos.id === showAddCandidateModal) {
               // Avoid duplicate candidate in same position
               if (pos.candidates.some(c => c.memberId === member.id)) {
-                alert('Mwanachama huyu tayari yumo kwenye nafasi hii!');
                 return pos;
               }
               return {
@@ -386,10 +395,19 @@ export const UwalemiElections: React.FC<Props> = ({
   };
 
   // Remove Candidate
-  const handleRemoveCandidate = async (posId: string, candidateId: string) => {
+  const handleRemoveCandidate = (posId: string, candidateId: string) => {
     if (readOnly || !activeElection) return;
-    if (!confirm('Ondoa mgombea huyu kwenye nafasi hii?')) return;
+    const pos = activeElection.positions.find(p => p.id === posId);
+    const cand = pos?.candidates.find(c => c.id === candidateId);
+    setConfirmRemoveCandModal({
+      posId,
+      candId: candidateId,
+      candName: cand?.fullName || 'Mgombea huyu'
+    });
+  };
 
+  const executeRemoveCandidate = async (posId: string, candidateId: string) => {
+    if (readOnly || !activeElection) return;
     const updatedElections = elections.map(elec => {
       if (elec.id === activeElection.id) {
         return {
@@ -412,6 +430,7 @@ export const UwalemiElections: React.FC<Props> = ({
       ...state,
       elections: updatedElections
     });
+    setConfirmRemoveCandModal(null);
   };
 
   // Send SMS Links to voters
@@ -2054,6 +2073,92 @@ export const UwalemiElections: React.FC<Props> = ({
                   Kamilisha Uchaguzi Sasa
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Position Confirmation Modal */}
+      {confirmDeletePosModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-11 h-11 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  Ondoa Nafasi ya Uongozi?
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {confirmDeletePosModal.posTitle}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
+              Je, una uhakika unataka kuondoa nafasi ya <strong className="text-white">"{confirmDeletePosModal.posTitle}"</strong> kwenye uchaguzi huu? Nafasi hii na wagombea wake wataondolewa.
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDeletePosModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Ghairi
+              </button>
+              <button
+                type="button"
+                onClick={() => executeDeletePosition(confirmDeletePosModal.posId)}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                Ndio, Ondoa Nafasi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Candidate Confirmation Modal */}
+      {confirmRemoveCandModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-11 h-11 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  Ondoa Mgombea?
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {confirmRemoveCandModal.candName}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
+              Je, una uhakika unataka kumwondoa <strong className="text-white">"{confirmRemoveCandModal.candName}"</strong> kwenye orodha ya wagombea wa nafasi hii?
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmRemoveCandModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Ghairi
+              </button>
+              <button
+                type="button"
+                onClick={() => executeRemoveCandidate(confirmRemoveCandModal.posId, confirmRemoveCandModal.candId)}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                Ndio, Ondoa Mgombea
+              </button>
             </div>
           </div>
         </div>
