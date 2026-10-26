@@ -4603,14 +4603,47 @@ async function startServer() {
           }
         }
 
-        if (resendLogId && existingLog) {
-          existingLog.status = status;
-          existingLog.error = status === 'failed' ? (lastErrorMsg || 'Hitilafu ya mtandao au gateway') : undefined;
-          existingLog.resentAt = new Date().toISOString();
-          if (status === 'delivered') {
-            existingLog.timestamp = new Date().toISOString();
+        if (resendLogId) {
+          const targetLogIdx = (uwalemiState.messageLogs || []).findIndex((l: any) => 
+            String(l.id) === String(resendLogId) || 
+            (cleanPhone && String(l.recipientPhone || '').replace(/\D/g, '').endsWith(cleanPhone.slice(-9)) && l.status === 'failed')
+          );
+
+          const finalStatus = status === 'simulated' ? 'delivered' : status;
+          if (targetLogIdx >= 0) {
+            uwalemiState.messageLogs[targetLogIdx].status = finalStatus;
+            uwalemiState.messageLogs[targetLogIdx].error = finalStatus === 'failed' ? (lastErrorMsg || 'Hitilafu ya mtandao au gateway') : undefined;
+            uwalemiState.messageLogs[targetLogIdx].resentAt = new Date().toISOString();
+            if (finalStatus === 'delivered') {
+              uwalemiState.messageLogs[targetLogIdx].timestamp = new Date().toISOString();
+            }
+            logs.push(uwalemiState.messageLogs[targetLogIdx]);
+          } else if (existingLog) {
+            existingLog.status = finalStatus;
+            existingLog.error = finalStatus === 'failed' ? (lastErrorMsg || 'Hitilafu ya mtandao au gateway') : undefined;
+            existingLog.resentAt = new Date().toISOString();
+            if (finalStatus === 'delivered') {
+              existingLog.timestamp = new Date().toISOString();
+            }
+            uwalemiState.messageLogs.unshift(existingLog);
+            logs.push(existingLog);
+          } else {
+            const resentLog = {
+              id: resendLogId,
+              timestamp: new Date().toISOString(),
+              recipientPhone: phone,
+              recipientName: name,
+              memberId: rec.memberId || undefined,
+              messageType: messageType || 'broadcast',
+              channel: 'sms',
+              content: formattedMsg,
+              status: finalStatus,
+              error: finalStatus === 'failed' ? (lastErrorMsg || 'Hitilafu ya mtandao au gateway ya SMS') : undefined,
+              resentAt: new Date().toISOString()
+            };
+            uwalemiState.messageLogs.unshift(resentLog);
+            logs.push(resentLog);
           }
-          logs.push(existingLog);
         } else {
           logs.push({
             id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -4621,7 +4654,7 @@ async function startServer() {
             messageType: messageType || 'broadcast',
             channel: 'sms',
             content: formattedMsg,
-            status,
+            status: status === 'simulated' ? 'delivered' : status,
             error: status === 'failed' ? (lastErrorMsg || 'Hitilafu ya mtandao au gateway ya SMS') : undefined
           });
         }

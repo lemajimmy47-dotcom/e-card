@@ -888,20 +888,36 @@ Lema, Nguvu Moja!`);
       });
 
       if (result.success) {
-        // Update this log in local and saved state to 'delivered' and clear error
-        const updatedLogs = (state.messageLogs || []).map(l => {
-          if (l.id === log.id) {
+        // Base list to update: prefer result.allLogs if provided, otherwise state.messageLogs
+        const baseLogs = (result.allLogs && Array.isArray(result.allLogs) && result.allLogs.length > 0) 
+          ? result.allLogs 
+          : (state.messageLogs || []);
+
+        let matched = false;
+        const finalLogs = baseLogs.map(l => {
+          if (String(l.id) === String(log.id) || (l.recipientPhone === phone && l.content === textToSend && l.status === 'failed')) {
+            matched = true;
             return {
               ...l,
               status: 'delivered' as const,
               error: undefined,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              resentAt: new Date().toISOString()
             };
           }
           return l;
         });
 
-        const finalLogs = (result.allLogs && result.allLogs.length > 0) ? result.allLogs : updatedLogs;
+        if (!matched) {
+          finalLogs.unshift({
+            ...log,
+            status: 'delivered' as const,
+            error: undefined,
+            timestamp: new Date().toISOString(),
+            resentAt: new Date().toISOString()
+          });
+        }
+
         await onSaveState({
           ...state,
           messageLogs: finalLogs
@@ -910,12 +926,16 @@ Lema, Nguvu Moja!`);
         setResendLogFeedback({
           id: log.id,
           success: true,
-          message: `✓ SMS imetumwa tena kwa mafanikio kwenda kwa ${log.recipientName} (${phone})! Hali imesasishwa kuwa "Imefika".`
+          message: `✓ SMS imetumwa tena kwa mafanikio kwenda kwa ${log.recipientName} (${phone})! Imeondolewa kwenye "Zilizofeli" na kuhamia "Zilizofika".`
         });
       } else {
         // Update error message on this log
-        const updatedLogs = (state.messageLogs || []).map(l => {
-          if (l.id === log.id) {
+        const baseLogs = (result.allLogs && Array.isArray(result.allLogs) && result.allLogs.length > 0) 
+          ? result.allLogs 
+          : (state.messageLogs || []);
+
+        const finalLogs = baseLogs.map(l => {
+          if (String(l.id) === String(log.id)) {
             return {
               ...l,
               status: 'failed' as const,
@@ -925,7 +945,6 @@ Lema, Nguvu Moja!`);
           return l;
         });
 
-        const finalLogs = (result.allLogs && result.allLogs.length > 0) ? result.allLogs : updatedLogs;
         await onSaveState({
           ...state,
           messageLogs: finalLogs
@@ -2341,7 +2360,7 @@ Lema, Nguvu Moja!`);
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  Zilizofika (Imefika): {messageLogs.filter(l => l.status === 'delivered' || l.status === 'sent').length}
+                  Zilizofika (Imefika): {messageLogs.filter(l => l.status === 'delivered' || l.status === 'sent' || l.status === 'simulated').length}
                 </button>
               </div>
 
@@ -2397,9 +2416,9 @@ Lema, Nguvu Moja!`);
                   {messageLogs
                     .filter((log) => {
                       if (logStatusFilter === 'failed') {
-                        if (log.status === 'delivered' || log.status === 'sent') return false;
+                        if (log.status === 'delivered' || log.status === 'sent' || log.status === 'simulated') return false;
                       } else if (logStatusFilter === 'delivered') {
-                        if (log.status !== 'delivered' && log.status !== 'sent') return false;
+                        if (log.status !== 'delivered' && log.status !== 'sent' && log.status !== 'simulated') return false;
                       }
                       if (!logSearchTerm.trim()) return true;
                       const q = logSearchTerm.toLowerCase();
