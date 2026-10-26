@@ -10,7 +10,6 @@ import {
   calculateElectionTally, 
   recomputeElectionVoters, 
   generateVoterToken,
-  isElectionConcluded,
   ElectionPositionTally 
 } from '../../services/uwalemiService';
 import { 
@@ -124,21 +123,6 @@ export const UwalemiElections: React.FC<Props> = ({
     fileName: string;
   } | null>(null);
 
-  // Confirmation & Report Protection Modals
-  const [showCompleteConfirmModal, setShowCompleteConfirmModal] = useState<boolean>(false);
-  const [showReportLockedModal, setShowReportLockedModal] = useState<boolean>(false);
-  const [confirmDeletePosModal, setConfirmDeletePosModal] = useState<{ posId: string; posTitle: string } | null>(null);
-  const [confirmRemoveCandModal, setConfirmRemoveCandModal] = useState<{ posId: string; candId: string; candName: string } | null>(null);
-  const [showDeleteElectionModal, setShowDeleteElectionModal] = useState<boolean>(false);
-  const [showEditElectionModal, setShowEditElectionModal] = useState<boolean>(false);
-  const [editElectionTitle, setEditElectionTitle] = useState<string>('');
-  const [editElectionTerm, setEditElectionTerm] = useState<string>('');
-  const [editElectionStartDate, setEditElectionStartDate] = useState<string>('');
-  const [editElectionEndDate, setEditElectionEndDate] = useState<string>('');
-  const [editRequireActiveOnly, setEditRequireActiveOnly] = useState<boolean>(true);
-  const [editRequireRegFeePaid, setEditRequireRegFeePaid] = useState<boolean>(false);
-  const [editMaxDebtMonths, setEditMaxDebtMonths] = useState<number>(99);
-
   // Add candidate form
   const [candMemberId, setCandMemberId] = useState<string>('');
   const [candSlogan, setCandSlogan] = useState<string>('');
@@ -152,17 +136,11 @@ export const UwalemiElections: React.FC<Props> = ({
   // Clipboard feedback
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
-  const totalGroupMembers = (state.members || []).length || (activeElection?.voters || []).length || 0;
-
-  const isElectionEnded = useMemo(() => {
-    return isElectionConcluded(activeElection);
-  }, [activeElection]);
-
-  // Calculate live tally using verified member count
+  // Calculate live tally
   const tallyData = useMemo(() => {
     if (!activeElection) return null;
-    return calculateElectionTally(activeElection, totalGroupMembers);
-  }, [activeElection, totalGroupMembers]);
+    return calculateElectionTally(activeElection);
+  }, [activeElection]);
 
   // Handle status toggle
   const handleUpdateElectionStatus = async (newStatus: 'draft' | 'active' | 'paused' | 'completed') => {
@@ -324,17 +302,10 @@ export const UwalemiElections: React.FC<Props> = ({
   };
 
   // Delete Position
-  const handleDeletePosition = (posId: string) => {
+  const handleDeletePosition = async (posId: string) => {
     if (readOnly || !activeElection) return;
-    const targetPos = activeElection.positions.find(p => p.id === posId);
-    setConfirmDeletePosModal({
-      posId,
-      posTitle: targetPos?.title || 'Nafasi hii'
-    });
-  };
+    if (!confirm('Je, una uhakika unataka kufuta nafasi hii ya uongozi?')) return;
 
-  const executeDeletePosition = async (posId: string) => {
-    if (readOnly || !activeElection) return;
     const updatedElections = elections.map(elec => {
       if (elec.id === activeElection.id) {
         return {
@@ -349,7 +320,6 @@ export const UwalemiElections: React.FC<Props> = ({
       ...state,
       elections: updatedElections
     });
-    setConfirmDeletePosModal(null);
   };
 
   // Add Candidate to Position
@@ -379,6 +349,7 @@ export const UwalemiElections: React.FC<Props> = ({
             if (pos.id === showAddCandidateModal) {
               // Avoid duplicate candidate in same position
               if (pos.candidates.some(c => c.memberId === member.id)) {
+                alert('Mwanachama huyu tayari yumo kwenye nafasi hii!');
                 return pos;
               }
               return {
@@ -404,19 +375,10 @@ export const UwalemiElections: React.FC<Props> = ({
   };
 
   // Remove Candidate
-  const handleRemoveCandidate = (posId: string, candidateId: string) => {
+  const handleRemoveCandidate = async (posId: string, candidateId: string) => {
     if (readOnly || !activeElection) return;
-    const pos = activeElection.positions.find(p => p.id === posId);
-    const cand = pos?.candidates.find(c => c.id === candidateId);
-    setConfirmRemoveCandModal({
-      posId,
-      candId: candidateId,
-      candName: cand?.fullName || 'Mgombea huyu'
-    });
-  };
+    if (!confirm('Ondoa mgombea huyu kwenye nafasi hii?')) return;
 
-  const executeRemoveCandidate = async (posId: string, candidateId: string) => {
-    if (readOnly || !activeElection) return;
     const updatedElections = elections.map(elec => {
       if (elec.id === activeElection.id) {
         return {
@@ -439,65 +401,6 @@ export const UwalemiElections: React.FC<Props> = ({
       ...state,
       elections: updatedElections
     });
-    setConfirmRemoveCandModal(null);
-  };
-
-  // Delete Election
-  const handleDeleteElection = async () => {
-    if (readOnly || !activeElection) return;
-    const updatedElections = elections.filter(e => e.id !== activeElection.id);
-    await onSaveState({
-      ...state,
-      elections: updatedElections
-    });
-    if (updatedElections.length > 0) {
-      setSelectedElectionId(updatedElections[0].id);
-    } else {
-      setSelectedElectionId('');
-    }
-    setShowDeleteElectionModal(false);
-  };
-
-  const handleOpenEditElection = () => {
-    if (!activeElection) return;
-    setEditElectionTitle(activeElection.title || '');
-    setEditElectionTerm(activeElection.termYears || '');
-    setEditElectionStartDate(activeElection.startDate || new Date().toISOString().slice(0, 16));
-    setEditElectionEndDate(activeElection.endDate || new Date().toISOString().slice(0, 16));
-    setEditRequireActiveOnly(activeElection.eligibilityCriteria?.activeMembersOnly ?? true);
-    setEditRequireRegFeePaid(activeElection.eligibilityCriteria?.requireRegistrationFeePaid ?? false);
-    setEditMaxDebtMonths(activeElection.eligibilityCriteria?.maxAllowedFeeDebtMonths ?? 99);
-    setShowEditElectionModal(true);
-  };
-
-  const handleSaveEditElection = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (readOnly || !activeElection || !editElectionTitle.trim()) return;
-
-    const updatedElections = elections.map(elec => {
-      if (elec.id === activeElection.id) {
-        return {
-          ...elec,
-          title: editElectionTitle.trim(),
-          termYears: editElectionTerm.trim(),
-          startDate: editElectionStartDate,
-          endDate: editElectionEndDate,
-          eligibilityCriteria: {
-            activeMembersOnly: editRequireActiveOnly,
-            requireRegistrationFeePaid: editRequireRegFeePaid,
-            maxAllowedFeeDebtMonths: editMaxDebtMonths
-          }
-        };
-      }
-      return elec;
-    });
-
-    await onSaveState({
-      ...state,
-      elections: updatedElections
-    });
-
-    setShowEditElectionModal(false);
   };
 
   // Send SMS Links to voters
@@ -620,29 +523,254 @@ export const UwalemiElections: React.FC<Props> = ({
 
   const checkCanExportResults = (): boolean => {
     if (!activeElection) return false;
-    if (!isElectionEnded) {
-      setShowReportLockedModal(true);
+    const isCompleted = activeElection.status === 'completed';
+    const isTimeEnded = activeElection.endDate && new Date() > new Date(activeElection.endDate);
+    if (!isCompleted && !isTimeEnded) {
+      alert("Zoezi la upigaji kura bado linaendelea! Ripoti rasmi ya matokeo haitolewi hadi uchaguzi utakapokamilika rasmi au muda uliopangwa kupiga kura uishe.");
       return false;
     }
     return true;
   };
 
-  const handleCompleteElectionWithConfirmation = () => {
+  const handleCompleteElectionWithConfirmation = async () => {
     if (!activeElection) return;
-    setShowCompleteConfirmModal(true);
-  };
-
-  const handleConfirmCompleteElection = async () => {
-    if (readOnly || !activeElection) return;
-    await handleUpdateElectionStatus('completed');
-    setShowCompleteConfirmModal(false);
-    setShowReportLockedModal(false);
+    if (window.confirm("Je, una uhakika unataka kukamilisha na kufunga rasmi uchaguzi huu? Baada ya kufunga, matokeo yatakuwa rasmi na ripoti rasmi itapatikana.")) {
+      await handleUpdateElectionStatus('completed');
+    }
   };
 
   // Print/Export Official Results Report with Logo & Watermark
   const handlePrintResults = async () => {
     if (!checkCanExportResults()) return;
-    await handlePreviewPDFResults();
+    if (!activeElection || !tallyData) {
+      alert("Hakuna matokeo ya kupakua kwa sasa.");
+      return;
+    }
+
+    setIsPrintingReport(true);
+    let logoB64 = '';
+    try {
+      logoB64 = await loadUwalemiLogoAsBase64(state.groupSettings?.logoUrl);
+    } catch (e) {
+      console.warn("Could not load logo as base64 for report:", e);
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Tafadhali ruhusu Popups (pop-up blocker) kwenye kivinjari chako ili kupakua ripoti.");
+      setIsPrintingReport(false);
+      return;
+    }
+
+    const groupName = state.groupSettings?.groupName || "UWALEMI";
+    const slogan = state.groupSettings?.slogan && !state.groupSettings.slogan.includes('Shida na Raha')
+      ? state.groupSettings.slogan
+      : "Lema, Nguvu Moja.";
+    const title = activeElection.title || "Uchaguzi wa Viongozi";
+    const term = activeElection.termYears ? `${activeElection.termYears} (Miaka ${activeElection.termYears})` : "-";
+    const dateStr = new Date().toLocaleDateString('sw-TZ', { dateStyle: 'long' });
+    const timeStr = new Date().toLocaleTimeString('sw-TZ', { timeStyle: 'short' });
+    const logoSrc = logoB64 || state.groupSettings?.logoUrl || '/uwalemi_logo.png';
+
+    let positionsHtml = '';
+    tallyData.positionsTally.forEach((pos: any) => {
+      let candidatesHtml = '';
+      pos.results.forEach((cand: any, idx: number) => {
+        candidatesHtml += `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 10px; font-weight: bold; text-align: center;">${idx + 1}</td>
+            <td style="padding: 10px;">
+              <span style="font-weight: 700; color: #0f172a;">${cand.candidateName}</span> 
+              <span style="color: #64748b; font-family: monospace; font-size: 11px;">(${cand.candidateNo})</span>
+            </td>
+            <td style="padding: 10px; text-align: center; font-weight: bold; font-family: monospace; font-size: 14px;">${cand.votesCount}</td>
+            <td style="padding: 10px; text-align: right; font-weight: bold; font-family: monospace; color: #0f766e; font-size: 13px;">${cand.percentage}%</td>
+            <td style="padding: 10px; text-align: center;">
+              ${cand.isWinner ? '<span style="background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; padding: 3px 12px; border-radius: 9999px; font-size: 11px; font-weight: bold; display: inline-block;">Mshindi ✓</span>' : cand.isTie ? '<span style="background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; padding: 3px 12px; border-radius: 9999px; font-size: 11px; font-weight: bold; display: inline-block;">Sare ⚠</span>' : '<span style="color: #94a3b8;">-</span>'}
+            </td>
+          </tr>
+        `;
+      });
+
+      positionsHtml += `
+        <div style="margin-top: 25px; page-break-inside: avoid;">
+          <h3 style="background-color: #f1f5f9; padding: 10px 14px; margin-bottom: 10px; border-left: 4px solid #0f766e; color: #0f172a; font-size: 14px; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+            <span>${pos.positionTitle.toUpperCase()}</span>
+            <span style="font-size: 11px; font-weight: normal; color: #475569;">Nafasi Zinazotakiwa: <strong>${pos.maxWinners}</strong> | Jumla: <strong>${pos.totalVotesForPosition}</strong> Kura</span>
+          </h3>
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">
+            <thead>
+              <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; color: #475569; font-weight: bold; font-size: 12px; text-transform: uppercase;">
+                <th style="padding: 10px; text-align: center; width: 45px;">#</th>
+                <th style="padding: 10px; text-align: left;">Jina la Mgombea</th>
+                <th style="padding: 10px; text-align: center; width: 110px;">Jumla ya Kura</th>
+                <th style="padding: 10px; text-align: right; width: 100px;">Asilimia (%)</th>
+                <th style="padding: 10px; text-align: center; width: 130px;">Hali ya Matokeo</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${candidatesHtml || '<tr><td colspan="5" style="text-align: center; padding: 14px; color: #94a3b8;">Hakuna wagombea walioteuliwa</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+    });
+
+    const reportHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Ripoti ya Matokeo ya Uchaguzi - ${groupName}</title>
+        <meta charset="utf-8">
+        <style>
+          body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #334155;
+            line-height: 1.5;
+            padding: 25px;
+            background-color: #f8fafc;
+          }
+          .report-container {
+            border: 2px solid #0f766e;
+            padding: 35px 40px;
+            border-radius: 8px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            max-width: 820px;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+          }
+          .stats-grid {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+          }
+          .stat-card {
+            flex: 1;
+            border: 1px solid #e2e8f0;
+            padding: 14px;
+            border-radius: 8px;
+            text-align: center;
+            background-color: #f8fafc;
+          }
+          @media print {
+            body { padding: 0; background-color: white; }
+            .no-print { display: none; }
+            .report-container { border: none; box-shadow: none; padding: 0; max-width: 100%; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print" style="background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 14px 20px; border-radius: 12px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; max-width: 820px; margin-left: auto; margin-right: auto; box-sizing: border-box;">
+          <div>
+            <h4 style="margin: 0; color: #0f766e; font-size: 15px; font-weight: bold;">Kihakiki Ripoti Rasmi ya Matokeo</h4>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">Huu ni mwonekano rasmi wa kuchapa au kuhifadhi kama PDF ukiwa na nembo ya ${groupName}.</p>
+          </div>
+          <button onclick="window.print()" style="background-color: #0f766e; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; transition: background-color 0.2s;">
+            Chapa / Hifadhi kama PDF
+          </button>
+        </div>
+
+        <div class="report-container">
+          <!-- Subtle Center Security Watermark Logo -->
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.045; pointer-events: none; z-index: 0; width: 440px; height: 440px;">
+            <img src="${logoSrc}" alt="Watermark" style="width: 100%; height: 100%; object-fit: contain;" />
+          </div>
+
+          <div style="position: relative; z-index: 1;">
+            <!-- Top Emerald Stripe -->
+            <div style="height: 6px; background: linear-gradient(90deg, #059669, #0d9488, #10b981); border-radius: 4px 4px 0 0; margin: -35px -40px 22px -40px;"></div>
+
+            <!-- Official Crest Header with Logo (Matching Other Reports) -->
+            <div style="text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 18px; margin-bottom: 25px;">
+              <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px;">
+                <div style="width: 80px; height: 80px; border-radius: 50%; padding: 3px; background: linear-gradient(135deg, #059669, #0d9488, #0284c7); box-shadow: 0 4px 10px rgba(15, 118, 110, 0.25); display: flex; align-items: center; justify-content: center;">
+                  <img 
+                    src="${logoSrc}" 
+                    alt="${groupName} Logo" 
+                    style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; background: #ffffff;"
+                  />
+                </div>
+              </div>
+              <h1 style="margin: 0; font-size: 24px; letter-spacing: 1.5px; color: #0f766e; text-transform: uppercase; font-weight: 900;">${groupName}</h1>
+              <p style="margin: 4px 0; font-size: 13px; font-style: italic; color: #475569; font-weight: 600;">"${slogan}"</p>
+              <p style="margin: 2px 0 12px 0; font-size: 10px; font-weight: bold; color: #059669; letter-spacing: 1.5px; text-transform: uppercase;">CHAMA CHA KIJAMII CHA KUSAIDIANA NA KUSTAWISHANA</p>
+
+              <div style="display: inline-block; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-left: 4px solid #0f766e; padding: 8px 22px; border-radius: 6px;">
+                <div style="font-weight: 900; font-size: 14px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">
+                  TAARIFA RASMI YA MATOKEO YA UCHAGUZI WA VIONGOZI
+                </div>
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: #475569;">
+                  <strong>Uchaguzi:</strong> ${title} • <strong>Kipindi cha Uongozi:</strong> ${term} • <strong>Tarehe:</strong> ${dateStr}
+                </p>
+              </div>
+            </div>
+
+            <!-- Statistics Cards Grid -->
+            <div class="stats-grid">
+              <div class="stat-card">
+                <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; letter-spacing: 0.5px;">Daftari la Wapiga Kura</p>
+                <h2 style="margin: 5px 0 0 0; font-size: 22px; color: #1e293b; font-family: monospace; font-weight: bold;">${tallyData.totalEligibleVoters}</h2>
+                <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Wanachama wenye sifa</p>
+              </div>
+              <div class="stat-card">
+                <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; letter-spacing: 0.5px;">Kura Zilizopigwa</p>
+                <h2 style="margin: 5px 0 0 0; font-size: 22px; color: #0f766e; font-family: monospace; font-weight: bold;">${tallyData.totalBallotsCast}</h2>
+                <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Kura zilizorekodiwa</p>
+              </div>
+              <div class="stat-card">
+                <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; letter-spacing: 0.5px;">Asilimia ya Ushiriki</p>
+                <h2 style="margin: 5px 0 0 0; font-size: 22px; color: #0d9488; font-family: monospace; font-weight: bold;">${tallyData.turnoutPercentage}%</h2>
+                <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">Kiwango cha ushiriki</p>
+              </div>
+            </div>
+
+            <!-- Position breakdown -->
+            ${positionsHtml}
+
+            <!-- Declaration / Verification Sign-off -->
+            <div style="margin-top: 45px; border-top: 1px dashed #cbd5e1; padding-top: 25px; page-break-inside: avoid;">
+              <p style="font-size: 12px; color: #475569; font-style: italic; text-align: center;">
+                Taarifa hii imetolewa na kuthibitishwa rasmi kupitia Mfumo wa Kidijitali wa ${groupName} tarehe ${dateStr} saa ${timeStr}.
+              </p>
+
+              <div style="display: flex; justify-content: space-between; margin-top: 40px; font-size: 13px;">
+                <div style="width: 250px; text-align: center;">
+                  <div style="border-bottom: 1px solid #94a3b8; height: 35px; margin-bottom: 5px;"></div>
+                  <strong>Msimamizi wa Uchaguzi</strong>
+                  <p style="margin: 3px 0 0 0; font-size: 11px; color: #64748b;">Sahihi na Tarehe</p>
+                </div>
+                <div style="width: 250px; text-align: center;">
+                  <div style="border-bottom: 1px solid #94a3b8; height: 35px; margin-bottom: 5px;"></div>
+                  <strong>Katibu wa Kamati ya Uchaguzi</strong>
+                  <p style="margin: 3px 0 0 0; font-size: 11px; color: #64748b;">Sahihi na Tarehe</p>
+                </div>
+              </div>
+
+              <div style="text-align: center; margin-top: 25px;">
+                <span style="display: inline-block; border: 2px solid #0f766e; color: #0f766e; font-size: 11px; font-weight: bold; padding: 4px 16px; border-radius: 4px; letter-spacing: 1px; text-transform: uppercase;">
+                  ✓ IMETHIBITISHWA NA KAMATI YA UCHAGUZI YA ${groupName}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(reportHtml);
+    printWindow.document.close();
+    setIsPrintingReport(false);
   };
 
   // Download PDF Results
@@ -783,31 +911,13 @@ export const UwalemiElections: React.FC<Props> = ({
                 </button>
 
                 {activeElection && (
-                  <>
-                    <button
-                      onClick={() => setShowSendSmsModal(true)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-950/40"
-                    >
-                      <Send className="w-4 h-4" />
-                      Tuma Viungo kwa SMS
-                    </button>
-                    <button
-                      onClick={() => setShowDeleteElectionModal(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/30 transition-all cursor-pointer"
-                      title="Futa Uchaguzi Huu"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Futa Uchaguzi
-                    </button>
-                    <button
-                      onClick={handleOpenEditElection}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-                      title="Hariri Uchaguzi Huu"
-                    >
-                      <Edit3 className="w-4 h-4 text-teal-400" />
-                      Hariri
-                    </button>
-                  </>
+                  <button
+                    onClick={() => setShowSendSmsModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-emerald-950/40"
+                  >
+                    <Send className="w-4 h-4" />
+                    Tuma Viungo kwa SMS
+                  </button>
                 )}
               </>
             ) : (
@@ -988,84 +1098,27 @@ export const UwalemiElections: React.FC<Props> = ({
                 </p>
               </div>
 
-              {/* Live Monitoring Notification Banner while Voting is Ongoing */}
-              {!isElectionEnded && (
-                <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-slate-900 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="relative mt-1">
-                      <span className="flex h-3.5 w-3.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
-                      </span>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-bold text-white">
-                          Zoezi la Upigaji Kura Linaendelea (Live Monitoring)
-                        </h4>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/40 uppercase tracking-wider font-bold">
-                          Moja kwa Moja
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-300 mt-1.5 max-w-2xl leading-relaxed">
-                        Takwimu za ushiriki wa wanachama na idadi ya kura zinasasishwa kwa wakati halisi. Kulingana na kanuni za uchaguzi, 
-                        <strong> Ripoti Rasmi ya Matokeo (PDF)</strong> itazalishwa tu baada ya muda uliopangwa kufika mwisho au baada ya kamati kuthibitisha na kukamilisha uchaguzi.
-                      </p>
-                    </div>
-                  </div>
-                  {!readOnly && (
-                    <button
-                      onClick={handleCompleteElectionWithConfirmation}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-950/50 flex items-center gap-2 shrink-0 cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      Kamilisha Uchaguzi Sasa
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Turnout Stats 4-Card Grid with Real Members and Accurate Tally */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Turnout Stats Card */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-blue-400" />
-                    Jumla ya Wanachama Wote
-                  </span>
-                  <p className="text-2xl sm:text-3xl font-black text-white mt-1.5">
-                    {totalGroupMembers}
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-1">Wanachama wote waliosajiliwa</p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    Wapiga Kura Wenye Sifa
-                  </span>
-                  <p className="text-2xl sm:text-3xl font-black text-white mt-1.5">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Jumla ya Wapiga Kura Wenye Sifa</span>
+                  <p className="text-2xl font-black text-white mt-1">
                     {tallyData?.totalEligibleVoters || 0}
                   </p>
-                  <p className="text-[11px] text-slate-400 mt-1">Wenye vigezo vya kikatiba</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Wanachama walioidhinishwa kikatiba</p>
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Vote className="w-3.5 h-3.5 text-emerald-400" />
-                    Kura Zilizopigwa
-                  </span>
-                  <p className="text-2xl sm:text-3xl font-black text-emerald-400 mt-1.5">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Kura Zilizopigwa Hadi Sasa</span>
+                  <p className="text-2xl font-black text-emerald-400 mt-1">
                     {tallyData?.totalBallotsCast || 0}
                   </p>
                   <p className="text-[11px] text-slate-400 mt-1">Kura zilizorekodiwa kwa siri 100%</p>
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <TrendingUp className="w-3.5 h-3.5 text-teal-400" />
-                    Asilimia ya Ushiriki
-                  </span>
-                  <p className="text-2xl sm:text-3xl font-black text-teal-400 mt-1.5">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Asilimia ya Ushiriki (Turnout)</span>
+                  <p className="text-2xl font-black text-teal-400 mt-1">
                     {tallyData?.turnoutPercentage || 0}%
                   </p>
                   {/* Progress bar */}
@@ -1081,80 +1134,49 @@ export const UwalemiElections: React.FC<Props> = ({
               {/* Print / Export Actions */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <span>Matokeo ya Kila Nafasi ya Uongozi</span>
-                    {!isElectionEnded && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-600/30">
-                        Zoezi Linaendelea
-                      </span>
-                    )}
+                  <h3 className="text-base font-bold text-white">
+                    Matokeo ya Kila Nafasi ya Uongozi
                   </h3>
                   <p className="text-xs text-slate-400">
-                    {isElectionEnded
-                      ? 'Uchaguzi umekamilika rasmi. Unaweza kupakua na kuchapisha ripoti rasmi yenye nembo.'
-                      : 'Kura zote zinasasishwa kwa wakati halisi wanachama wanapopiga kura zao.'}
+                    Kura zote zinasasishwa kwa wakati halisi mpiga kura anapowasilisha kura yake.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  {isElectionEnded ? (
-                    <>
-                      <button
-                        onClick={handlePreviewPDFResults}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-                        title="Kihakiki Ripoti ya PDF yenye Nembo"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-teal-400" />
-                        Kihakiki PDF
-                      </button>
+                  <button
+                    onClick={handlePreviewPDFResults}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                    title="Kihakiki Ripoti ya PDF yenye Nembo"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-teal-400" />
+                    Kihakiki PDF
+                  </button>
 
-                      <button
-                        onClick={handleDownloadPDFResults}
-                        disabled={isExportingPdf}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold border border-emerald-600 transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {isExportingPdf ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Download className="w-3.5 h-3.5 text-white" />
-                        )}
-                        Pakua PDF ya Matokeo
-                      </button>
+                  <button
+                    onClick={handleDownloadPDFResults}
+                    disabled={isExportingPdf}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold border border-emerald-600 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isExportingPdf ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 text-white" />
+                    )}
+                    Pakua PDF ya Matokeo
+                  </button>
 
-                      <button
-                        onClick={handlePrintResults}
-                        disabled={isPrintingReport}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-                      >
-                        {isPrintingReport ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                        ) : (
-                          <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                        )}
-                        Chapisha Ripoti Rasmi
-                      </button>
-                    </>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowReportLockedModal(true)}
-                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700 transition-all cursor-pointer group"
-                      >
-                        <Lock className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
-                        <span>Ripoti Rasmi ya PDF Imefungwa</span>
-                        <span className="text-[10px] text-amber-400 font-mono underline ml-1">Kwanini?</span>
-                      </button>
-                      {!readOnly && (
-                        <button
-                          onClick={handleCompleteElectionWithConfirmation}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold transition-all cursor-pointer shadow-md shadow-emerald-950/40"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                          Kamilisha Uchaguzi
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  <button
+                    onClick={handlePrintResults}
+                    disabled={isPrintingReport}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                  >
+                    {isPrintingReport ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    ) : (
+                      <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    Chapisha Ripoti Rasmi
+                  </button>
                 </div>
               </div>
 
@@ -2016,417 +2038,6 @@ export const UwalemiElections: React.FC<Props> = ({
                 title="Interactive Election Results PDF Viewer"
               />
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Complete Election Confirmation Modal ("Nina uhakika?") */}
-      {showCompleteConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl p-6 relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base sm:text-lg font-black text-white">
-                  Je, una uhakika unataka kukamilisha uchaguzi?
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Uchaguzi: <strong className="text-slate-200">{activeElection?.title}</strong>
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 mb-4 space-y-2">
-              <div className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-                Hali ya Kura Hadi Sasa:
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] uppercase">Wanachama Wote</span>
-                  <span className="text-white font-bold text-sm">{totalGroupMembers}</span>
-                </div>
-                <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] uppercase">Wapiga Kura Wenye Sifa</span>
-                  <span className="text-white font-bold text-sm">{tallyData?.totalEligibleVoters || 0}</span>
-                </div>
-                <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] uppercase">Kura Zilizopigwa</span>
-                  <span className="text-emerald-400 font-bold text-sm">{tallyData?.totalBallotsCast || 0}</span>
-                </div>
-                <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] uppercase">Asilimia ya Ushiriki</span>
-                  <span className="text-teal-400 font-bold text-sm">{tallyData?.turnoutPercentage || 0}%</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-amber-950/30 border border-amber-600/30 rounded-xl p-3.5 mb-6 text-xs text-amber-200/90 leading-relaxed">
-              <strong>Zingatia:</strong> Ukithibitisha kukamilisha zoezi hili:
-              <ul className="list-disc list-inside mt-1.5 space-y-1 text-slate-300">
-                <li>Hakuna mwanachama mwingine atakayeweza kupiga kura baada ya hapa.</li>
-                <li>Matokeo ya washindi yatathibitishwa rasmi.</li>
-                <li><strong>Ripoti Rasmi ya Matokeo (PDF yenye Nembo)</strong> itafunguliwa na kupakuliwa.</li>
-              </ul>
-            </div>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowCompleteConfirmModal(false)}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Ghairi
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmCompleteElection}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-950/50 flex items-center gap-2 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                Ndio, Nina Uhakika - Kamilisha Uchaguzi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Report Locked Informational Modal */}
-      {showReportLockedModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md shadow-2xl p-6 relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                <Lock className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  Ripoti Rasmi Haijazalishwa Bado
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Zoezi la upigaji kura bado linaendelea
-                </p>
-              </div>
-            </div>
-
-            <div className="text-xs text-slate-300 space-y-3 leading-relaxed mb-6">
-              <p>
-                Ripoti rasmi ya matokeo ya uchaguzi haiwezi kuzalishwa au kupakuliwa huku zoezi la upigaji kura likiwa linaendelea.
-              </p>
-              <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2 text-[11px]">
-                <div className="flex items-center justify-between text-slate-400">
-                  <span>Jumla ya Wanachama:</span>
-                  <span className="font-bold text-white">{totalGroupMembers}</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-400">
-                  <span>Wapiga Kura Wenye Sifa:</span>
-                  <span className="font-bold text-white">{tallyData?.totalEligibleVoters || 0}</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-400">
-                  <span>Kura Zilizopigwa Hadi Sasa:</span>
-                  <span className="font-bold text-emerald-400">{tallyData?.totalBallotsCast || 0}</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-400">
-                  <span>Asilimia ya Ushiriki:</span>
-                  <span className="font-bold text-teal-400">{tallyData?.turnoutPercentage || 0}%</span>
-                </div>
-              </div>
-              <p className="text-slate-400 text-[11px]">
-                Ripoti rasmi itazalishwa na kufunguliwa mara tu muda uliopangwa ukifika au baada ya kamati kuthibitisha na kukamilisha uchaguzi.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setShowReportLockedModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Sawa, Nimeelewa
-              </button>
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowReportLockedModal(false);
-                    handleCompleteElectionWithConfirmation();
-                  }}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Kamilisha Uchaguzi Sasa
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Position Confirmation Modal */}
-      {confirmDeletePosModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-11 h-11 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  Ondoa Nafasi ya Uongozi?
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {confirmDeletePosModal.posTitle}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-              Je, una uhakika unataka kuondoa nafasi ya <strong className="text-white">"{confirmDeletePosModal.posTitle}"</strong> kwenye uchaguzi huu? Nafasi hii na wagombea wake wataondolewa.
-            </p>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmDeletePosModal(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Ghairi
-              </button>
-              <button
-                type="button"
-                onClick={() => executeDeletePosition(confirmDeletePosModal.posId)}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" />
-                Ndio, Ondoa Nafasi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Remove Candidate Confirmation Modal */}
-      {confirmRemoveCandModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-11 h-11 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  Ondoa Mgombea?
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {confirmRemoveCandModal.candName}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-              Je, una uhakika unataka kumwondoa <strong className="text-white">"{confirmRemoveCandModal.candName}"</strong> kwenye orodha ya wagombea wa nafasi hii?
-            </p>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmRemoveCandModal(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Ghairi
-              </button>
-              <button
-                type="button"
-                onClick={() => executeRemoveCandidate(confirmRemoveCandModal.posId, confirmRemoveCandModal.candId)}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" />
-                Ndio, Ondoa Mgombea
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Election Confirmation Modal */}
-      {showDeleteElectionModal && activeElection && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-11 h-11 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  Futa Uchaguzi Huu?
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {activeElection.title}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-              Je, una uhakika unataka kufuta uchaguzi huu wa mfano <strong className="text-white">"{activeElection.title}"</strong>? Hatua hii itaondoa uchaguzi huu na takwimu zake zote kabisa kwenye mfumo.
-            </p>
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowDeleteElectionModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Ghairi
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteElection}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" />
-                Ndio, Futa Uchaguzi Huu
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Election Modal */}
-      {showEditElectionModal && activeElection && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200 my-8">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
-                  <Edit3 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Hariri Taarifa za Uchaguzi</h3>
-                  <p className="text-xs text-slate-400">Badili vichwa, muda, au vigezo vya uchaguzi</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowEditElectionModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditElection} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Jina la Uchaguzi
-                </label>
-                <input
-                  type="text"
-                  value={editElectionTitle}
-                  onChange={(e) => setEditElectionTitle(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
-                  placeholder="Mf. Uchaguzi Mkuu wa Viongozi 2026"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Kipindi cha Uongozi (Term)
-                  </label>
-                  <input
-                    type="text"
-                    value={editElectionTerm}
-                    onChange={(e) => setEditElectionTerm(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
-                    placeholder="Mf. 2026 - 2028"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Tarehe ya Kuanza
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={editElectionStartDate}
-                    onChange={(e) => setEditElectionStartDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Tarehe na Wakati wa Kufunga Kura
-                </label>
-                <input
-                  type="datetime-local"
-                  value={editElectionEndDate}
-                  onChange={(e) => setEditElectionEndDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
-                />
-              </div>
-
-              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
-                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Vigezo vya Mpigaji Kura (Eligibility)
-                </div>
-
-                <label className="flex items-center gap-2.5 cursor-pointer text-xs text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={editRequireActiveOnly}
-                    onChange={(e) => setEditRequireActiveOnly(e.target.checked)}
-                    className="rounded bg-slate-900 border-slate-700 text-teal-600 focus:ring-0"
-                  />
-                  <span>Lazima awe Mwanachama Hai (Active)</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 cursor-pointer text-xs text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={editRequireRegFeePaid}
-                    onChange={(e) => setEditRequireRegFeePaid(e.target.checked)}
-                    className="rounded bg-slate-900 border-slate-700 text-teal-600 focus:ring-0"
-                  />
-                  <span>Lazima amelipa Ada ya Kiingilio (Registration Fee)</span>
-                </label>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Kikomo cha Miezi ya Deni la Michango ya Kila Mwezi
-                  </label>
-                  <select
-                    value={editMaxDebtMonths}
-                    onChange={(e) => setEditMaxDebtMonths(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500"
-                  >
-                    <option value={0}>Hana deni kabisa (Miezi 0 ya nyuma)</option>
-                    <option value={1}>Deni lisizidi miezi 1</option>
-                    <option value={3}>Deni lisizidi miezi 3</option>
-                    <option value={6}>Deni lisizidi miezi 6</option>
-                    <option value={99}>Ruhusu wote (Bila kujali deni)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowEditElectionModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  Ghairi
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition-all shadow-lg shadow-teal-950/50 flex items-center gap-2 cursor-pointer"
-                >
-                  <Check className="w-4 h-4" />
-                  Hifadhi Mabadiliko
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

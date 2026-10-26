@@ -2482,14 +2482,7 @@ export const generateElectionResultsPDF = (
     throw new Error('Hakuna taarifa za uchaguzi zilizopatikana kwa sasa.');
   }
 
-  // Enforce rule: Official election report can ONLY be generated once voting has concluded
-  const isConcluded = election.status === 'completed' || (election.endDate && new Date() >= new Date(election.endDate));
-  if (!isConcluded) {
-    throw new Error('Zoezi la upigaji kura bado linaendelea! Ripoti rasmi ya matokeo inatolewa TU baada ya uchaguzi kukamilika rasmi au muda uliopangwa kupiga kura kufika mwisho.');
-  }
-
-  const totalMembersCount = (state.members || []).length || (election.voters || []).length;
-  const tallyData = calculateElectionTally(election, totalMembersCount);
+  const tallyData = calculateElectionTally(election);
   const term = election.termYears ? `${election.termYears} (Miaka ${election.termYears})` : '-';
 
   const currentY = drawOfficialHeader(
@@ -2507,11 +2500,10 @@ export const generateElectionResultsPDF = (
     startY: nextY,
     head: [['TAKWIMU ZA UCHAGUZI WA VIONGOZI', 'TAARIFA / IDADI']],
     body: [
-      ['Jumla ya Wanachama Wote wa Kikundi', `${totalMembersCount} Wanachama`],
       ['Daftari la Wapiga Kura Wenye Sifa (Eligible Voters)', `${tallyData.totalEligibleVoters} Wanachama`],
       ['Jumla ya Kura Zilizopigwa (Ballots Cast)', `${tallyData.totalBallotsCast} Kura`],
       ['Asilimia ya Ushiriki (Voter Turnout)', `${tallyData.turnoutPercentage}%`],
-      ['Hali ya Zoezi la Uchaguzi', election.status === 'completed' ? 'UMEKAMILIKA NA KUTHIBITISHWA RASMI' : 'DIRISHA LA KURA LIMEFUNGWA']
+      ['Hali ya Zoezi la Uchaguzi', election.status === 'completed' ? 'UMEKAMILIKA RASMI' : election.status === 'active' ? 'ZOEZI LINAENDELEA' : 'RATIBA ILIYOPITA']
     ],
     theme: 'grid',
     headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },

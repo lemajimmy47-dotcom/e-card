@@ -202,8 +202,10 @@ export interface UwalemiMessageLog {
   timestamp?: string;
   sentAt?: string;
   createdAt?: string;
+  resentAt?: string;
   recipientPhone: string;
   recipientName: string;
+  memberId?: string;
   messageType?: 'receipt' | 'reminder' | 'emergency' | 'meeting' | 'broadcast' | string;
   type?: string;
   channel?: 'sms' | 'whatsapp' | string;
@@ -211,6 +213,7 @@ export interface UwalemiMessageLog {
   message?: string;
   text?: string;
   status: 'delivered' | 'failed' | 'sent' | 'simulated' | string;
+  error?: string;
 }
 
 export interface UwalemiCandidate {

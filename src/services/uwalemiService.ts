@@ -1241,6 +1241,7 @@ export async function sendUwalemiSms(payload: {
   }[];
   message: string;
   messageType: 'receipt' | 'reminder' | 'emergency' | 'meeting' | 'broadcast';
+  resendLogId?: string;
 }): Promise<{ 
   success: boolean; 
   deliveredCount: number; 
@@ -1250,6 +1251,7 @@ export async function sendUwalemiSms(payload: {
   isBalanceError?: boolean; 
   error?: string;
   logs?: any[];
+  allLogs?: any[];
 }> {
   try {
     const res = await fetch('/api/uwalemi/send-sms', {
@@ -1268,7 +1270,8 @@ export async function sendUwalemiSms(payload: {
       message: data.message || data.error || (data.success ? 'Ujumbe umetumwa' : 'Imeshindwa kutuma SMS'),
       isBalanceError: !!data.isBalanceError,
       error: data.error,
-      logs: data.logs || []
+      logs: data.logs || [],
+      allLogs: data.allLogs || []
     };
   } catch (e: any) {
     return { success: false, deliveredCount: 0, sentCount: 0, failedCount: 0, message: e.message || 'Hitilafu ya mtandao', isBalanceError: false };
@@ -1833,44 +1836,19 @@ export interface ElectionPositionTally {
   }[];
 }
 
-/**
- * Checks if an election is officially concluded (completed or past its scheduled end date)
- */
-export function isElectionConcluded(election: UwalemiElection | null | undefined): boolean {
-  if (!election) return false;
-  if (election.status === 'completed') return true;
-  if (election.endDate) {
-    const end = new Date(election.endDate);
-    if (!isNaN(end.getTime()) && new Date() >= end) {
-      return true;
-    }
-  }
-  return false;
-}
-
-export function calculateElectionTally(
-  election: UwalemiElection,
-  totalGroupMembersCount?: number
-): {
-  totalGroupMembers: number;
+export function calculateElectionTally(election: UwalemiElection): {
   totalEligibleVoters: number;
   totalBallotsCast: number;
   turnoutPercentage: number;
   positionsTally: ElectionPositionTally[];
 } {
-  const voters = election.voters || [];
-  const ballots = election.ballots || [];
-  const eligibleVoters = voters.filter(v => v.isEligible);
+  const eligibleVoters = (election.voters || []).filter(v => v.isEligible);
   const totalEligibleVoters = eligibleVoters.length;
+  const ballots = election.ballots || [];
   const totalBallotsCast = ballots.length;
-  const totalGroupMembers = typeof totalGroupMembersCount === 'number' && totalGroupMembersCount > 0
-    ? totalGroupMembersCount
-    : Math.max(voters.length, totalEligibleVoters);
-  const rawTurnout = totalEligibleVoters > 0 
-    ? (totalBallotsCast / totalEligibleVoters) * 100 
+  const turnoutPercentage = totalEligibleVoters > 0 
+    ? Math.round((totalBallotsCast / totalEligibleVoters) * 100) 
     : 0;
-  // Format to 1 decimal place if not a whole number (e.g. 2.5%, 64%)
-  const turnoutPercentage = Math.round(rawTurnout * 10) / 10;
 
   const positionsTally: ElectionPositionTally[] = (election.positions || []).map(pos => {
     // Count votes per candidate
@@ -1948,7 +1926,6 @@ export function calculateElectionTally(
   });
 
   return {
-    totalGroupMembers,
     totalEligibleVoters,
     totalBallotsCast,
     turnoutPercentage,

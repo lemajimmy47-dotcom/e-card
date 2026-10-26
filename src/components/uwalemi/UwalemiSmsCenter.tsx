@@ -104,6 +104,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   const [selectedLogForModal, setSelectedLogForModal] = useState<UwalemiMessageLog | any | null>(null);
   const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
   const [logSearchTerm, setLogSearchTerm] = useState<string>('');
+  const [logStatusFilter, setLogStatusFilter] = useState<'all' | 'failed' | 'delivered'>('all');
 
   // Sync props when user triggers SMS from external tabs (like Fines report or Meetings)
   useEffect(() => {
@@ -840,13 +841,27 @@ Lema, Nguvu Moja!`);
       success: result.success,
       message: result.message
     });
+
+    // Unconditionally update messageLogs in state so all sent and failed messages appear in Kumbukumbu immediately
+    if (result.allLogs && Array.isArray(result.allLogs) && result.allLogs.length > 0) {
+      await onSaveState({
+        ...state,
+        messageLogs: result.allLogs
+      });
+    } else if (result.logs && Array.isArray(result.logs) && result.logs.length > 0) {
+      const merged = [...result.logs, ...(state.messageLogs || [])];
+      await onSaveState({
+        ...state,
+        messageLogs: merged
+      });
+    }
   };
 
   const handleResendLog = async (log: any) => {
     if (readOnly) return;
     const phone = log.recipientPhone || '';
-    if (!phone) {
-      alert('Hakuna namba ya simu ya mpokeaji iliyopatikana kwenye kumbukumbu hii.');
+    if (!phone || phone === 'Bila Namba') {
+      alert('Hakuna namba sahihi ya simu ya mpokeaji iliyopatikana kwenye kumbukumbu hii.');
       return;
     }
     const textToSend = log.message || log.content || '';
@@ -868,14 +883,60 @@ Lema, Nguvu Moja!`);
           }
         ],
         message: textToSend,
-        messageType: log.type || 'receipt'
+        messageType: log.messageType || log.type || 'broadcast',
+        resendLogId: log.id
       });
 
-      setResendLogFeedback({
-        id: log.id,
-        success: result.success,
-        message: result.success ? `✓ SMS imetumwa tena kwa mafanikio kwenda ${phone}!` : (result.message || 'Haikuweza kutuma SMS.')
-      });
+      if (result.success) {
+        // Update this log in local and saved state to 'delivered' and clear error
+        const updatedLogs = (state.messageLogs || []).map(l => {
+          if (l.id === log.id) {
+            return {
+              ...l,
+              status: 'delivered' as const,
+              error: undefined,
+              timestamp: new Date().toISOString()
+            };
+          }
+          return l;
+        });
+
+        const finalLogs = (result.allLogs && result.allLogs.length > 0) ? result.allLogs : updatedLogs;
+        await onSaveState({
+          ...state,
+          messageLogs: finalLogs
+        });
+
+        setResendLogFeedback({
+          id: log.id,
+          success: true,
+          message: `✓ SMS imetumwa tena kwa mafanikio kwenda kwa ${log.recipientName} (${phone})! Hali imesasishwa kuwa "Imefika".`
+        });
+      } else {
+        // Update error message on this log
+        const updatedLogs = (state.messageLogs || []).map(l => {
+          if (l.id === log.id) {
+            return {
+              ...l,
+              status: 'failed' as const,
+              error: result.message || result.error || 'Imeshindwa kutuma SMS'
+            };
+          }
+          return l;
+        });
+
+        const finalLogs = (result.allLogs && result.allLogs.length > 0) ? result.allLogs : updatedLogs;
+        await onSaveState({
+          ...state,
+          messageLogs: finalLogs
+        });
+
+        setResendLogFeedback({
+          id: log.id,
+          success: false,
+          message: `✕ ${result.message || 'Haikuweza kutuma SMS. Hakikisha salio lipo au jaribu tena.'}`
+        });
+      }
     } catch (e: any) {
       setResendLogFeedback({
         id: log.id,
@@ -2216,15 +2277,23 @@ Lema, Nguvu Moja!`);
                 Huonesha tarehe, muda halisi, namba ya simu, na ujumbe kamili uliotumwa kwa kila mwanachama.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-mono">
                 Jumla: {messageLogs.length}
               </span>
+              <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 font-mono">
+                Zilizofika: {messageLogs.filter(l => l.status === 'delivered' || l.status === 'sent').length}
+              </span>
+              {messageLogs.some(l => l.status === 'failed' || (!['delivered', 'sent', 'simulated'].includes(l.status))) && (
+                <span className="text-xs px-2.5 py-1 rounded-lg bg-rose-950/50 border border-rose-800/80 text-rose-300 font-bold font-mono animate-pulse">
+                  Zilzofeli: {messageLogs.filter(l => l.status === 'failed' || (!['delivered', 'sent', 'simulated'].includes(l.status))).length}
+                </span>
+              )}
               {!readOnly && messageLogs.length > 0 && (
                 <button
                   type="button"
                   onClick={handleClearAllLogs}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-800/60 text-xs font-semibold transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-800/60 text-xs font-semibold transition-all cursor-pointer ml-auto"
                   title="Futa Kumbukumbu Zote za Ujumbe"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -2234,25 +2303,66 @@ Lema, Nguvu Moja!`);
             </div>
           </div>
 
-          {/* Search bar for logs */}
+          {/* Filter pills and Search bar for logs */}
           {messageLogs.length > 0 && (
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={logSearchTerm}
-                onChange={(e) => setLogSearchTerm(e.target.value)}
-                placeholder="Tafuta kumbukumbu kwa jina la mwanachama, namba ya simu, au maneno ya ujumbe..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-              />
-              {logSearchTerm && (
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-[11px] text-slate-400 font-medium">Chuja Hali:</span>
                 <button
-                  onClick={() => setLogSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                  type="button"
+                  onClick={() => setLogStatusFilter('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    logStatusFilter === 'all'
+                      ? 'bg-slate-700 text-white shadow'
+                      : 'bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800'
+                  }`}
                 >
-                  ✕
+                  Zote ({messageLogs.length})
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setLogStatusFilter('failed')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    logStatusFilter === 'failed'
+                      ? 'bg-rose-600 text-white shadow-lg shadow-rose-950/50'
+                      : 'bg-rose-950/30 hover:bg-rose-900/40 text-rose-300 border border-rose-800/50'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                  Zilizofeli (Imeshindwa): {messageLogs.filter(l => l.status === 'failed' || (!['delivered', 'sent', 'simulated'].includes(l.status))).length}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLogStatusFilter('delivered')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    logStatusFilter === 'delivered'
+                      ? 'bg-emerald-600 text-white shadow'
+                      : 'bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-300 border border-emerald-800/50'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Zilizofika (Imefika): {messageLogs.filter(l => l.status === 'delivered' || l.status === 'sent').length}
+                </button>
+              </div>
+
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={logSearchTerm}
+                  onChange={(e) => setLogSearchTerm(e.target.value)}
+                  placeholder="Tafuta kumbukumbu kwa jina la mwanachama, namba ya simu, au maneno ya ujumbe..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+                {logSearchTerm && (
+                  <button
+                    onClick={() => setLogSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -2286,6 +2396,11 @@ Lema, Nguvu Moja!`);
                 <tbody className="divide-y divide-slate-800">
                   {messageLogs
                     .filter((log) => {
+                      if (logStatusFilter === 'failed') {
+                        if (log.status === 'delivered' || log.status === 'sent') return false;
+                      } else if (logStatusFilter === 'delivered') {
+                        if (log.status !== 'delivered' && log.status !== 'sent') return false;
+                      }
                       if (!logSearchTerm.trim()) return true;
                       const q = logSearchTerm.toLowerCase();
                       const name = (log.recipientName || '').toLowerCase();
@@ -2326,9 +2441,10 @@ Lema, Nguvu Moja!`);
                       const messageText = log.content || log.message || log.text || '';
                       const recipientPhone = log.recipientPhone || (log as any).phone || '';
                       const recipientName = log.recipientName || (log as any).name || 'Mjumbe';
+                      const isFailed = log.status === 'failed' || (!['delivered', 'sent', 'simulated'].includes(log.status));
 
                       return (
-                        <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                        <tr key={log.id} className={`transition-colors ${isFailed ? 'bg-rose-950/15 hover:bg-rose-950/25' : 'hover:bg-slate-800/40'}`}>
                           <td className="py-2.5 px-3 font-mono text-slate-300 text-[11px] whitespace-nowrap">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-500" />
@@ -2344,20 +2460,29 @@ Lema, Nguvu Moja!`);
                             {recipientName}
                           </td>
                           <td className="py-2.5 px-3 font-mono text-slate-400 text-[11px] whitespace-nowrap">
-                            {recipientPhone}
+                            <span className={recipientPhone === 'Bila Namba' ? 'text-amber-400 italic' : ''}>
+                              {recipientPhone}
+                            </span>
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                              log.status === 'delivered' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' :
-                              log.status === 'sent' ? 'bg-blue-500/15 text-blue-400 border-blue-500/20' :
-                              log.status === 'simulated' ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' :
-                              'bg-rose-500/15 text-rose-400 border-rose-500/20'
-                            }`}>
-                              {log.status === 'delivered' ? 'Imefika' :
-                               log.status === 'sent' ? 'Imetumwa' :
-                               log.status === 'simulated' ? 'Majaribio' :
-                               'Imeshindwa'}
-                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 w-fit ${
+                                log.status === 'delivered' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' :
+                                log.status === 'sent' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                                log.status === 'simulated' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                                'bg-rose-500/25 text-rose-300 border-rose-500/40 shadow-sm shadow-rose-950'
+                              }`}>
+                                {log.status === 'delivered' ? '✓ Imefika' :
+                                 log.status === 'sent' ? '✓ Imetumwa' :
+                                 log.status === 'simulated' ? '⚡ Majaribio' :
+                                 '✕ Imeshindwa'}
+                              </span>
+                              {isFailed && log.error && (
+                                <span className="text-[10px] text-rose-400 font-mono block truncate max-w-[150px]" title={log.error}>
+                                  {log.error}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 text-slate-200">
                             <div className="flex items-start justify-between gap-2 max-w-md">
@@ -2391,11 +2516,15 @@ Lema, Nguvu Moja!`);
                                 type="button"
                                 onClick={() => handleResendLog(log)}
                                 disabled={resendingLogId === log.id}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600 border border-blue-500/40 text-blue-300 hover:text-white text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50 ${
+                                  isFailed
+                                    ? 'bg-rose-600/30 hover:bg-rose-600 border border-rose-500/50 text-rose-200 hover:text-white shadow-sm shadow-rose-950/40'
+                                    : 'bg-blue-600/20 hover:bg-blue-600 border border-blue-500/40 text-blue-300 hover:text-white'
+                                }`}
                                 title="Tuma Tena Ujumbe Huu kwa SMS"
                               >
-                                <Send className="w-3 h-3" />
-                                {resendingLogId === log.id ? '...' : 'Tuma Tena'}
+                                <RefreshCw className={`w-3 h-3 ${resendingLogId === log.id ? 'animate-spin' : ''}`} />
+                                {resendingLogId === log.id ? 'Inatuma...' : 'Tuma Tena'}
                               </button>
                               <button
                                 type="button"
@@ -2489,6 +2618,18 @@ Lema, Nguvu Moja!`);
                   </span>
                 </div>
               </div>
+
+              {/* Error Reason Banner if failed */}
+              {selectedLogForModal.error && (
+                <div className="bg-rose-950/60 border border-rose-800/80 rounded-xl p-3 text-rose-300 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-rose-200 block text-xs">Sababu ya Kufeli (Error Details):</span>
+                    <span className="font-mono text-[11px] text-rose-300/90 leading-relaxed block">{selectedLogForModal.error}</span>
+                    <span className="text-[10px] text-rose-400/80 block mt-1">Unaweza kubonyeza kitufe cha &quot;Tuma Tena SMS&quot; hapa chini ili kujaribu kutuma tena.</span>
+                  </div>
+                </div>
+              )}
 
               {/* Message Box */}
               <div>

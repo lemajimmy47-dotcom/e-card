@@ -4,15 +4,6 @@ try {
 } catch {
   // Ignore in production where environment variables are injected directly
 }
-
-process.on("uncaughtException", (err) => {
-  console.error("[Server UncaughtException]:", err?.message || err);
-});
-
-process.on("unhandledRejection", (reason) => {
-  console.warn("[Server UnhandledRejection]:", (reason as any)?.message || reason);
-});
-
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -3556,7 +3547,7 @@ async function startServer() {
   await performSelfCleaningAndMigration(initData);
   
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = 3000;
 
   // Start the cron service
   startPaymentRemindersCron();
@@ -4264,6 +4255,28 @@ async function startServer() {
           }));
         }
       }
+
+      // Preserve and merge existing messageLogs from database so that newly dispatched SMS logs are never lost
+      const existingLogs = (db.uwalemiState && Array.isArray(db.uwalemiState.messageLogs)) ? db.uwalemiState.messageLogs : [];
+      const incomingLogs = (state && Array.isArray(state.messageLogs)) ? state.messageLogs : [];
+      
+      const logMap = new Map<string, any>();
+      incomingLogs.forEach((l: any) => {
+        if (l && l.id) logMap.set(l.id, l);
+      });
+      existingLogs.forEach((l: any) => {
+        if (l && l.id && !logMap.has(l.id)) {
+          logMap.set(l.id, l);
+        }
+      });
+      const mergedLogs = Array.from(logMap.values());
+      mergedLogs.sort((a: any, b: any) => {
+        const tA = new Date(a.timestamp || a.sentAt || a.createdAt || 0).getTime();
+        const tB = new Date(b.timestamp || b.sentAt || b.createdAt || 0).getTime();
+        return tB - tA;
+      });
+      state.messageLogs = mergedLogs.slice(0, 10000);
+
       db.uwalemiState = state;
       await writeDB(db);
       return res.json({ success: true, message: "UWALEMI state saved successfully" });
@@ -4275,7 +4288,7 @@ async function startServer() {
 
   app.post("/api/uwalemi/send-sms", async (req, res) => {
     try {
-      const { recipients, message, messageType } = req.body;
+      const { recipients, message, messageType, resendLogId } = req.body;
       if (!recipients || !Array.isArray(recipients) || recipients.length === 0 || !message) {
         return res.status(400).json({ error: "Recipients list and message text are required" });
       }
@@ -4331,6 +4344,8 @@ async function startServer() {
         secretKey: activeSecretKey
       };
 
+      const existingLog = resendLogId ? (uwalemiState.messageLogs || []).find((l: any) => l.id === resendLogId) : null;
+
       const logs: any[] = [];
       let deliveredCount = 0;
       let failedCount = 0;
@@ -4343,7 +4358,6 @@ async function startServer() {
         const phone = String(rec.phone || '').trim();
         const name = String(rec.name || 'Mjumbe');
         const memberNo = rec.memberNo || '';
-        if (!phone) continue;
 
         // Dynamic personalization per recipient
         let formattedMsg = rec.customMessage || message;
@@ -4520,6 +4534,47 @@ async function startServer() {
         formattedMsg = formattedMsg.replace(/\s*\(\s*UWL-[A-Za-z0-9-]+\s*\)/gi, '');
         formattedMsg = formattedMsg.replace(/ {2,}/g, ' ').trim();
 
+        // Check for missing or invalid phone number without skipping logging
+        if (!phone) {
+          failedCount++;
+          const missingPhoneLog = {
+            id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            timestamp: new Date().toISOString(),
+            recipientPhone: 'Bila Namba',
+            recipientName: name,
+            memberId: rec.memberId || undefined,
+            messageType: messageType || 'broadcast',
+            channel: 'sms',
+            content: formattedMsg,
+            status: 'failed',
+            error: 'Mwanachama hana namba ya simu iliyosajiliwa'
+          };
+          logs.push(missingPhoneLog);
+          continue;
+        }
+
+        let cleanPhone = phone.replace(/[^0-9]/g, '');
+        if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
+        if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
+
+        if (cleanPhone.length < 9) {
+          failedCount++;
+          const invalidPhoneLog = {
+            id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            timestamp: new Date().toISOString(),
+            recipientPhone: phone,
+            recipientName: name,
+            memberId: rec.memberId || undefined,
+            messageType: messageType || 'broadcast',
+            channel: 'sms',
+            content: formattedMsg,
+            status: 'failed',
+            error: `Namba ya simu si sahihi au ina tarakimu pungufu (${phone})`
+          };
+          logs.push(invalidPhoneLog);
+          continue;
+        }
+
         let status: 'delivered' | 'sent' | 'simulated' | 'failed' = 'simulated';
 
         if (smsConfig.provider === 'simulation') {
@@ -4536,10 +4591,6 @@ async function startServer() {
               url: smsConfig.baseUrl || 'https://sms.ehub.co.tz/api/v1/sms/send'
             };
 
-            let cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
-            if (cleanPhone.startsWith('7') || cleanPhone.startsWith('6')) cleanPhone = '255' + cleanPhone;
-
             await dispatchSMS(cleanPhone, formattedMsg, 'sms', gatewaySettings);
             status = 'delivered';
             deliveredCount++;
@@ -4552,21 +4603,35 @@ async function startServer() {
           }
         }
 
-        logs.push({
-          id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          timestamp: new Date().toISOString(),
-          recipientPhone: phone,
-          recipientName: name,
-          messageType: messageType || 'broadcast',
-          channel: 'sms',
-          content: formattedMsg,
-          status
-        });
+        if (resendLogId && existingLog) {
+          existingLog.status = status;
+          existingLog.error = status === 'failed' ? (lastErrorMsg || 'Hitilafu ya mtandao au gateway') : undefined;
+          existingLog.resentAt = new Date().toISOString();
+          if (status === 'delivered') {
+            existingLog.timestamp = new Date().toISOString();
+          }
+          logs.push(existingLog);
+        } else {
+          logs.push({
+            id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            timestamp: new Date().toISOString(),
+            recipientPhone: phone,
+            recipientName: name,
+            memberId: rec.memberId || undefined,
+            messageType: messageType || 'broadcast',
+            channel: 'sms',
+            content: formattedMsg,
+            status,
+            error: status === 'failed' ? (lastErrorMsg || 'Hitilafu ya mtandao au gateway ya SMS') : undefined
+          });
+        }
       }
 
       // Persist logs in UWALEMI state
       if (!uwalemiState.messageLogs) uwalemiState.messageLogs = [];
-      uwalemiState.messageLogs.unshift(...logs);
+      if (!resendLogId) {
+        uwalemiState.messageLogs.unshift(...logs);
+      }
       if (uwalemiState.messageLogs.length > 10000) {
         uwalemiState.messageLogs = uwalemiState.messageLogs.slice(0, 10000);
       }
@@ -4584,7 +4649,9 @@ async function startServer() {
           failedCount,
           error: lastErrorMsg,
           isBalanceError,
-          message: lastErrorMsg || `Imeshindwa kutuma SMS kwa wajumbe kupitia ${smsConfig.provider.toUpperCase()}.`
+          message: lastErrorMsg || `Imeshindwa kutuma SMS kwa wajumbe kupitia ${smsConfig.provider.toUpperCase()}.`,
+          logs,
+          allLogs: uwalemiState.messageLogs
         });
       }
 
@@ -4596,7 +4663,9 @@ async function startServer() {
           ? `Ujumbe ${deliveredCount} umerekodiwa (Hali ya Majaribio/Simulation). Ili kutuma SMS halisi, weka API Key za Meseji/Beem/NextSMS kwenye Mipangilio ya UWALEMI.`
           : failedCount === 0
             ? `Ujumbe ${deliveredCount} kati ya ${recipients.length} umetumwa kwa mafanikio kupitia ${smsConfig.provider.toUpperCase()} (${smsConfig.senderId || 'MESEJI'}).`
-            : `Ujumbe ${deliveredCount} umetumwa, lakini ujumbe ${failedCount} umeshindwa: ${lastErrorMsg}`
+            : `Ujumbe ${deliveredCount} umetumwa, lakini ujumbe ${failedCount} umeshindwa: ${lastErrorMsg}`,
+        logs,
+        allLogs: uwalemiState.messageLogs
       });
     } catch (error: any) {
       console.error("[UWALEMI SMS] Error:", error);
@@ -4745,15 +4814,29 @@ async function startServer() {
       for (const item of unpaidMembers) {
         const phone = String(item.member.phone || '').trim();
         const name = item.member.fullName || 'Mjumbe';
-        if (!phone) continue;
-
-        remindedNames.push(`${name} (${item.member.memberNo || ''})`);
-
         const formattedMsg = `KIKUMBUSHO CHA ADA YA MWEZI - UWALEMI
 Habari ${name}, unakumbushwa kulipa ada yako ya mwezi wa ${monthName} ${currentYear} (TZS ${item.balance.toLocaleString()}) kabla ya tarehe 30 ili kuepuka usumbufu na tozo ya ucheleweshaji.
 
 Lipa kupitia: M Koba au 0758 219 298 Eva O Lema.
 Lema, Nguvu Moja!`;
+        let lastErr = '';
+        if (!phone) {
+          logs.push({
+            id: `log-remind-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            timestamp: new Date().toISOString(),
+            recipientPhone: 'Bila Namba',
+            recipientName: name,
+            memberId: item.member.id,
+            messageType: 'reminder',
+            channel: 'sms',
+            content: formattedMsg,
+            status: 'failed',
+            error: 'Mwanachama hana namba ya simu iliyosajiliwa'
+          });
+          continue;
+        }
+
+        remindedNames.push(`${name} (${item.member.memberNo || ''})`);
 
         let status: 'delivered' | 'sent' | 'simulated' | 'failed' = 'simulated';
 
@@ -4778,7 +4861,8 @@ Lema, Nguvu Moja!`;
             status = 'delivered';
             deliveredCount++;
           } catch (smsErr: any) {
-            console.warn("[UWALEMI Auto Reminder SMS] Error:", smsErr?.message || smsErr);
+            lastErr = smsErr?.message || String(smsErr);
+            console.warn("[UWALEMI Auto Reminder SMS] Error:", lastErr);
             status = 'failed';
           }
         }
@@ -4788,10 +4872,12 @@ Lema, Nguvu Moja!`;
           timestamp: new Date().toISOString(),
           recipientPhone: phone,
           recipientName: name,
+          memberId: item.member.id,
           messageType: 'reminder',
           channel: 'sms',
           content: formattedMsg,
-          status
+          status,
+          error: status === 'failed' ? (lastErr || 'Hitilafu ya mtandao au gateway') : undefined
         });
       }
 
@@ -4948,29 +5034,15 @@ Lema, Nguvu Moja!`;
         receiptCode: matchedVoter.receiptCode
       };
 
-      // Check if election is concluded (completed or past end date)
-      const isConcluded = matchedElection.status === 'completed' || timeStatus === 'ended';
-
-      const ballots = matchedElection.ballots || [];
-      const voters = matchedElection.voters || [];
-      const totalEligible = voters.filter((v: any) => v.isEligible).length;
-      const totalCast = ballots.length;
-      const rawTurnout = totalEligible > 0 ? (totalCast / totalEligible) * 100 : 0;
-      const turnoutPercent = Math.round(rawTurnout * 10) / 10;
-      const totalGroupMembers = (state.members || []).length || voters.length;
-
-      // Live turnout monitoring (safe to show to members during voting)
-      const liveTurnout = {
-        totalGroupMembers,
-        totalEligibleVoters: totalEligible,
-        totalBallotsCast: totalCast,
-        turnoutPercentage: turnoutPercent,
-        isConcluded
-      };
-
-      // Candidate votes breakdown ONLY generated and returned when election is officially concluded
+      // Compute simple, safe aggregate results tally if voter has voted or election ended/completed
       let resultsTally: any = null;
-      if (isConcluded) {
+      if (matchedVoter.hasVoted || timeStatus === 'ended' || matchedElection.status === 'completed') {
+        const ballots = matchedElection.ballots || [];
+        const voters = matchedElection.voters || [];
+        const totalEligible = voters.filter((v: any) => v.isEligible).length;
+        const totalCast = ballots.length;
+        const turnoutPercent = totalEligible > 0 ? Math.round((totalCast / totalEligible) * 100) : 0;
+
         const positionsTally = (matchedElection.positions || []).map((pos: any) => {
           const candidateVotes: Record<string, number> = {};
           (pos.candidates || []).forEach((c: any) => {
@@ -4988,7 +5060,7 @@ Lema, Nguvu Moja!`;
 
           const results = (pos.candidates || []).map((c: any) => {
             const count = candidateVotes[c.id] || 0;
-            const pct = totalCast > 0 ? Math.round((count / totalCast) * 1000) / 10 : 0;
+            const pct = totalCast > 0 ? Math.round((count / totalCast) * 100) : 0;
             return {
               candidateId: c.id,
               candidateName: c.fullName,
@@ -5027,7 +5099,6 @@ Lema, Nguvu Moja!`;
         });
 
         resultsTally = {
-          totalGroupMembers,
           totalEligibleVoters: totalEligible,
           totalBallotsCast: totalCast,
           turnoutPercentage: turnoutPercent,
@@ -5047,14 +5118,11 @@ Lema, Nguvu Moja!`;
           endDate: matchedElection.endDate,
           status: matchedElection.status,
           positions: matchedElection.positions || [],
-          totalEligibleCount: totalEligible,
-          totalVotesCast: totalCast,
-          totalGroupMembers
+          totalEligibleCount: (matchedElection.voters || []).filter((v: any) => v.isEligible).length,
+          totalVotesCast: (matchedElection.ballots || []).length
         },
         voter: voterSafe,
         timeStatus,
-        isConcluded,
-        liveTurnout,
         resultsTally,
         groupSettings: {
           groupName: state.groupSettings?.groupName || 'UWALEMI',
@@ -8848,23 +8916,6 @@ Tafadhali toa majibu kwenye mfumo wa JSON pekee wenye muundo ufuatao bila maelez
       appType: "spa",
     });
     app.use(vite.middlewares);
-
-    app.use("*", async (req, res, next) => {
-      if (req.method !== "GET" || res.headersSent) return next();
-      const url = req.originalUrl;
-      try {
-        const indexPath = path.resolve(process.cwd(), "index.html");
-        if (fs.existsSync(indexPath)) {
-          let template = fs.readFileSync(indexPath, "utf-8");
-          template = await vite.transformIndexHtml(url, template);
-          res.status(200).set({ "Content-Type": "text/html" }).end(template);
-        } else {
-          next();
-        }
-      } catch (e: any) {
-        next(e);
-      }
-    });
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));

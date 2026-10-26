@@ -12,22 +12,10 @@ export default defineConfig(() => {
       },
     },
     server: {
-      host: '0.0.0.0',
-      port: 3000,
       hmr: false,
       ws: false as const,
       watch: {
-        ignored: [
-          '**/database.json',
-          '**/database.json.*',
-          '**/database.json.bak',
-          '**/database.json.tmp',
-          '**/logs.txt',
-          '**/state.json',
-          '**/user-backup.json',
-          '**/dist/**',
-          '**/*.log',
-        ],
+        ignored: ['**/database.json', '**/database.json.tmp']
       },
     },
   };
