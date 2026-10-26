@@ -6,3 +6,15 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Temporary chat uploads, screenshots, and explanation media
+public/assets/aistudio/
+public/assets/temp/
+.aistudio/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.zip
+

@@ -11685,7 +11685,7 @@
       {
         "id": "elec-1790252496480",
         "title": "Uchaguzi Mkuu wa Viongozi wa UWALEMI 2026/2029",
-        "status": "active",
+        "status": "draft",
         "voters": [
           {
             "phone": "+255653578184",
@@ -11695,7 +11695,7 @@
             "memberNo": "UWL-001",
             "smsSentAt": "2026-09-24T12:22:41.878Z",
             "isEligible": true,
-            "voterToken": "VTOK_d3decbfd190fb2ed8e6cfe6eb38d626614c10b12d6cc5428"
+            "voterToken": "VT-UWL001-UY6CY1431D"
           },
           {
             "phone": "+255713553037",
@@ -11704,7 +11704,7 @@
             "memberId": "uwl-mem-1787294936692-481",
             "memberNo": "UWL-002",
             "isEligible": true,
-            "voterToken": "VTOK_db9965ca460f300f9a5da348680d23817fd7ed9d3d468752"
+            "voterToken": "VT-UWL002-UO7GFJ431D"
           },
           {
             "phone": "+255719688750",
@@ -11713,7 +11713,7 @@
             "memberId": "uwl-mem-1787295082826-375",
             "memberNo": "UWL-003",
             "isEligible": true,
-            "voterToken": "VTOK_2fea87bba503e7081ab2bce2e1121662d80a0b1415cc36ca"
+            "voterToken": "VT-UWL003-3M72K0431D"
           },
           {
             "phone": "+255758219298",
@@ -11722,7 +11722,7 @@
             "memberId": "uwl-mem-1787313691229-121",
             "memberNo": "UWL-004",
             "isEligible": true,
-            "voterToken": "VTOK_884b9b3a58d4b915b2d8ffb4fea1a93fd6f6684afebd7daa"
+            "voterToken": "VT-UWL004-9O4X6K431D"
           },
           {
             "phone": "+255653792361",
@@ -11731,7 +11731,7 @@
             "memberId": "uwl-mem-1787319591013-246",
             "memberNo": "UWL-005",
             "isEligible": true,
-            "voterToken": "VTOK_43044f6a31f2bcd18be98cf82bf63d578288f5491a9371ac"
+            "voterToken": "VT-UWL005-DJTNNR431D"
           },
           {
             "phone": "+255764366142",
@@ -11740,7 +11740,7 @@
             "memberId": "uwl-mem-1787324532702-435",
             "memberNo": "UWL-006",
             "isEligible": true,
-            "voterToken": "VTOK_9d87b6777ab18b9834e95f12ddcb65b2aa9aeec3c56b53d1"
+            "voterToken": "VT-UWL006-LSC944431D"
           },
           {
             "phone": "+255781643211",
@@ -11749,7 +11749,7 @@
             "memberId": "uwl-mem-1787328526107-729",
             "memberNo": "UWL-007",
             "isEligible": true,
-            "voterToken": "VTOK_4f0c58b37e92e5bb69c23220f0d0edb27c6e02ffb7cdebc6"
+            "voterToken": "VT-UWL007-98PBVA431D"
           },
           {
             "phone": "+255688190948",
@@ -11758,7 +11758,7 @@
             "memberId": "uwl-mem-1787329676844-332",
             "memberNo": "UWL-008",
             "isEligible": true,
-            "voterToken": "VTOK_fb527b37e2fd674d47f69ea71915c3b58cdcfca09934e34a"
+            "voterToken": "VT-UWL008-14P63X431D"
           },
           {
             "phone": "+255717390079",
@@ -11767,7 +11767,7 @@
             "memberId": "uwl-mem-1787330141225-180",
             "memberNo": "UWL-009",
             "isEligible": true,
-            "voterToken": "VTOK_0a7e2d9e5550cd212dc17599acd85b4fb15f187c0bf7d352"
+            "voterToken": "VT-UWL009-Z2ZCI7431D"
           },
           {
             "phone": "+255773101102",
@@ -11776,7 +11776,7 @@
             "memberId": "uwl-mem-1787331038053-53",
             "memberNo": "UWL-010",
             "isEligible": true,
-            "voterToken": "VTOK_5aa105c18984a046c920b2f2d968249c50cb9c0f126955d7"
+            "voterToken": "VT-UWL010-UQF13K431D"
           },
           {
             "phone": "+255738069363",
@@ -11785,7 +11785,7 @@
             "memberId": "uwl-mem-1787477004725-876",
             "memberNo": "UWL-011",
             "isEligible": true,
-            "voterToken": "VTOK_02ebd2794e47a47d8da072cb2b3834f179bdda8c71a45b76"
+            "voterToken": "VT-UWL011-AEI99Y431D"
           },
           {
             "phone": "+255677575431",
@@ -11794,7 +11794,7 @@
             "memberId": "uwl-mem-1787509180794-227",
             "memberNo": "UWL-012",
             "isEligible": true,
-            "voterToken": "VTOK_94e7e6618fb0bf46bea71304b4a7e350d9b80f2bf1f340b7"
+            "voterToken": "VT-UWL012-8E939Q431D"
           },
           {
             "phone": "+255769348020",
@@ -11803,7 +11803,7 @@
             "memberId": "uwl-mem-1787509331839-537",
             "memberNo": "UWL-013",
             "isEligible": true,
-            "voterToken": "VTOK_7897e18791356853f0246764b7334b9b3802644e44b30bb6"
+            "voterToken": "VT-UWL013-5GEXNP431D"
           },
           {
             "phone": "+255717761113",
@@ -11812,7 +11812,7 @@
             "memberId": "uwl-mem-1787509452898-820",
             "memberNo": "UWL-014",
             "isEligible": true,
-            "voterToken": "VTOK_ff14f9c80dd2bdce0964e0072d0e64c2295a6f2fbb42e2c9"
+            "voterToken": "VT-UWL014-7XB52Z431D"
           },
           {
             "phone": "+255713350466",
@@ -11821,7 +11821,7 @@
             "memberId": "uwl-mem-1787509547364-651",
             "memberNo": "UWL-015",
             "isEligible": true,
-            "voterToken": "VTOK_8974387d76803e871f682e4c682a83046bae09bc9e8d10ec"
+            "voterToken": "VT-UWL015-T62A61431D"
           },
           {
             "phone": "+255659140579",
@@ -11830,7 +11830,7 @@
             "memberId": "uwl-mem-1787509878195-183",
             "memberNo": "UWL-016",
             "isEligible": true,
-            "voterToken": "VTOK_b40a1b3352230572600ca2e2763b5d400fd305344e68b061"
+            "voterToken": "VT-UWL016-S3NP6V431D"
           },
           {
             "phone": "+255769348031",
@@ -11839,7 +11839,7 @@
             "memberId": "uwl-mem-1787510012773-22",
             "memberNo": "UWL-017",
             "isEligible": true,
-            "voterToken": "VTOK_dcfc4488dbc756cd37b0543d2061ef652815880224662e32"
+            "voterToken": "VT-UWL017-5X3IKZ431D"
           },
           {
             "phone": "+255713633839",
@@ -11848,7 +11848,7 @@
             "memberId": "uwl-mem-1787510225996-309",
             "memberNo": "UWL-018",
             "isEligible": true,
-            "voterToken": "VTOK_e2414e1a773117ff02bdd2753a2dcb7a4bf5ddc4a6adc480"
+            "voterToken": "VT-UWL018-HOC93J431D"
           },
           {
             "phone": "+255713212880",
@@ -11857,7 +11857,7 @@
             "memberId": "uwl-mem-1787510358691-719",
             "memberNo": "UWL-019",
             "isEligible": true,
-            "voterToken": "VTOK_c041de6ae935fcc457f69735ec4d96349ca9e58b1014c559"
+            "voterToken": "VT-UWL019-UN9B30431D"
           },
           {
             "phone": "+255745107628",
@@ -11866,7 +11866,7 @@
             "memberId": "uwl-mem-1787510435431-608",
             "memberNo": "UWL-020",
             "isEligible": true,
-            "voterToken": "VTOK_e5b00cf90b2e5b10f10e226f49f620da9c81febf7419f978"
+            "voterToken": "VT-UWL020-4WS8ZM431D"
           },
           {
             "phone": "+255762325988",
@@ -11875,7 +11875,7 @@
             "memberId": "uwl-mem-1787517212886-43",
             "memberNo": "UWL-021",
             "isEligible": true,
-            "voterToken": "VTOK_e6578912f70acf25e712032770482efe831e9a381e77de0f"
+            "voterToken": "VT-UWL021-E40AMK431D"
           },
           {
             "phone": "+255768599565",
@@ -11884,7 +11884,7 @@
             "memberId": "uwl-mem-1787517281942-709",
             "memberNo": "UWL-022",
             "isEligible": true,
-            "voterToken": "VTOK_f3a7e65035c30bedf2a3e77288e26fa3b797f871164b1209"
+            "voterToken": "VT-UWL022-5V0JVX431D"
           },
           {
             "phone": "+255756357777",
@@ -11893,7 +11893,7 @@
             "memberId": "uwl-mem-1787517365145-951",
             "memberNo": "UWL-023",
             "isEligible": true,
-            "voterToken": "VTOK_8583fda7819af19651d2650aa16fd448e474a2699ec6f25e"
+            "voterToken": "VT-UWL023-JC9BJ4431D"
           },
           {
             "phone": "+255714910651",
@@ -11902,7 +11902,7 @@
             "memberId": "uwl-mem-1787517430141-494",
             "memberNo": "UWL-024",
             "isEligible": true,
-            "voterToken": "VTOK_0432fdfecb0045f21795a82a815bcb7f49835a5beaa03094"
+            "voterToken": "VT-UWL024-5YS4G4431D"
           },
           {
             "phone": "+255756406374",
@@ -11911,7 +11911,7 @@
             "memberId": "uwl-mem-1787517489865-563",
             "memberNo": "UWL-025",
             "isEligible": true,
-            "voterToken": "VTOK_92c45ea8448760946e60158c0116287028f731f8ddf8c990"
+            "voterToken": "VT-UWL025-L6KOP8431D"
           },
           {
             "phone": "+255763108388",
@@ -11920,7 +11920,7 @@
             "memberId": "uwl-mem-1787517556941-772",
             "memberNo": "UWL-026",
             "isEligible": true,
-            "voterToken": "VTOK_8587a8ab6ec6403f51b1e035f9a6f0446248e84ab761d267"
+            "voterToken": "VT-UWL026-0426BA431D"
           },
           {
             "phone": "+255765568704",
@@ -11929,7 +11929,7 @@
             "memberId": "uwl-mem-1787517615652-208",
             "memberNo": "UWL-027",
             "isEligible": true,
-            "voterToken": "VTOK_650c3eb6adc91465b71e2e98fa997abcde76cceafb7f3f62"
+            "voterToken": "VT-UWL027-AHNNID431D"
           },
           {
             "phone": "+255716914782",
@@ -11938,7 +11938,7 @@
             "memberId": "uwl-mem-1787517690910-54",
             "memberNo": "UWL-028",
             "isEligible": true,
-            "voterToken": "VTOK_46b2a94a72b03834d7b9fdede662939acc7e866c9669fdc0"
+            "voterToken": "VT-UWL028-TKF7MU431D"
           },
           {
             "phone": "+255658184314",
@@ -11947,7 +11947,7 @@
             "memberId": "uwl-mem-1787517824648-720",
             "memberNo": "UWL-029",
             "isEligible": true,
-            "voterToken": "VTOK_143cc091a3b7da2003385c4a7c320503479489aa466b30e8"
+            "voterToken": "VT-UWL029-HVBWOE431D"
           },
           {
             "phone": "+255759555567",
@@ -11956,7 +11956,7 @@
             "memberId": "uwl-mem-1787518005374-488",
             "memberNo": "UWL-030",
             "isEligible": true,
-            "voterToken": "VTOK_9de08068965bb643ef37fa3de49049847de334f4fed3c42a"
+            "voterToken": "VT-UWL030-ZGJDSF431D"
           },
           {
             "phone": "+255717512283",
@@ -11965,7 +11965,7 @@
             "memberId": "uwl-mem-1787520168941-602",
             "memberNo": "UWL-031",
             "isEligible": true,
-            "voterToken": "VTOK_829079d1b851c323627e438478dbd5926acb40c2bd989ed9"
+            "voterToken": "VT-UWL031-0ZZPRQ431D"
           },
           {
             "phone": "+255714901936",
@@ -11974,7 +11974,7 @@
             "memberId": "uwl-mem-1787520267234-257",
             "memberNo": "UWL-032",
             "isEligible": true,
-            "voterToken": "VTOK_1b1aa2135df4502a49927c98ec34f3e101af9112668e7eed"
+            "voterToken": "VT-UWL032-UTQPMC431D"
           },
           {
             "phone": "+255687503116",
@@ -11983,7 +11983,7 @@
             "memberId": "uwl-mem-1787520343258-905",
             "memberNo": "UWL-033",
             "isEligible": true,
-            "voterToken": "VTOK_66610337f170a610c5acc3c1ca3c51ab9a56ef493e50d0dc"
+            "voterToken": "VT-UWL033-A2S4VX431D"
           },
           {
             "phone": "+255757517727",
@@ -11992,7 +11992,7 @@
             "memberId": "uwl-mem-1787520529700-637",
             "memberNo": "UWL-034",
             "isEligible": true,
-            "voterToken": "VTOK_c60ac7301c2bc0503f8ce84a1c6997e04c7410c2e7c1cd32"
+            "voterToken": "VT-UWL034-UCLZYB431D"
           },
           {
             "phone": "+255715659094",
@@ -12001,7 +12001,7 @@
             "memberId": "uwl-mem-1787520593395-511",
             "memberNo": "UWL-035",
             "isEligible": true,
-            "voterToken": "VTOK_8a4c1cce5d8e9b652367c914fef88c0385533945828252b7"
+            "voterToken": "VT-UWL035-KEBKNV431D"
           },
           {
             "phone": "+255716471771",
@@ -12010,7 +12010,7 @@
             "memberId": "uwl-mem-1787521438931-429",
             "memberNo": "UWL-036",
             "isEligible": true,
-            "voterToken": "VTOK_61695ee56e2d3ee64b30a942ed151d71a81e4ec37b6d8f13"
+            "voterToken": "VT-UWL036-G60L8G431D"
           },
           {
             "phone": "+255763111500",
@@ -12019,7 +12019,7 @@
             "memberId": "uwl-mem-1787521614256-668",
             "memberNo": "UWL-037",
             "isEligible": true,
-            "voterToken": "VTOK_59cc0583f3d19f99de03751dab66a1bc502450f2e1896ef6"
+            "voterToken": "VT-UWL037-B5IL7D431D"
           },
           {
             "phone": "+255713482666",
@@ -12028,7 +12028,7 @@
             "memberId": "uwl-mem-1787521722881-363",
             "memberNo": "UWL-038",
             "isEligible": true,
-            "voterToken": "VTOK_1bef78d2e75c224e277f33a79a9d0a2428eb3c47d57cff00"
+            "voterToken": "VT-UWL038-BB5797431D"
           },
           {
             "phone": "+255760626346",
@@ -12037,7 +12037,7 @@
             "memberId": "uwl-mem-1787522273679-869",
             "memberNo": "UWL-039",
             "isEligible": true,
-            "voterToken": "VTOK_66b3e59a7d0e1f42deb1a8bcb4b65c539587ca4e7a61e50f"
+            "voterToken": "VT-UWL039-IOCQNJ431D"
           },
           {
             "phone": "+255788019211",
@@ -12046,11 +12046,11 @@
             "memberId": "uwl-mem-1787522393037-659",
             "memberNo": "UWL-040",
             "isEligible": true,
-            "voterToken": "VTOK_af4136c3a30d448e3151e9218c00178bb8cb513fc6acb964"
+            "voterToken": "VT-UWL040-K2J6DM431D"
           }
         ],
         "ballots": [],
-        "endDate": "2026-10-31T20:00",
+        "endDate": "2026-09-27T12:18",
         "createdAt": "2026-09-24T12:21:36.480Z",
         "positions": [
           {
@@ -12100,96 +12100,28 @@
           {
             "id": "pos-1790252496480-3",
             "title": "Katibu Mkuu",
-            "candidates": [
-              {
-                "id": "cand-1792921323776-UWL-005",
-                "memberId": "uwl-mem-1787319591013-246",
-                "memberNo": "UWL-005",
-                "fullName": "Joachim Shekiel Tarimo",
-                "phone": "+255653792361",
-                "slogan": "Uongozi Bora na Uwazi"
-              },
-              {
-                "id": "cand-1792921323777-UWL-006",
-                "memberId": "uwl-mem-1787324532702-435",
-                "memberNo": "UWL-006",
-                "fullName": "Adonica Onesmo Lema",
-                "phone": "+255764366142",
-                "slogan": "Mshikamano na Maendeleo"
-              }
-            ],
+            "candidates": [],
             "maxWinners": 1,
             "description": "Msimamizi wa Shughuli za Kila Siku na Kumbukumbu"
           },
           {
             "id": "pos-1790252496480-4",
             "title": "Katibu Msaidizi",
-            "candidates": [
-              {
-                "id": "cand-1792921323776-UWL-007",
-                "memberId": "uwl-mem-1787328526107-729",
-                "memberNo": "UWL-007",
-                "fullName": "Agness R Lema",
-                "phone": "+255781643211",
-                "slogan": "Uongozi Bora na Uwazi"
-              },
-              {
-                "id": "cand-1792921323777-UWL-008",
-                "memberId": "uwl-mem-1787329676844-332",
-                "memberNo": "UWL-008",
-                "fullName": "Ainess Paradiso Lema",
-                "phone": "+255688190948",
-                "slogan": "Mshikamano na Maendeleo"
-              }
-            ],
+            "candidates": [],
             "maxWinners": 1,
             "description": "Msaidizi wa Katibu Mkuu"
           },
           {
             "id": "pos-1790252496480-5",
             "title": "Mweka Hazina",
-            "candidates": [
-              {
-                "id": "cand-1792921323776-UWL-009",
-                "memberId": "uwl-mem-1787330141225-180",
-                "memberNo": "UWL-009",
-                "fullName": "Alfande Erasto Lema",
-                "phone": "+255717390079",
-                "slogan": "Uongozi Bora na Uwazi"
-              },
-              {
-                "id": "cand-1792921323777-UWL-010",
-                "memberId": "uwl-mem-1787331038053-53",
-                "memberNo": "UWL-010",
-                "fullName": "Aneth Shisarandumi Lema",
-                "phone": "+255773101102",
-                "slogan": "Mshikamano na Maendeleo"
-              }
-            ],
+            "candidates": [],
             "maxWinners": 1,
             "description": "Msimamizi Mkuu wa Fedha na Akaunti za UWALEMI"
           },
           {
             "id": "pos-1790252496480-6",
             "title": "Mweka Hazina Msaidizi",
-            "candidates": [
-              {
-                "id": "cand-1792921323776-UWL-011",
-                "memberId": "uwl-mem-1787477004725-876",
-                "memberNo": "UWL-011",
-                "fullName": "Beliam Pendaeli Lema",
-                "phone": "+255738069363",
-                "slogan": "Uongozi Bora na Uwazi"
-              },
-              {
-                "id": "cand-1792921323777-UWL-012",
-                "memberId": "uwl-mem-1787509180794-227",
-                "memberNo": "UWL-012",
-                "fullName": "Clara Fanuel Lema",
-                "phone": "+255677575431",
-                "slogan": "Mshikamano na Maendeleo"
-              }
-            ],
+            "candidates": [],
             "maxWinners": 1,
             "description": "Msaidizi wa Mweka Hazina"
           },
@@ -12201,21 +12133,13 @@
             "description": "Wawakilishi wa Wanachama kwenye Kamati ya Uendeshaji"
           }
         ],
-        "startDate": "2026-10-24T08:00",
+        "startDate": "2026-09-24T12:18",
         "termYears": "2026 - 2028",
         "eligibilityCriteria": {
           "activeMembersOnly": true,
           "maxAllowedFeeDebtMonths": 99,
           "requireRegistrationFeePaid": false
-        },
-        "auditTrail": [
-          {
-            "id": "aud-init",
-            "timestamp": "2026-10-25T08:50:55.398Z",
-            "action": "Mfumo wa uchaguzi umesasishwa kwa viwango vya juu vya usalama (Decoupled Secret Ballot Architecture)",
-            "performedBy": "Kamati ya Uchaguzi / System"
-          }
-        ]
+        }
       },
       {
         "id": "elec-1788949701119",
@@ -12224,15 +12148,15 @@
         "voters": [
           {
             "phone": "+255653578184",
+            "votedAt": "2026-09-09T10:41:31.464Z",
             "fullName": "Jimson  Fanuel Lema",
             "hasVoted": true,
             "memberId": "uwl-mem-1787293910280-307",
             "memberNo": "UWL-001",
             "smsSentAt": "2026-09-09T11:05:17.375Z",
             "isEligible": true,
-            "voterToken": "VTOK_9d8a0c836ef558f476a6562beed3046a4763281a0c237bde",
-            "acknowledgmentCode": "UWL-ACK-35F6DF",
-            "votedDate": "2026-09-09"
+            "voterToken": "VT-UWL001-MO9JTCGNPC",
+            "receiptCode": "UWL-VT-NLK69585"
           },
           {
             "phone": "+255713553037",
@@ -12241,7 +12165,7 @@
             "memberId": "uwl-mem-1787294936692-481",
             "memberNo": "UWL-002",
             "isEligible": true,
-            "voterToken": "VTOK_16ac9b93be110d948afddb1c2b292d519c0754f78e340108"
+            "voterToken": "VT-UWL002-SW7TAIGNPD"
           },
           {
             "phone": "+255719688750",
@@ -12250,7 +12174,7 @@
             "memberId": "uwl-mem-1787295082826-375",
             "memberNo": "UWL-003",
             "isEligible": true,
-            "voterToken": "VTOK_0b6900568b713ad76fbe33964e1c4648081473b4d7e6ac1d"
+            "voterToken": "VT-UWL003-E2AAWWGNPD"
           },
           {
             "phone": "+255758219298",
@@ -12259,7 +12183,7 @@
             "memberId": "uwl-mem-1787313691229-121",
             "memberNo": "UWL-004",
             "isEligible": true,
-            "voterToken": "VTOK_9648aee6be1fef7df0b2eedafbcb1002decf28b0532390c4"
+            "voterToken": "VT-UWL004-PZ8QISGNPD"
           },
           {
             "phone": "+255653792361",
@@ -12268,7 +12192,7 @@
             "memberId": "uwl-mem-1787319591013-246",
             "memberNo": "UWL-005",
             "isEligible": true,
-            "voterToken": "VTOK_bf787be55139b90cd4c5eefb83b5989ebc0f697f2e7b38e4"
+            "voterToken": "VT-UWL005-IOA33MGNPD"
           },
           {
             "phone": "+255764366142",
@@ -12277,7 +12201,7 @@
             "memberId": "uwl-mem-1787324532702-435",
             "memberNo": "UWL-006",
             "isEligible": true,
-            "voterToken": "VTOK_dc18bee951b0b6357a5ce962fe10b229ae9d447b29ae9a3a"
+            "voterToken": "VT-UWL006-JUAW77GNPD"
           },
           {
             "phone": "+255781643211",
@@ -12286,7 +12210,7 @@
             "memberId": "uwl-mem-1787328526107-729",
             "memberNo": "UWL-007",
             "isEligible": true,
-            "voterToken": "VTOK_73316949cdee949e7a9157217ca55d6be4e2fe6daf4ae5e3"
+            "voterToken": "VT-UWL007-Y501F6GNPD"
           },
           {
             "phone": "+255688190948",
@@ -12295,7 +12219,7 @@
             "memberId": "uwl-mem-1787329676844-332",
             "memberNo": "UWL-008",
             "isEligible": true,
-            "voterToken": "VTOK_6f24fac15c524f85aa1f53617fd2ad93ba9c47946d877a79"
+            "voterToken": "VT-UWL008-VNTD4QGNPD"
           },
           {
             "phone": "+255717390079",
@@ -12304,7 +12228,7 @@
             "memberId": "uwl-mem-1787330141225-180",
             "memberNo": "UWL-009",
             "isEligible": true,
-            "voterToken": "VTOK_eb88f2294e46e87b59e0ed456956fb7a26f870167bf0dde5"
+            "voterToken": "VT-UWL009-WIJSEEGNPD"
           },
           {
             "phone": "+255773101102",
@@ -12313,7 +12237,7 @@
             "memberId": "uwl-mem-1787331038053-53",
             "memberNo": "UWL-010",
             "isEligible": true,
-            "voterToken": "VTOK_737ee56e1cc4e2cd4380181d2e94f8c6c40173ba50ab6831"
+            "voterToken": "VT-UWL010-B3WJNOGNPD"
           },
           {
             "phone": "+255738069363",
@@ -12322,7 +12246,7 @@
             "memberId": "uwl-mem-1787477004725-876",
             "memberNo": "UWL-011",
             "isEligible": true,
-            "voterToken": "VTOK_615984931a0711f5862480e5c5e4f4f1a29225cd77e1f2cc"
+            "voterToken": "VT-UWL011-IVNOXZGNPD"
           },
           {
             "phone": "+255677575431",
@@ -12331,7 +12255,7 @@
             "memberId": "uwl-mem-1787509180794-227",
             "memberNo": "UWL-012",
             "isEligible": true,
-            "voterToken": "VTOK_af243ea27f5849866fe66090cdb6edb553ade5f954addbd8"
+            "voterToken": "VT-UWL012-QS8OE3GNPD"
           },
           {
             "phone": "+255769348020",
@@ -12340,7 +12264,7 @@
             "memberId": "uwl-mem-1787509331839-537",
             "memberNo": "UWL-013",
             "isEligible": true,
-            "voterToken": "VTOK_d4a104f2ae2d1e996f9b1b944ce049fd0e0d41d2434ba3a0"
+            "voterToken": "VT-UWL013-DJC2SWGNPD"
           },
           {
             "phone": "+255717761113",
@@ -12349,7 +12273,7 @@
             "memberId": "uwl-mem-1787509452898-820",
             "memberNo": "UWL-014",
             "isEligible": true,
-            "voterToken": "VTOK_d7ed1239a72b5433eff54f51ba9e60e21be44055daee6abf"
+            "voterToken": "VT-UWL014-XBOOIFGNPD"
           },
           {
             "phone": "+255713350466",
@@ -12358,7 +12282,7 @@
             "memberId": "uwl-mem-1787509547364-651",
             "memberNo": "UWL-015",
             "isEligible": true,
-            "voterToken": "VTOK_ae8c4afb8eeceb90c457405a610e4d24492e8becc91509ee"
+            "voterToken": "VT-UWL015-AJJ516GNPD"
           },
           {
             "phone": "+255659140579",
@@ -12367,7 +12291,7 @@
             "memberId": "uwl-mem-1787509878195-183",
             "memberNo": "UWL-016",
             "isEligible": true,
-            "voterToken": "VTOK_c619ddc285f1804a1902da03a6d7450eb67429cba4e1253b"
+            "voterToken": "VT-UWL016-JAVZL7GNPD"
           },
           {
             "phone": "+255769348031",
@@ -12377,7 +12301,7 @@
             "memberNo": "UWL-017",
             "smsSentAt": "2026-09-24T12:19:42.992Z",
             "isEligible": true,
-            "voterToken": "VTOK_58dc0cb0532d1876b577677ddf44d46374e395b7fec9b743"
+            "voterToken": "VT-UWL017-096YZMGNPD"
           },
           {
             "phone": "+255713633839",
@@ -12386,7 +12310,7 @@
             "memberId": "uwl-mem-1787510225996-309",
             "memberNo": "UWL-018",
             "isEligible": true,
-            "voterToken": "VTOK_54646c6594115d40331c99191164324e18df5bdd2b01608e"
+            "voterToken": "VT-UWL018-85MO0GGNPD"
           },
           {
             "phone": "+255713212880",
@@ -12395,7 +12319,7 @@
             "memberId": "uwl-mem-1787510358691-719",
             "memberNo": "UWL-019",
             "isEligible": true,
-            "voterToken": "VTOK_c018452f1c68955d2b8d2e194074ae4eeaacc0ee36d058c6"
+            "voterToken": "VT-UWL019-Z5JBUOGNPD"
           },
           {
             "phone": "+255745107628",
@@ -12404,7 +12328,7 @@
             "memberId": "uwl-mem-1787510435431-608",
             "memberNo": "UWL-020",
             "isEligible": true,
-            "voterToken": "VTOK_9e99122a0c0a3254dd8b672d1c20d6e7b7c2077a4b2469a1"
+            "voterToken": "VT-UWL020-S5QGM6GNPD"
           },
           {
             "phone": "+255762325988",
@@ -12413,7 +12337,7 @@
             "memberId": "uwl-mem-1787517212886-43",
             "memberNo": "UWL-021",
             "isEligible": true,
-            "voterToken": "VTOK_070563b715dce908d00a12f719a19a57db9f1b970a86b101"
+            "voterToken": "VT-UWL021-GMHG72GNPD"
           },
           {
             "phone": "+255768599565",
@@ -12422,7 +12346,7 @@
             "memberId": "uwl-mem-1787517281942-709",
             "memberNo": "UWL-022",
             "isEligible": true,
-            "voterToken": "VTOK_609004ea28cc087a465f8d35e5b7eb5ccb27eedf32ed7eee"
+            "voterToken": "VT-UWL022-OVRDMIGNPD"
           },
           {
             "phone": "+255756357777",
@@ -12431,7 +12355,7 @@
             "memberId": "uwl-mem-1787517365145-951",
             "memberNo": "UWL-023",
             "isEligible": true,
-            "voterToken": "VTOK_36032950da3140fce4afd46b5eea27ee4d3bc80ce4d9706e"
+            "voterToken": "VT-UWL023-3QK8RRGNPD"
           },
           {
             "phone": "+255714910651",
@@ -12440,7 +12364,7 @@
             "memberId": "uwl-mem-1787517430141-494",
             "memberNo": "UWL-024",
             "isEligible": true,
-            "voterToken": "VTOK_2456dc7dd12d8aa84371f692b967052dbc7eef2aeecb4272"
+            "voterToken": "VT-UWL024-T43P76GNPD"
           },
           {
             "phone": "+255756406374",
@@ -12449,7 +12373,7 @@
             "memberId": "uwl-mem-1787517489865-563",
             "memberNo": "UWL-025",
             "isEligible": true,
-            "voterToken": "VTOK_2c9e63eb670d1c84c1a03b17af0d8029a3cf5b29c4e2c674"
+            "voterToken": "VT-UWL025-223QO3GNPD"
           },
           {
             "phone": "+255763108388",
@@ -12458,7 +12382,7 @@
             "memberId": "uwl-mem-1787517556941-772",
             "memberNo": "UWL-026",
             "isEligible": true,
-            "voterToken": "VTOK_b41caeee6c46826904183748cfc454d7019a4d44cd3284f2"
+            "voterToken": "VT-UWL026-YTAE6LGNPD"
           },
           {
             "phone": "+255765568704",
@@ -12467,7 +12391,7 @@
             "memberId": "uwl-mem-1787517615652-208",
             "memberNo": "UWL-027",
             "isEligible": true,
-            "voterToken": "VTOK_54112a2a43a18ad642b9e85178ced237afd6309ebb97430c"
+            "voterToken": "VT-UWL027-5HI9L9GNPD"
           },
           {
             "phone": "+255716914782",
@@ -12476,7 +12400,7 @@
             "memberId": "uwl-mem-1787517690910-54",
             "memberNo": "UWL-028",
             "isEligible": true,
-            "voterToken": "VTOK_1857b240fb3511757422ea82d6ff9fb8ebad28942f64bac6"
+            "voterToken": "VT-UWL028-QCAQ68GNPD"
           },
           {
             "phone": "+255658184314",
@@ -12485,7 +12409,7 @@
             "memberId": "uwl-mem-1787517824648-720",
             "memberNo": "UWL-029",
             "isEligible": true,
-            "voterToken": "VTOK_a33aa1cf73a0c54c83de862ce8257925818911ce8afb1204"
+            "voterToken": "VT-UWL029-510B9DGNPD"
           },
           {
             "phone": "+255759555567",
@@ -12494,7 +12418,7 @@
             "memberId": "uwl-mem-1787518005374-488",
             "memberNo": "UWL-030",
             "isEligible": true,
-            "voterToken": "VTOK_483227371183d5fb773488d6fe94580e226b574c28233a12"
+            "voterToken": "VT-UWL030-HQSVOBGNPD"
           },
           {
             "phone": "+255717512283",
@@ -12503,7 +12427,7 @@
             "memberId": "uwl-mem-1787520168941-602",
             "memberNo": "UWL-031",
             "isEligible": true,
-            "voterToken": "VTOK_0775e195c1281bd90624c59c6d3292aa8d7e6d97ce9d0d41"
+            "voterToken": "VT-UWL031-Z23OHFGNPD"
           },
           {
             "phone": "+255714901936",
@@ -12512,7 +12436,7 @@
             "memberId": "uwl-mem-1787520267234-257",
             "memberNo": "UWL-032",
             "isEligible": true,
-            "voterToken": "VTOK_d6ad0b1830db2043597a59b44a16f88cb9da397e62624219"
+            "voterToken": "VT-UWL032-UF7TQPGNPD"
           },
           {
             "phone": "+255687503116",
@@ -12521,7 +12445,7 @@
             "memberId": "uwl-mem-1787520343258-905",
             "memberNo": "UWL-033",
             "isEligible": true,
-            "voterToken": "VTOK_7eb6fd3b36528f5d0bd2c86ff91239d3ebaedeeb2340fa84"
+            "voterToken": "VT-UWL033-Y86ZMQGNPD"
           },
           {
             "phone": "+255757517727",
@@ -12530,7 +12454,7 @@
             "memberId": "uwl-mem-1787520529700-637",
             "memberNo": "UWL-034",
             "isEligible": true,
-            "voterToken": "VTOK_9a1fc74dc372ae6dd7aa88e0427cf7c61423f36f84eef720"
+            "voterToken": "VT-UWL034-Y25EOFGNPD"
           },
           {
             "phone": "+255715659094",
@@ -12539,7 +12463,7 @@
             "memberId": "uwl-mem-1787520593395-511",
             "memberNo": "UWL-035",
             "isEligible": true,
-            "voterToken": "VTOK_bfa00ba07fb40b8209f6fe360557834282837e0b9acdd766"
+            "voterToken": "VT-UWL035-I4CU9IGNPD"
           },
           {
             "phone": "+255716471771",
@@ -12548,7 +12472,7 @@
             "memberId": "uwl-mem-1787521438931-429",
             "memberNo": "UWL-036",
             "isEligible": true,
-            "voterToken": "VTOK_6e321a62aca48dc1df042f15938d5acd6e08818d86253feb"
+            "voterToken": "VT-UWL036-NHVFF5GNPD"
           },
           {
             "phone": "+255763111500",
@@ -12557,7 +12481,7 @@
             "memberId": "uwl-mem-1787521614256-668",
             "memberNo": "UWL-037",
             "isEligible": true,
-            "voterToken": "VTOK_5c98b98bd3d96205ea2251ab46c3dcb6825e1e76320937c0"
+            "voterToken": "VT-UWL037-LT44RSGNPD"
           },
           {
             "phone": "+255713482666",
@@ -12566,7 +12490,7 @@
             "memberId": "uwl-mem-1787521722881-363",
             "memberNo": "UWL-038",
             "isEligible": true,
-            "voterToken": "VTOK_69aa334c804396e57dee1399656a41acf751395357be1411"
+            "voterToken": "VT-UWL038-259H6SGNPD"
           },
           {
             "phone": "+255760626346",
@@ -12575,7 +12499,7 @@
             "memberId": "uwl-mem-1787522273679-869",
             "memberNo": "UWL-039",
             "isEligible": true,
-            "voterToken": "VTOK_87fde0235dfabfe108a50f614b7da8d43f5c7e71f8c5e13e"
+            "voterToken": "VT-UWL039-PNF05KGNPD"
           },
           {
             "phone": "+255788019211",
@@ -12584,7 +12508,7 @@
             "memberId": "uwl-mem-1787522393037-659",
             "memberNo": "UWL-040",
             "isEligible": true,
-            "voterToken": "VTOK_6a7c805801c20629a2025cdb1cdf62cc25dec2b8505d02c7"
+            "voterToken": "VT-UWL040-WRF39TGNPD"
           }
         ],
         "ballots": [
@@ -12616,7 +12540,7 @@
             },
             "timestamp": "2026-09-09T10:41:31.464Z",
             "electionId": "elec-1788949701119",
-            "receiptCode": "BLT-C93FD8D2"
+            "receiptCode": "UWL-VT-NLK69585"
           }
         ],
         "endDate": "2026-09-09T16:00",
@@ -12785,15 +12709,7 @@
           "activeMembersOnly": true,
           "maxAllowedFeeDebtMonths": 99,
           "requireRegistrationFeePaid": false
-        },
-        "auditTrail": [
-          {
-            "id": "aud-init",
-            "timestamp": "2026-10-25T08:50:55.399Z",
-            "action": "Mfumo wa uchaguzi umesasishwa kwa viwango vya juu vya usalama (Decoupled Secret Ballot Architecture)",
-            "performedBy": "Kamati ya Uchaguzi / System"
-          }
-        ]
+        }
       }
     ],
     "initialized": true,

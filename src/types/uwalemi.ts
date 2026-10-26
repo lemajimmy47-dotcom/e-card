@@ -191,9 +191,6 @@ export interface UwalemiGroupSettings {
   paymentMethods: UwalemiPaymentMethod[];
   smsConfig: UwalemiSmsConfig;
   constitutionSummary?: string;
-  adminPin?: string;
-  adminPinHash?: string;
-  adminPinSalt?: string;
   createdDate: string;
   foundedYear?: number;
   foundedMonth?: number;
@@ -239,9 +236,7 @@ export interface UwalemiElectionPosition {
 }
 
 export interface UwalemiVoterRecord {
-  voterToken?: string; // Secret token delivered to voter (omitted in non-admin/public state)
-  voterTokenHash?: string; // SHA-256 hash stored on server
-  tokenExpiresAt?: string; // Expiration ISO string
+  voterToken: string; // Unique, secret token e.g. "VT-91827481-UWL002"
   memberId: string;
   memberNo: string;
   fullName: string;
@@ -249,29 +244,18 @@ export interface UwalemiVoterRecord {
   isEligible: boolean;
   ineligibilityReason?: string;
   hasVoted: boolean;
-  votedDate?: string; // YYYY-MM-DD date only (no second/millisecond timestamp to prevent deanonymization)
-  votedAt?: string; // legacy backward compatibility
-  acknowledgmentCode?: string; // Voter acknowledgment receipt e.g. "UWL-ACK-94817" (completely separate from ballot code)
-  receiptCode?: string; // legacy backward compatibility
+  votedAt?: string;
+  receiptCode?: string; // e.g. "UWL-VT-94817"
   smsSentAt?: string;
 }
 
 export interface UwalemiAnonymousBallot {
   id: string;
   electionId: string;
-  date?: string; // YYYY-MM-DD date only
-  timestamp?: string; // date or approximate window
-  receiptCode: string; // Cryptographic verification code for the ballot e.g. "BLT-74819"
+  timestamp: string;
+  receiptCode: string;
   // Map of positionId -> array of candidateIds chosen
   votes: Record<string, string[]>;
-}
-
-export interface UwalemiElectionAuditEntry {
-  id: string;
-  timestamp: string;
-  action: string;
-  performedBy: string;
-  details?: string;
 }
 
 export interface UwalemiElection {
@@ -282,7 +266,6 @@ export interface UwalemiElection {
   startDate: string; // YYYY-MM-DDTHH:mm
   endDate: string; // YYYY-MM-DDTHH:mm
   status: 'draft' | 'active' | 'paused' | 'completed';
-  isStructureLocked?: boolean; // Locked against candidate/position changes once active or completed
   eligibilityCriteria: {
     activeMembersOnly: boolean;
     requireRegistrationFeePaid: boolean;
@@ -290,8 +273,7 @@ export interface UwalemiElection {
   };
   positions: UwalemiElectionPosition[];
   voters: UwalemiVoterRecord[];
-  ballots: UwalemiAnonymousBallot[]; // Anonymous votes storage (shuffled, decoupled from voters)
-  auditTrail?: UwalemiElectionAuditEntry[];
+  ballots: UwalemiAnonymousBallot[]; // Anonymous votes storage
   createdAt: string;
   certifiedAt?: string;
   certifiedBy?: string;

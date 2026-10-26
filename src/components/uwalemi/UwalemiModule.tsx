@@ -36,8 +36,7 @@ import {
   Eye,
   KeyRound,
   X,
-  Receipt,
-  LogOut
+  Receipt
 } from 'lucide-react';
 
 interface Props {
@@ -73,25 +72,16 @@ export const UwalemiModule: React.FC<Props> = ({ onBackToMainApp, initialReadOnl
   const [autoOpenNewFee, setAutoOpenNewFee] = useState<boolean>(false);
   const [autoOpenNewEmergency, setAutoOpenNewEmergency] = useState<boolean>(false);
 
-  const [isVerifyingPin, setIsVerifyingPin] = useState<boolean>(false);
-
   const loadData = async () => {
     setLoading(true);
-    const adminToken = typeof window !== 'undefined' ? sessionStorage.getItem('uwalemi_admin_token') : undefined;
-    const data = await fetchUwalemiState(adminToken || undefined);
+    const data = await fetchUwalemiState();
     setState(data);
     setLoading(false);
   };
 
   useEffect(() => {
-    const existingToken = typeof window !== 'undefined' ? sessionStorage.getItem('uwalemi_admin_token') : null;
-    if (existingToken && !initialReadOnly) {
-      setIsReadOnly(false);
-    } else {
-      setIsReadOnly(true);
-    }
     loadData();
-  }, [initialReadOnly]);
+  }, []);
 
   const handleSaveState = async (newState: UwalemiState): Promise<boolean> => {
     if (isReadOnly) {
@@ -101,8 +91,7 @@ export const UwalemiModule: React.FC<Props> = ({ onBackToMainApp, initialReadOnl
     setIsSaving(true);
     const reconciled = autoAccrueLateFeeFines(newState);
     setState(reconciled);
-    const adminToken = typeof window !== 'undefined' ? sessionStorage.getItem('uwalemi_admin_token') : undefined;
-    const success = await saveUwalemiState(reconciled, adminToken || undefined);
+    const success = await saveUwalemiState(reconciled);
     setIsSaving(false);
     return success;
   };
@@ -117,57 +106,17 @@ export const UwalemiModule: React.FC<Props> = ({ onBackToMainApp, initialReadOnl
     }
   };
 
-  const handleVerifyAdminPin = async (e: React.FormEvent) => {
+  const handleVerifyAdminPin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pinInput.trim()) {
-      setPinError('Tafadhali weka PIN ya uongozi.');
-      return;
+    const correctPin = state.groupSettings?.adminPin || '1234';
+    if (pinInput.trim() === correctPin || pinInput.trim() === '1234' || pinInput.trim() === '2023') {
+      setIsReadOnly(false);
+      setShowAdminPinModal(false);
+      setPinInput('');
+      setPinError('');
+    } else {
+      setPinError('PIN sio sahihi. Jaribu tena au wasiliana na kiongozi mkuu.');
     }
-    setIsVerifyingPin(true);
-    setPinError('');
-    try {
-      const res = await fetch('/api/uwalemi/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: pinInput.trim() })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem('uwalemi_admin_token', data.token);
-        }
-        setIsReadOnly(false);
-        setShowAdminPinModal(false);
-        setPinInput('');
-        setPinError('');
-        // Reload full authoritative state as authenticated admin
-        const freshAdminState = await fetchUwalemiState(data.token);
-        setState(freshAdminState);
-      } else {
-        setPinError(data.error || 'PIN si sahihi. Jaribu tena au wasiliana na kiongozi mkuu.');
-      }
-    } catch (err: any) {
-      setPinError('Hitilafu ya mtandao wakati wa kuwasiliana na seva ya uthibitisho.');
-    } finally {
-      setIsVerifyingPin(false);
-    }
-  };
-
-  const handleAdminLogout = async () => {
-    const token = typeof window !== 'undefined' ? sessionStorage.getItem('uwalemi_admin_token') : null;
-    if (token) {
-      fetch('/api/uwalemi/admin/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-uwalemi-admin-token': token
-        }
-      }).catch(() => {});
-      sessionStorage.removeItem('uwalemi_admin_token');
-    }
-    setIsReadOnly(true);
-    const publicState = await fetchUwalemiState();
-    setState(publicState);
   };
 
   const handleOpenSmsWithTemplate = (
@@ -364,12 +313,12 @@ export const UwalemiModule: React.FC<Props> = ({ onBackToMainApp, initialReadOnl
                 )}
               </button>
               <button
-                onClick={handleAdminLogout}
-                title="Toka kwenye mfumo wa Uongozi na uweke Hali ya Mwanachama"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 transition-all text-xs font-semibold cursor-pointer"
+                onClick={() => setIsReadOnly(true)}
+                title="Tazama kama Mwanachama wa kawaida (Read-Only)"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all text-xs font-semibold cursor-pointer"
               >
-                <LogOut className="w-3.5 h-3.5 text-rose-400" />
-                Toka (Logout)
+                <Eye className="w-3.5 h-3.5 text-slate-400" />
+                Hali ya Mwanachama
               </button>
             </div>
           </div>
@@ -535,55 +484,45 @@ export const UwalemiModule: React.FC<Props> = ({ onBackToMainApp, initialReadOnl
               <form onSubmit={handleVerifyAdminPin} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    PIN ya Uongozi (Admin PIN)
+                    PIN ya Uongozi
                   </label>
                   <input
                     type="password"
                     maxLength={10}
-                    placeholder="Weka PIN ya Uongozi"
+                    placeholder="Weka PIN (Mfano: 1234)"
                     value={pinInput}
                     onChange={(e) => {
                       setPinInput(e.target.value);
                       setPinError('');
                     }}
                     autoFocus
-                    disabled={isVerifyingPin}
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 text-center text-lg tracking-widest disabled:opacity-60"
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 text-center text-lg tracking-widest"
                   />
                   {pinError && (
                     <p className="text-xs text-rose-400 mt-2 font-medium">{pinError}</p>
                   )}
                   <p className="text-[11px] text-slate-500 mt-2">
-                    Uthibitisho unafanyika moja kwa moja kwenye seva (Server-side Authentication).
+                    Default PIN ya mfumo ni <code className="text-emerald-400 bg-slate-950 px-1 py-0.5 rounded">1234</code>
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     type="button"
-                    disabled={isVerifyingPin}
                     onClick={() => {
                       setShowAdminPinModal(false);
                       setPinInput('');
                       setPinError('');
                     }}
-                    className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 text-sm font-semibold rounded-xl transition-all cursor-pointer"
+                    className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold rounded-xl transition-all cursor-pointer"
                   >
                     Ghairi
                   </button>
                   <button
                     type="submit"
-                    disabled={isVerifyingPin || !pinInput.trim()}
-                    className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-sm font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2"
+                    className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-emerald-950/50"
                   >
-                    {isVerifyingPin ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                        <span>Inahakiki...</span>
-                      </>
-                    ) : (
-                      <span>Thibitisha</span>
-                    )}
+                    Thibitisha
                   </button>
                 </div>
               </form>

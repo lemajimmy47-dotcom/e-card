@@ -4119,380 +4119,143 @@ async function startServer() {
   });
 
   // ==========================================
-  // UWALEMI ISOLATED COMMUNITY MODULE & SECURITY
+  // UWALEMI ISOLATED COMMUNITY MODULE APIS
   // ==========================================
-  const uwalemiAdminSessions = new Map<string, { createdAt: number; expiresAt: number; adminName: string }>();
-  const pinAttemptTracker = new Map<string, { attempts: number; lockedUntil: number }>();
-  const uwalemiVoteRateLimit = new Map<string, { count: number; resetAt: number }>();
-
-  function hashAdminPin(pin: string, salt: string = 'uwalemi_sec_salt_2026') {
-    return crypto.createHash('sha256').update(pin.trim() + salt).digest('hex');
-  }
-
-  function hashVoterTokenServer(token: string) {
-    return crypto.createHash('sha256').update(token.trim()).digest('hex');
-  }
-
-  function getUwalemiAdmin(req: express.Request): { adminName: string } | null {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') 
-      ? authHeader.slice(7).trim() 
-      : String(req.headers['x-uwalemi-admin-token'] || '').trim();
-    if (!token) return null;
-    const sess = uwalemiAdminSessions.get(token);
-    if (!sess) return null;
-    if (Date.now() > sess.expiresAt) {
-      uwalemiAdminSessions.delete(token);
-      return null;
-    }
-    return { adminName: sess.adminName };
-  }
-
-  function checkPinRateLimit(ipKey: string): { allowed: boolean; remainingLockMinutes?: number } {
-    const tracker = pinAttemptTracker.get(ipKey);
-    if (tracker && tracker.lockedUntil > Date.now()) {
-      const remainingMinutes = Math.ceil((tracker.lockedUntil - Date.now()) / 60000);
-      return { allowed: false, remainingLockMinutes: remainingMinutes };
-    }
-    return { allowed: true };
-  }
-
-  function recordPinAttempt(ipKey: string, success: boolean) {
-    if (success) {
-      pinAttemptTracker.delete(ipKey);
-      return;
-    }
-    const tracker = pinAttemptTracker.get(ipKey) || { attempts: 0, lockedUntil: 0 };
-    tracker.attempts += 1;
-    if (tracker.attempts >= 5) {
-      tracker.lockedUntil = Date.now() + 15 * 60 * 1000; // 15 minutes lockout
-      tracker.attempts = 0;
-    }
-    pinAttemptTracker.set(ipKey, tracker);
-  }
-
-  function checkVoteRateLimit(ipKey: string): boolean {
-    const now = Date.now();
-    const entry = uwalemiVoteRateLimit.get(ipKey);
-    if (!entry || entry.resetAt < now) {
-      uwalemiVoteRateLimit.set(ipKey, { count: 1, resetAt: now + 60000 });
-      return true;
-    }
-    if (entry.count >= 20) {
-      return false; // Max 20 requests per minute
-    }
-    entry.count += 1;
-    return true;
-  }
-
-  function shuffleBallots<T>(items: T[]): T[] {
-    const copy = [...items];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  }
-
-  // --- ADMIN AUTH ENDPOINTS ---
-  app.post("/api/uwalemi/admin/login", async (req, res) => {
-    try {
-      const clientIp = req.ip || req.socket.remoteAddress || 'unknown-client';
-      const rateLimit = checkPinRateLimit(clientIp);
-      if (!rateLimit.allowed) {
-        return res.status(429).json({ 
-          error: `Majaribio mengi ya PIN yasiyo sahihi. Akaunti imefungwa kwa muda wa dakika ${rateLimit.remainingLockMinutes || 15}.` 
-        });
-      }
-
-      const { pin } = req.body;
-      if (!pin || typeof pin !== 'string') {
-        return res.status(400).json({ error: "PIN inahitajika" });
-      }
-
-      const cleanPin = pin.trim();
-      const db = await readDBLatest();
-      const state = db.uwalemiState || {};
-      const groupSettings = state.groupSettings || {};
-
-      let isAuthenticated = false;
-      let isFirstTimeSetup = false;
-
-      // STRICT AUTH: No hardcoded backdoor 1234 or 2023!
-      if (groupSettings.adminPinHash) {
-        isAuthenticated = (hashAdminPin(cleanPin) === groupSettings.adminPinHash);
-      } else if (groupSettings.adminPin) {
-        // Upgrade legacy plaintext PIN to hash
-        isAuthenticated = (cleanPin === groupSettings.adminPin);
-        if (isAuthenticated) {
-          groupSettings.adminPinHash = hashAdminPin(cleanPin);
-          delete groupSettings.adminPin;
-          db.uwalemiState = state;
-          await writeDB(db);
-        }
-      } else {
-        // If system has no admin PIN configured yet, allow initial configuration
-        if (/^\d{4,8}$/.test(cleanPin)) {
-          groupSettings.adminPinHash = hashAdminPin(cleanPin);
-          db.uwalemiState = state;
-          await writeDB(db);
-          isAuthenticated = true;
-          isFirstTimeSetup = true;
-        } else {
-          return res.status(400).json({ 
-            error: "Tafadhali weka PIN mpya ya namba kati ya 4 hadi 8 ili kuweka ulinzi wa mfumo kwa mara ya kwanza." 
-          });
-        }
-      }
-
-      if (!isAuthenticated) {
-        recordPinAttempt(clientIp, false);
-        return res.status(401).json({ error: "PIN ya uongozi si sahihi. Jaribu tena." });
-      }
-
-      recordPinAttempt(clientIp, true);
-      const sessionToken = crypto.randomBytes(32).toString('hex');
-      const expiresAt = Date.now() + 8 * 3600 * 1000; // 8 hours session
-      uwalemiAdminSessions.set(sessionToken, {
-        createdAt: Date.now(),
-        expiresAt,
-        adminName: 'Kiongozi wa UWALEMI'
-      });
-
-      return res.json({
-        success: true,
-        token: sessionToken,
-        expiresAt,
-        isFirstTimeSetup,
-        message: isFirstTimeSetup ? "PIN ya uongozi imewekwa kikamilifu!" : "Umeingia kama Kiongozi kikamilifu."
-      });
-    } catch (err: any) {
-      console.error("[UWALEMI] Login error:", err);
-      res.status(500).json({ error: "Hitilafu ya seva wakati wa kuingia" });
-    }
-  });
-
-  app.post("/api/uwalemi/admin/logout", (req, res) => {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') 
-      ? authHeader.slice(7).trim() 
-      : String(req.headers['x-uwalemi-admin-token'] || '').trim();
-    if (token) {
-      uwalemiAdminSessions.delete(token);
-    }
-    res.json({ success: true, message: "Umetoka kwenye mfumo wa uongozi" });
-  });
-
-  app.post("/api/uwalemi/admin/change-pin", async (req, res) => {
-    try {
-      const admin = getUwalemiAdmin(req);
-      if (!admin) {
-        return res.status(401).json({ error: "Idhini ya uongozi inahitajika ili kubadilisha PIN." });
-      }
-
-      const { currentPin, newPin } = req.body;
-      if (!newPin || typeof newPin !== 'string' || !/^\d{4,8}$/.test(newPin.trim())) {
-        return res.status(400).json({ error: "PIN mpya lazima iwe namba zenye tarakimu 4 hadi 8." });
-      }
-
-      const db = await readDBLatest();
-      const state = db.uwalemiState || {};
-      const groupSettings = state.groupSettings || {};
-
-      if (groupSettings.adminPinHash) {
-        if (!currentPin || hashAdminPin(currentPin.trim()) !== groupSettings.adminPinHash) {
-          return res.status(400).json({ error: "PIN ya sasa si sahihi." });
-        }
-      }
-
-      groupSettings.adminPinHash = hashAdminPin(newPin.trim());
-      delete groupSettings.adminPin;
-      state.groupSettings = groupSettings;
-      db.uwalemiState = state;
-      await writeDB(db);
-
-      return res.json({ success: true, message: "PIN ya uongozi imesasishwa kikamilifu!" });
-    } catch (err: any) {
-      res.status(500).json({ error: "Hitilafu wakati wa kubadilisha PIN" });
-    }
-  });
-
-  // --- GET /api/uwalemi/state (Protected & Sanitized) ---
   app.get("/api/uwalemi/state", async (req, res) => {
     try {
       const db = await readDBLatest();
-      if (!db.uwalemiState || typeof db.uwalemiState !== 'object') {
-        return res.json({ initialized: false });
-      }
-
-      const rawState = db.uwalemiState;
-      const isAdmin = !!getUwalemiAdmin(req);
-
-      // Normalization helpers
-      if (rawState.groupSettings) {
-        if (!rawState.groupSettings.meetingFineDefault || rawState.groupSettings.meetingFineDefault === 5000 || rawState.groupSettings.meetingFineDefault === 0) {
-          rawState.groupSettings.meetingFineDefault = 10000;
+      if (db.uwalemiState && typeof db.uwalemiState === 'object') {
+        const uState = db.uwalemiState;
+        if (uState.groupSettings) {
+          if (!uState.groupSettings.meetingFineDefault || uState.groupSettings.meetingFineDefault === 5000 || uState.groupSettings.meetingFineDefault === 0) {
+            uState.groupSettings.meetingFineDefault = 10000;
+          }
+          if (!uState.groupSettings.meetingFineLateDefault || uState.groupSettings.meetingFineLateDefault === 0) {
+            uState.groupSettings.meetingFineLateDefault = 2000;
+          }
         }
-        if (!rawState.groupSettings.meetingFineLateDefault || rawState.groupSettings.meetingFineLateDefault === 0) {
-          rawState.groupSettings.meetingFineLateDefault = 2000;
+        if (Array.isArray(uState.finePayments)) {
+          uState.finePayments = uState.finePayments.filter((fp: any) => fp && fp.id !== 'fine-pay-1788768387595').map((fp: any) => ({
+            ...fp,
+            paymentMethod: fp.paymentMethod && /m-?pesa/i.test(fp.paymentMethod) ? 'M Koba' : (fp.paymentMethod || 'M Koba')
+          }));
         }
-      }
-
-      // Clone state for sending
-      const state = JSON.parse(JSON.stringify(rawState));
-
-      if (isAdmin) {
-        // Authenticated Admin View:
-        // Shuffle ballots so temporal correlation with voter activity is permanently severed
-        if (Array.isArray(state.elections)) {
-          state.elections.forEach((elec: any) => {
-            if (Array.isArray(elec.ballots)) {
-              elec.ballots = shuffleBallots(elec.ballots);
+        if (Array.isArray(uState.monthlyPayments)) {
+          uState.monthlyPayments = uState.monthlyPayments.map((p: any) => ({
+            ...p,
+            paymentMethod: p.paymentMethod && /m-?pesa/i.test(p.paymentMethod) ? 'M Koba' : (p.paymentMethod || 'M Koba')
+          }));
+        }
+        if (Array.isArray(uState.emergencyFunds)) {
+          uState.emergencyFunds = uState.emergencyFunds.map((ef: any) => ({
+            ...ef,
+            payments: (ef.payments || []).map((p: any) => ({
+              ...p,
+              paymentMethod: p.paymentMethod && /m-?pesa/i.test(p.paymentMethod) ? 'M Koba' : (p.paymentMethod || 'M Koba')
+            }))
+          }));
+        }
+        if (Array.isArray(uState.expenses)) {
+          uState.expenses = uState.expenses.map((e: any) => ({
+            ...e,
+            paymentMethod: e.paymentMethod && /m-?pesa/i.test(e.paymentMethod) ? 'M Koba' : (e.paymentMethod || 'M Koba')
+          }));
+        }
+        if (uState.groupSettings && Array.isArray(uState.groupSettings.paymentMethods)) {
+          uState.groupSettings.paymentMethods = uState.groupSettings.paymentMethods.map((pm: any) => ({
+            ...pm,
+            provider: pm.provider && /m-?pesa/i.test(pm.provider) ? 'M Koba' : (pm.provider || 'M Koba'),
+            accountName: pm.accountName?.replace(/m-?koba/i, 'M Koba').replace(/vodacom m-?pesa/i, 'M Koba') || pm.accountName
+          }));
+        }
+        if (Array.isArray(uState.meetings)) {
+          uState.meetings.forEach((m: any) => {
+            if (Array.isArray(m.attendees)) {
+              m.attendees.forEach((a: any) => {
+                if (a.status === 'absent' && (!a.fineAmount || a.fineAmount === 5000 || a.fineAmount === 0)) {
+                  a.fineAmount = 10000;
+                }
+                if (a.status === 'late' && (!a.fineAmount || a.fineAmount === 5000 || a.fineAmount === 0)) {
+                  a.fineAmount = 2000;
+                }
+              });
             }
           });
         }
-        return res.json(state);
+        return res.json(uState);
       }
-
-      // Public / Member View:
-      // STRIP sensitive credentials, voter tokens, ballots, and candidate tallies before completed
-      if (state.groupSettings) {
-        delete state.groupSettings.adminPin;
-        delete state.groupSettings.adminPinHash;
-        delete state.groupSettings.adminPinSalt;
-        if (state.groupSettings.smsConfig) {
-          state.groupSettings.smsConfig = {
-            ...state.groupSettings.smsConfig,
-            apiKey: '',
-            secretKey: ''
-          };
-        }
-      }
-
-      if (Array.isArray(state.members)) {
-        state.members = state.members.map((m: any) => {
-          const rawPhone = String(m.phone || '');
-          const maskedPhone = rawPhone.length > 6 
-            ? rawPhone.slice(0, 4) + ' ••• ' + rawPhone.slice(-3) 
-            : rawPhone;
-          return {
-            ...m,
-            phone: maskedPhone,
-            notes: undefined
-          };
-        });
-      }
-
-      if (Array.isArray(state.elections)) {
-        state.elections = state.elections.map((elec: any) => {
-          const isCompleted = elec.status === 'completed';
-          const ballotsCount = Array.isArray(elec.ballots) ? elec.ballots.length : 0;
-          const eligibleCount = Array.isArray(elec.voters) ? elec.voters.filter((v: any) => v.isEligible).length : 0;
-          const turnoutPercent = eligibleCount > 0 ? Math.round((ballotsCount / eligibleCount) * 1000) / 10 : 0;
-
-          return {
-            id: elec.id,
-            title: elec.title,
-            description: elec.description,
-            termYears: elec.termYears,
-            startDate: elec.startDate,
-            endDate: elec.endDate,
-            status: elec.status,
-            eligibilityCriteria: elec.eligibilityCriteria,
-            positions: elec.positions || [],
-            ballots: [], // Hide anonymous ballots from public state
-            voters: [], // Hide voter secrets and tokens from public state
-            createdAt: elec.createdAt,
-            certifiedAt: elec.certifiedAt,
-            certifiedBy: elec.certifiedBy,
-            liveTurnout: {
-              totalEligibleVoters: eligibleCount,
-              totalBallotsCast: ballotsCount,
-              turnoutPercentage: turnoutPercent,
-              isCompleted
-            }
-          };
-        });
-      }
-
-      return res.json(state);
+      // If not initialized, return default structure without writing
+      return res.json({ initialized: false });
     } catch (error: any) {
       console.error("[UWALEMI] Error fetching state:", error);
       res.status(500).json({ error: "Failed to fetch UWALEMI state" });
     }
   });
 
-  // --- POST /api/uwalemi/state (Admin Auth Required & Lost-Update Safe) ---
   app.post("/api/uwalemi/state", async (req, res) => {
     try {
-      const admin = getUwalemiAdmin(req);
-      if (!admin) {
-        return res.status(401).json({ 
-          error: "Idhini ya Uongozi (Admin Token) inahitajika ili kufanya mabadiliko ya taarifa za kikundi." 
-        });
-      }
-
-      const incomingState = req.body;
-      if (!incomingState || typeof incomingState !== 'object') {
+      const state = req.body;
+      if (!state || typeof state !== 'object') {
         return res.status(400).json({ error: "Invalid UWALEMI state payload" });
       }
-
       const db = await readDBLatest();
-      const existingState = db.uwalemiState || {};
-      const existingElections = Array.isArray(existingState.elections) ? existingState.elections : [];
-
-      // CRITICAL LOST-UPDATE PROTECTION:
-      // Preserve server-authoritative ballots, voter voting records, and secret tokens
-      if (Array.isArray(incomingState.elections)) {
-        incomingState.elections = incomingState.elections.map((inElec: any) => {
-          const existing = existingElections.find((e: any) => e.id === inElec.id);
-          if (!existing) {
-            return inElec;
+      if (state.groupSettings) {
+        if (!state.groupSettings.meetingFineDefault || state.groupSettings.meetingFineDefault === 5000 || state.groupSettings.meetingFineDefault === 0) {
+          state.groupSettings.meetingFineDefault = 10000;
+        }
+        if (!state.groupSettings.meetingFineLateDefault || state.groupSettings.meetingFineLateDefault === 0) {
+          state.groupSettings.meetingFineLateDefault = 2000;
+        }
+      }
+      if (Array.isArray(state.meetings)) {
+        state.meetings.forEach((m: any) => {
+          if (Array.isArray(m.attendees)) {
+            m.attendees.forEach((a: any) => {
+              if (a.status === 'absent' && (!a.fineAmount || a.fineAmount === 5000 || a.fineAmount === 0)) {
+                a.fineAmount = 10000;
+              }
+              if (a.status === 'late' && (!a.fineAmount || a.fineAmount === 5000 || a.fineAmount === 0)) {
+                a.fineAmount = 2000;
+              }
+            });
           }
-
-          // Lock election structure against unauthorized changes if active or completed
-          if (existing.status === 'active' || existing.status === 'completed') {
-            inElec.positions = existing.positions;
-            inElec.eligibilityCriteria = existing.eligibilityCriteria;
-            inElec.isStructureLocked = true;
-          }
-
-          // PRESERVE BALLOTS ATOMICALLY from server DB
-          inElec.ballots = existing.ballots || [];
-
-          // PRESERVE VOTER RECORD VOTING STATUSES & TOKENS from server DB
-          const existingVotersMap = new Map((existing.voters || []).map((v: any) => [v.memberId, v]));
-          inElec.voters = (inElec.voters || []).map((inVoter: any) => {
-            const existingVoter: any = existingVotersMap.get(inVoter.memberId);
-            if (existingVoter) {
-              return {
-                ...inVoter,
-                voterToken: existingVoter.voterToken || inVoter.voterToken,
-                voterTokenHash: existingVoter.voterTokenHash || inVoter.voterTokenHash,
-                tokenExpiresAt: existingVoter.tokenExpiresAt || inVoter.tokenExpiresAt,
-                hasVoted: existingVoter.hasVoted ?? inVoter.hasVoted,
-                votedDate: existingVoter.votedDate || inVoter.votedDate,
-                acknowledgmentCode: existingVoter.acknowledgmentCode || inVoter.acknowledgmentCode,
-                smsSentAt: existingVoter.smsSentAt || inVoter.smsSentAt
-              };
-            }
-            return inVoter;
-          });
-
-          return inElec;
         });
-
-        // ENFORCE IMMUTABILITY: Completed elections can NEVER be deleted or wiped from state
-        const existingCompletedElections = existingElections.filter((e: any) => e.status === 'completed');
-        for (const completedElec of existingCompletedElections) {
-          const existsInIncoming = incomingState.elections.some((e: any) => e.id === completedElec.id);
-          if (!existsInIncoming) {
-            incomingState.elections.push(completedElec);
-          }
+        if (Array.isArray(state.finePayments)) {
+          state.finePayments = state.finePayments.filter((fp: any) => fp && fp.id !== 'fine-pay-1788768387595').map((fp: any) => ({
+            ...fp,
+            paymentMethod: fp.paymentMethod && /m-?pesa/i.test(fp.paymentMethod) ? 'M Koba' : (fp.paymentMethod || 'M Koba')
+          }));
+        }
+        if (Array.isArray(state.monthlyPayments)) {
+          state.monthlyPayments = state.monthlyPayments.map((p: any) => ({
+            ...p,
+            paymentMethod: p.paymentMethod && /m-?pesa/i.test(p.paymentMethod) ? 'M Koba' : (p.paymentMethod || 'M Koba')
+          }));
+        }
+        if (Array.isArray(state.emergencyFunds)) {
+          state.emergencyFunds = state.emergencyFunds.map((ef: any) => ({
+            ...ef,
+            payments: (ef.payments || []).map((p: any) => ({
+              ...p,
+              paymentMethod: p.paymentMethod && /m-?pesa/i.test(p.paymentMethod) ? 'M Koba' : (p.paymentMethod || 'M Koba')
+            }))
+          }));
+        }
+        if (Array.isArray(state.expenses)) {
+          state.expenses = state.expenses.map((e: any) => ({
+            ...e,
+            paymentMethod: e.paymentMethod && /m-?pesa/i.test(e.paymentMethod) ? 'M Koba' : (e.paymentMethod || 'M Koba')
+          }));
+        }
+        if (state.groupSettings && Array.isArray(state.groupSettings.paymentMethods)) {
+          state.groupSettings.paymentMethods = state.groupSettings.paymentMethods.map((pm: any) => ({
+            ...pm,
+            provider: pm.provider && /m-?pesa/i.test(pm.provider) ? 'M Koba' : (pm.provider || 'M Koba'),
+            accountName: pm.accountName?.replace(/m-?koba/i, 'M Koba').replace(/vodacom m-?pesa/i, 'M Koba') || pm.accountName
+          }));
         }
       }
 
-<<<<<<< HEAD
       // Preserve and merge existing messageLogs from database so that newly dispatched SMS logs are never lost
       const existingLogs = (db.uwalemiState && Array.isArray(db.uwalemiState.messageLogs)) ? db.uwalemiState.messageLogs : [];
       const incomingLogs = (state && Array.isArray(state.messageLogs)) ? state.messageLogs : [];
@@ -4515,15 +4278,6 @@ async function startServer() {
       state.messageLogs = mergedLogs.slice(0, 10000);
 
       db.uwalemiState = state;
-=======
-      // Preserve admin PIN hash from existing database
-      if (existingState.groupSettings?.adminPinHash && incomingState.groupSettings) {
-        incomingState.groupSettings.adminPinHash = existingState.groupSettings.adminPinHash;
-        delete incomingState.groupSettings.adminPin;
-      }
-
-      db.uwalemiState = incomingState;
->>>>>>> 77f0646f3c95c3762f7f524c5091d95f9a786a74
       await writeDB(db);
       return res.json({ success: true, message: "UWALEMI state saved successfully" });
     } catch (error: any) {
@@ -5224,198 +4978,24 @@ Lema, Nguvu Moja!`;
   // ==========================================
   // UWALEMI DIGITAL ELECTION (E-VOTING) APIS
   // ==========================================
-  let voteMutexLock = Promise.resolve();
-  function withVoteLock<T>(fn: () => Promise<T>): Promise<T> {
-    const next = voteMutexLock.then(fn, fn);
-    voteMutexLock = next.then(() => {});
-    return next;
-  }
-
-  function generateServerVoterAckCode(): string {
-    const randNum = Math.floor(10000 + Math.random() * 90000);
-    const letterCode = Math.random().toString(36).substring(2, 5).toUpperCase();
-    return `UWL-ACK-${letterCode}${randNum}`;
-  }
-
-  function generateServerBallotCode(): string {
-    const randNum = Math.floor(10000 + Math.random() * 90000);
-    const letterCode = Math.random().toString(36).substring(2, 5).toUpperCase();
-    return `BLT-${letterCode}${randNum}`;
-  }
-
-  function calculateServerElectionTally(election: any, totalMembers: number) {
-    const voters = election.voters || [];
-    const ballots = election.ballots || [];
-    const eligibleVoters = voters.filter((v: any) => v.isEligible);
-    const totalEligible = eligibleVoters.length;
-    const totalCast = ballots.length;
-    const rawTurnout = totalEligible > 0 ? (totalCast / totalEligible) * 100 : 0;
-    const turnoutPercentage = Math.round(rawTurnout * 10) / 10;
-
-    const positionsTally = (election.positions || []).map((pos: any) => {
-      const candidateVotes: Record<string, number> = {};
-      (pos.candidates || []).forEach((c: any) => {
-        candidateVotes[c.id] = 0;
-      });
-
-      let totalVotesForPosition = 0;
-      ballots.forEach((ballot: any) => {
-        const votesForPos = ballot.votes?.[pos.id] || [];
-        const uniqueVotes = Array.from(new Set(votesForPos));
-        uniqueVotes.forEach((cId: any) => {
-          if (cId in candidateVotes) {
-            candidateVotes[cId] = (candidateVotes[cId] || 0) + 1;
-            totalVotesForPosition += 1;
-          }
-        });
-      });
-
-      const results = (pos.candidates || []).map((c: any) => {
-        const count = candidateVotes[c.id] || 0;
-        const pct = totalVotesForPosition > 0 ? Math.round((count / totalVotesForPosition) * 1000) / 10 : 0;
-        return {
-          candidateId: c.id,
-          candidateName: c.fullName,
-          candidateNo: c.memberNo,
-          candidatePhone: c.phone,
-          avatarUrl: c.avatarUrl,
-          slogan: c.slogan || c.manifesto,
-          votesCount: count,
-          percentage: pct,
-          isWinner: false,
-          isTie: false
-        };
-      });
-
-      results.sort((a: any, b: any) => b.votesCount - a.votesCount);
-
-      if (totalVotesForPosition > 0 && results.length > 0) {
-        const maxW = Math.max(1, pos.maxWinners || 1);
-        if (maxW === 1) {
-          const topVotes = results[0].votesCount;
-          if (topVotes > 0) {
-            const tiedTop = results.filter((r: any) => r.votesCount === topVotes);
-            if (tiedTop.length > 1) {
-              tiedTop.forEach((r: any) => { r.isTie = true; r.isWinner = false; });
-            } else {
-              results[0].isWinner = true;
-            }
-          }
-        } else {
-          const cutoffIdx = Math.min(maxW - 1, results.length - 1);
-          const cutoffVotes = results[cutoffIdx].votesCount;
-          if (cutoffVotes > 0) {
-            const tiedAtCutoff = results.filter((r: any) => r.votesCount === cutoffVotes);
-            const candidatesAboveCutoff = results.filter((r: any) => r.votesCount > cutoffVotes);
-            candidatesAboveCutoff.forEach((r: any) => { r.isWinner = true; });
-            if (candidatesAboveCutoff.length + tiedAtCutoff.length > maxW) {
-              tiedAtCutoff.forEach((r: any) => { r.isTie = true; r.isWinner = false; });
-            } else {
-              tiedAtCutoff.forEach((r: any) => { r.isWinner = true; });
-            }
-          } else {
-            results.slice(0, maxW).forEach((r: any) => {
-              if (r.votesCount > 0) r.isWinner = true;
-            });
-          }
-        }
-      }
-
-      return {
-        positionId: pos.id,
-        positionTitle: pos.title,
-        maxWinners: pos.maxWinners || 1,
-        totalVotesForPosition,
-        results
-      };
-    });
-
-    return {
-      totalGroupMembers: totalMembers,
-      totalEligibleVoters: totalEligible,
-      totalBallotsCast: totalCast,
-      turnoutPercentage,
-      positionsTally
-    };
-  }
-
-  function parseElectionDate(dateStr: any, isEnd = false): Date | null {
-    if (!dateStr) return null;
-    const str = String(dateStr).trim();
-    if (!str) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-      return new Date(isEnd ? `${str}T23:59:59.999` : `${str}T00:00:00.000`);
-    }
-    const parsed = new Date(str);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  function getElectionTimeStatus(election: any): { timeStatus: 'not_started' | 'open' | 'ended'; isConcluded: boolean } {
-    if (!election) return { timeStatus: 'not_started', isConcluded: false };
-
-    const now = new Date();
-    const startDate = parseElectionDate(election.startDate, false);
-    const endDate = parseElectionDate(election.endDate, true);
-
-    // 1. Officially completed by admin
-    if (election.status === 'completed') {
-      return { timeStatus: 'ended', isConcluded: true };
-    }
-
-    // 2. Explicitly paused by admin
-    if (election.status === 'paused') {
-      return { timeStatus: 'not_started', isConcluded: false };
-    }
-
-    // 3. Automatic End: Time passed endDate
-    if (endDate && now > endDate) {
-      return { timeStatus: 'ended', isConcluded: false };
-    }
-
-    // 4. Manual Active: Admin explicitly activated live (status === 'active')
-    if (election.status === 'active') {
-      return { timeStatus: 'open', isConcluded: false };
-    }
-
-    // 5. Automatic Start: Time reached or passed startDate (now >= startDate)
-    if (startDate && now >= startDate) {
-      return { timeStatus: 'open', isConcluded: false };
-    }
-
-    // 6. Otherwise not started
-    return { timeStatus: 'not_started', isConcluded: false };
-  }
-
-  // --- GET ELECTION BALLOT ---
   app.get("/api/uwalemi/election-ballot/:token", async (req, res) => {
     try {
-      const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
-      if (!checkVoteRateLimit(clientIp)) {
-        return res.status(429).json({ error: "Maombi mengi sana kwa muda mfupi. Tafadhali subiri sekunde 30." });
-      }
-
       const { token } = req.params;
       if (!token) {
         return res.status(400).json({ error: "Kifunguo cha mpiga kura (Token) kinahitajika" });
       }
 
-      const cleanToken = token.trim();
-      const tokenHash = hashVoterTokenServer(cleanToken);
-
       const db = await readDBLatest();
       const state = db.uwalemiState || {};
       const elections = state.elections || [];
 
-      // Find election containing this voter token or token hash
+      // Find election containing this voter token
       let matchedElection: any = null;
       let matchedVoter: any = null;
 
       for (const elec of elections) {
         if (Array.isArray(elec.voters)) {
-          const v = elec.voters.find((vot: any) => 
-            vot.voterToken === cleanToken || 
-            (vot.voterTokenHash && vot.voterTokenHash === tokenHash)
-          );
+          const v = elec.voters.find((vot: any) => vot.voterToken === token);
           if (v) {
             matchedElection = elec;
             matchedVoter = v;
@@ -5426,32 +5006,34 @@ Lema, Nguvu Moja!`;
 
       if (!matchedElection || !matchedVoter) {
         return res.status(404).json({ 
-          error: "Kifunguo cha kura hakijatambuliwa au kimeisha muda wake. Tafadhali thibitisha kiungo ulichotumiwa kwenye SMS yako ya UWALEMI." 
+          error: "Kifunguo cha kura hakijatambuliwa. Tafadhali thibitisha kiungo ulichotumiwa kwenye SMS yako ya UWALEMI." 
         });
       }
 
-      // Check token expiry
-      if (matchedVoter.tokenExpiresAt && new Date(matchedVoter.tokenExpiresAt).getTime() < Date.now()) {
-        return res.status(403).json({ error: "Kiungo chako cha kura kimekwisha muda wake wa matumizi." });
+      // Check date validity
+      const now = new Date();
+      const startDate = matchedElection.startDate ? new Date(matchedElection.startDate) : null;
+      const endDate = matchedElection.endDate ? new Date(matchedElection.endDate) : null;
+
+      let timeStatus: 'not_started' | 'open' | 'ended' = 'open';
+      if (startDate && now < startDate) {
+        timeStatus = 'not_started';
+      } else if (endDate && now > endDate) {
+        timeStatus = 'ended';
       }
 
-      // Time and election status (Manual & Automatic)
-      const { timeStatus, isConcluded: autoIsConcluded } = getElectionTimeStatus(matchedElection);
-
-      // Return ONLY sanitized voter status (no secret token, no ballot linkage)
+      // Sanitize voter info (return only their personal status)
       const voterSafe = {
         memberNo: matchedVoter.memberNo,
         fullName: matchedVoter.fullName,
         phone: matchedVoter.phone,
         isEligible: matchedVoter.isEligible,
         ineligibilityReason: matchedVoter.ineligibilityReason,
-        hasVoted: !!matchedVoter.hasVoted,
-        votedDate: matchedVoter.votedDate || (matchedVoter.votedAt ? matchedVoter.votedAt.slice(0, 10) : undefined),
-        acknowledgmentCode: matchedVoter.acknowledgmentCode || matchedVoter.receiptCode,
-        receiptCode: matchedVoter.acknowledgmentCode || matchedVoter.receiptCode
+        hasVoted: matchedVoter.hasVoted,
+        votedAt: matchedVoter.votedAt,
+        receiptCode: matchedVoter.receiptCode
       };
 
-<<<<<<< HEAD
       // Compute simple, safe aggregate results tally if voter has voted or election ended/completed
       let resultsTally: any = null;
       if (matchedVoter.hasVoted || timeStatus === 'ended' || matchedElection.status === 'completed') {
@@ -5522,33 +5104,9 @@ Lema, Nguvu Moja!`;
           turnoutPercentage: turnoutPercent,
           positionsTally
         };
-=======
-      // STRICT RESULTS DISCLOSURE: Results are disclosed ONLY when election status is 'completed'
-      const isConcluded = matchedElection.status === 'completed';
-
-      const ballots = matchedElection.ballots || [];
-      const voters = matchedElection.voters || [];
-      const totalEligible = voters.filter((v: any) => v.isEligible).length;
-      const totalCast = ballots.length;
-      const rawTurnout = totalEligible > 0 ? (totalCast / totalEligible) * 100 : 0;
-      const turnoutPercent = Math.round(rawTurnout * 10) / 10;
-      const totalGroupMembers = (state.members || []).length || voters.length;
-
-      const liveTurnout = {
-        totalGroupMembers,
-        totalEligibleVoters: totalEligible,
-        totalBallotsCast: totalCast,
-        turnoutPercentage: turnoutPercent,
-        isConcluded
-      };
-
-      // Candidate votes breakdown ONLY returned when officially certified and completed
-      let resultsTally: any = null;
-      if (isConcluded) {
-        resultsTally = calculateServerElectionTally(matchedElection, totalGroupMembers);
->>>>>>> 77f0646f3c95c3762f7f524c5091d95f9a786a74
       }
 
+      // Return clean election info without exposing other voters' tokens
       return res.json({
         success: true,
         election: {
@@ -5577,197 +5135,168 @@ Lema, Nguvu Moja!`;
     }
   });
 
-  // --- CAST ANONYMOUS VOTE (With Mutex & Decoupled Receipts) ---
   app.post("/api/uwalemi/election/vote", async (req, res) => {
     try {
-      const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
-      if (!checkVoteRateLimit(clientIp)) {
-        return res.status(429).json({ error: "Maombi mengi sana kwa muda mfupi. Tafadhali subiri kidogo." });
-      }
-
       const { token, electionId, votes } = req.body;
       if (!token || !electionId || !votes || typeof votes !== 'object') {
         return res.status(400).json({ error: "Taarifa za kura hazijakamilika" });
       }
 
-      const cleanToken = String(token).trim();
-      const tokenHash = hashVoterTokenServer(cleanToken);
+      const db = await readDBLatest();
+      const state = db.uwalemiState || {};
+      const elections = state.elections || [];
 
-      // Execute within vote Mutex to guarantee serial consistency and avoid lost votes / race conditions
-      const result = await withVoteLock(async () => {
-        const db = await readDBLatest();
-        const state = db.uwalemiState || {};
-        const elections = state.elections || [];
+      const elecIndex = elections.findIndex((e: any) => e.id === electionId);
+      if (elecIndex === -1) {
+        return res.status(404).json({ error: "Uchaguzi huu haukupatikana" });
+      }
 
-        const elecIndex = elections.findIndex((e: any) => e.id === electionId);
-        if (elecIndex === -1) {
-          return { status: 404, data: { error: "Uchaguzi huu haukupatikana" } };
-        }
+      const election = elections[elecIndex];
 
-        const election = elections[elecIndex];
+      // Check election status
+      if (election.status !== 'active') {
+        const statusMsg = election.status === 'completed' 
+          ? "Uchaguzi umeshakamilika na kufungwa rasmi."
+          : election.status === 'paused'
+            ? "Uchaguzi umesitishwa kwa muda na Kamati ya Uchaguzi."
+            : "Uchaguzi bado haujaanza rasmi (Hali: Matayarisho).";
+        return res.status(400).json({ error: statusMsg });
+      }
 
-        // Check election status - Allow voting if timeStatus is 'open' OR election.status is 'active'
-        const { timeStatus: currentVoteTimeStatus } = getElectionTimeStatus(election);
-        if (currentVoteTimeStatus !== 'open' && election.status !== 'active') {
-          const statusMsg = election.status === 'completed' 
-            ? "Uchaguzi umeshakamilika na kufungwa rasmi."
-            : election.status === 'paused'
-              ? "Uchaguzi umesitishwa kwa muda na Kamati ya Uchaguzi."
-              : currentVoteTimeStatus === 'ended'
-                ? "Muda uliopangwa wa upigaji kura umemalizika kwa mujibu wa ratiba."
-                : "Uchaguzi bado haujaanza rasmi.";
-          return { status: 400, data: { error: statusMsg } };
-        }
+      // Check time window
+      const now = new Date();
+      if (election.startDate && new Date(election.startDate) > now) {
+        return res.status(400).json({ error: `Muda wa kuanza kupiga kura bado haujafika (${new Date(election.startDate).toLocaleString('sw-TZ')}).` });
+      }
+      if (election.endDate && new Date(election.endDate) < now) {
+        return res.status(400).json({ error: `Dirisha la kupiga kura limefungwa rasmi tarehe ${new Date(election.endDate).toLocaleString('sw-TZ')}.` });
+      }
 
-        // Find voter in election
-        const voterIndex = (election.voters || []).findIndex((v: any) => 
-          v.voterToken === cleanToken || 
-          (v.voterTokenHash && v.voterTokenHash === tokenHash)
-        );
-        if (voterIndex === -1) {
-          return { status: 404, data: { error: "Kifunguo chako cha kura si sahihi au hakimo kwenye daftari la uchaguzi huu." } };
-        }
+      // Find voter in election
+      const voterIndex = (election.voters || []).findIndex((v: any) => v.voterToken === token);
+      if (voterIndex === -1) {
+        return res.status(404).json({ error: "Kifunguo chako cha kura si sahihi au hakimo kwenye daftari la uchaguzi huu." });
+      }
 
-        const voter = election.voters[voterIndex];
+      const voter = election.voters[voterIndex];
 
-        // Eligibility check
-        if (!voter.isEligible) {
-          return { 
-            status: 403, 
-            data: { error: `Huna sifa ya kupiga kura katika uchaguzi huu: ${voter.ineligibilityReason || 'Vigezo vya kikatiba havijakamilika.'}` } 
-          };
-        }
-
-        // Double voting prevention
-        if (voter.hasVoted) {
-          return { 
-            status: 400, 
-            data: { error: "Tayari ulishapiga kura yako ya uchaguzi huu. Kura moja tu inaruhusiwa kikatiba." } 
-          };
-        }
-
-        // STRICT VALIDATION: Duplicate candidates, invalid candidate IDs, and position boundaries
-        const cleanVotes: Record<string, string[]> = {};
-        const positions = election.positions || [];
-
-        for (const pos of positions) {
-          const candidateIds = votes[pos.id];
-          if (Array.isArray(candidateIds) && candidateIds.length > 0) {
-            // Check for duplicates within the chosen list for this position
-            const uniqueCandSet = new Set(candidateIds);
-            if (uniqueCandSet.size !== candidateIds.length) {
-              return { 
-                status: 400, 
-                data: { error: `Hitilafu: Mgombea hawezi kuchaguliwa zaidi ya mara moja katika nafasi ya "${pos.title}".` } 
-              };
-            }
-
-            const maxWinners = Math.max(1, pos.maxWinners || 1);
-            if (candidateIds.length > maxWinners) {
-              return { 
-                status: 400, 
-                data: { error: `Nafasi ya "${pos.title}" inaruhusu kuchagua wagombea wasiozidi ${maxWinners}. Umechagua ${candidateIds.length}.` } 
-              };
-            }
-
-            // Verify all selected candidates genuinely exist in this position
-            for (const cId of candidateIds) {
-              const candExists = (pos.candidates || []).some((c: any) => c.id === cId);
-              if (!candExists) {
-                return { 
-                  status: 400, 
-                  data: { error: `Mgombea asiyetambuliwa amechaguliwa katika nafasi ya "${pos.title}".` } 
-                };
-              }
-            }
-
-            cleanVotes[pos.id] = candidateIds;
-          } else {
-            // Explicit abstention for this position
-            cleanVotes[pos.id] = [];
-          }
-        }
-
-        // DECOUPLE RECEIPTS:
-        // 1. Voter acknowledgment code (confirms voter participated, ZERO link to ballot)
-        const voterAckCode = generateServerVoterAckCode();
-        // 2. Cryptographic ballot verification code (attached ONLY to anonymous ballot)
-        const ballotVerificationCode = generateServerBallotCode();
-        // 3. Date only: NO millisecond timestamps to prevent temporal deanonymization
-        const voteDateOnly = new Date().toISOString().slice(0, 10);
-
-        if (!Array.isArray(election.ballots)) {
-          election.ballots = [];
-        }
-
-        // Insert anonymous ballot
-        election.ballots.push({
-          id: `ballot-${crypto.randomBytes(8).toString('hex')}`,
-          electionId: election.id,
-          date: voteDateOnly,
-          timestamp: voteDateOnly,
-          receiptCode: ballotVerificationCode,
-          votes: cleanVotes
+      // Eligibility check
+      if (!voter.isEligible) {
+        return res.status(403).json({ 
+          error: `Huna sifa ya kupiga kura katika uchaguzi huu: ${voter.ineligibilityReason || 'Vigezo vya kikatiba havijakamilika.'}` 
         });
+      }
 
-        // PERMANENT SHUFFLE: Randomize ballots array so index order never reflects voter order
-        election.ballots = shuffleBallots(election.ballots);
+      // Already voted check
+      if (voter.hasVoted) {
+        return res.status(400).json({ 
+          error: `Tayari ulishapiga kura yako ya uchaguzi huu tarehe ${new Date(voter.votedAt).toLocaleString('sw-TZ')} (Stakabadhi: ${voter.receiptCode}). Kura moja tu inaruhusiwa.` 
+        });
+      }
 
-        // Mark voter as hasVoted, save acknowledgment code, and CLEAR any link to ballot
-        voter.hasVoted = true;
-        voter.votedDate = voteDateOnly;
-        voter.acknowledgmentCode = voterAckCode;
-        delete voter.receiptCode; // Wipe legacy receipt link
-        delete voter.votedAt; // Wipe millisecond timestamp
+      // Validate positions and vote selections
+      const cleanVotes: Record<string, string[]> = {};
+      const positions = election.positions || [];
 
-        // Persist DB
-        elections[elecIndex] = election;
-        state.elections = elections;
-        db.uwalemiState = state;
-        await writeDB(db);
-
-        // Dispatch Confirmation SMS in background directly using dispatchSMS (no localhost HTTP call)
-        const voterPhone = voter.phone;
-        const voterName = voter.fullName;
-        if (voterPhone && voterPhone.length >= 9) {
-          setTimeout(async () => {
-            try {
-              const smsText = `UWALEMI UCHAGUZI: Ndugu ${voterName}, kura yako ya viongozi imepokelewa na kurekodiwa kwa siri 100%. Namba ya Uthibitisho: ${voterAckCode}. Tarehe: ${voteDateOnly}. Asante kwa kushiriki.`;
-              const globalSmsSettings = db.smsGatewaySettings || {};
-              await dispatchSMS(voterPhone, smsText, 'sms', globalSmsSettings);
-            } catch (e: any) {
-              console.warn('[UWALEMI ELECTION] Confirmation SMS dispatch failed:', e.message);
-            }
-          }, 100);
-        }
-
-        return {
-          status: 200,
-          data: {
-            success: true,
-            acknowledgmentCode: voterAckCode,
-            ballotVerificationCode,
-            votedDate: voteDateOnly,
-            message: "Hongera! Kura yako ya uchaguzi wa UWALEMI imepokelewa na kurekodiwa kikamilifu kwa siri 100%."
+      for (const pos of positions) {
+        const candidateIds = votes[pos.id];
+        if (Array.isArray(candidateIds) && candidateIds.length > 0) {
+          const maxWinners = Math.max(1, pos.maxWinners || 1);
+          if (candidateIds.length > maxWinners) {
+            return res.status(400).json({ 
+              error: `Nafasi ya "${pos.title}" inaruhusu kuchagua wagombea wasiozidi ${maxWinners}. Umechagua ${candidateIds.length}.` 
+            });
           }
-        };
+          // Verify candidate IDs exist in this position
+          const validCandidateIds = candidateIds.filter((cId: string) => 
+            (pos.candidates || []).some((c: any) => c.id === cId)
+          );
+          cleanVotes[pos.id] = validCandidateIds;
+        } else {
+          // Empty vote / Abstention for this position
+          cleanVotes[pos.id] = [];
+        }
+      }
+
+      // Generate anonymous receipt code
+      const randNum = Math.floor(10000 + Math.random() * 90000);
+      const letterCode = Math.random().toString(36).substring(2, 5).toUpperCase();
+      const receiptCode = `UWL-VT-${letterCode}${randNum}`;
+      const voteTimestamp = new Date().toISOString();
+
+      // Record anonymous ballot (NO voter identification attached!)
+      if (!Array.isArray(election.ballots)) {
+        election.ballots = [];
+      }
+      election.ballots.push({
+        id: `ballot-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        electionId: election.id,
+        timestamp: voteTimestamp,
+        receiptCode,
+        votes: cleanVotes
       });
 
-      return res.status(result.status).json(result.data);
+      // Update voter record (mark that this member has voted, but don't store what they voted for)
+      voter.hasVoted = true;
+      voter.votedAt = voteTimestamp;
+      voter.receiptCode = receiptCode;
+
+      // Persist state
+      elections[elecIndex] = election;
+      state.elections = elections;
+      db.uwalemiState = state;
+      await writeDB(db);
+
+      console.log(`[UWALEMI ELECTION] Ballot cast successfully for voter ${voter.memberNo}. Receipt: ${receiptCode}`);
+
+      // Try sending confirmation SMS to voter in the background
+      const voterPhone = voter.phone;
+      const voterName = voter.fullName;
+      if (voterPhone && voterPhone.length >= 9) {
+        setTimeout(async () => {
+          try {
+            const smsText = `UWALEMI UCHAGUZI: Ndugu ${voterName}, kura yako ya viongozi imepokelewa na kurekodiwa kwa siri 100%. Namba ya Stakabadhi: ${receiptCode}. Tarehe: ${new Date(voteTimestamp).toLocaleDateString('sw-TZ')}. Asante kwa kushiriki.`;
+            
+            const configuredSms = state.groupSettings?.smsConfig;
+            const globalSmsSettings = db.smsGatewaySettings || {};
+            let activeApiKey = configuredSms?.apiKey || globalSmsSettings?.apiKey || '';
+            let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'meseji';
+            if (activeApiKey.startsWith('swl_')) effectiveProvider = 'swalasms';
+            else if (activeApiKey.startsWith('sk_')) effectiveProvider = 'ehub';
+
+            if (effectiveProvider !== 'simulation' && activeApiKey) {
+              const smsPayload = {
+                recipients: [{ name: voterName, phone: voterPhone, memberNo: voter.memberNo }],
+                message: smsText,
+                messageType: 'receipt'
+              };
+              // Dispatch SMS via internal helper if available
+              fetch(`http://localhost:3000/api/uwalemi/send-sms`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(smsPayload)
+              }).catch((e: any) => console.warn('[UWALEMI ELECTION] Confirmation SMS dispatch failed:', e.message));
+            }
+          } catch (e: any) {
+            console.warn('[UWALEMI ELECTION] Could not send confirmation SMS:', e.message);
+          }
+        }, 100);
+      }
+
+      return res.json({
+        success: true,
+        receiptCode,
+        votedAt: voteTimestamp,
+        message: "Hongera! Kura yako ya uchaguzi wa UWALEMI imepokelewa na kurekodiwa kikamilifu kwa siri 100%."
+      });
     } catch (err: any) {
       console.error("[UWALEMI ELECTION] Error casting vote:", err);
       res.status(500).json({ error: "Hitilafu ya seva wakati wa kurekodi kura yako" });
     }
   });
 
-  // --- SEND SECURE VOTER LINKS (Admin Auth Required & Dynamic URL) ---
   app.post("/api/uwalemi/election/send-voter-links", async (req, res) => {
     try {
-      const admin = getUwalemiAdmin(req);
-      if (!admin) {
-        return res.status(401).json({ error: "Idhini ya Uongozi inahitajika ili kutuma viungo vya kura." });
-      }
-
       const { electionId, voterTokens, customMessageTemplate, originUrl } = req.body;
       if (!electionId) {
         return res.status(400).json({ error: "electionId inahitajika" });
@@ -5793,28 +5322,24 @@ Lema, Nguvu Moja!`;
         return res.status(400).json({ error: "Hakuna wapiga kura wenye sifa waliochaguliwa" });
       }
 
-      // Dynamic host origin (avoids hardcoded localhost or stale app URLs)
-      const hostOrigin = originUrl || (req.protocol + '://' + req.get('host')) || process.env.APP_URL || '';
+      // Determine base URL
+      const hostOrigin = originUrl || 'https://ais-dev-szslj3otpfjyj7doxrjz75-384135275183.europe-west2.run.app';
 
       const defaultTemplate = `Habari {name}, uchaguzi wa viongozi wa UWALEMI unaendelea. Bofya kiungo hiki cha siri kupiga kura yako: {link} . Tafadhali usimtumie mtu mwingine kiungo hiki.`;
       const template = customMessageTemplate || defaultTemplate;
+
+      const configuredSms = state.groupSettings?.smsConfig;
       const globalSmsSettings = db.smsGatewaySettings || {};
+      let activeApiKey = configuredSms?.apiKey || globalSmsSettings?.apiKey || '';
+      let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'meseji';
+      if (activeApiKey.startsWith('swl_')) effectiveProvider = 'swalasms';
+      else if (activeApiKey.startsWith('sk_')) effectiveProvider = 'ehub';
 
       let sentCount = 0;
       let failedCount = 0;
       const nowStr = new Date().toISOString();
 
       for (const voter of targetVoters) {
-        // Ensure voter has a secure unguessable random token (no member number inside)
-        if (!voter.voterToken || voter.voterToken.includes(voter.memberNo)) {
-          const freshBytes = crypto.randomBytes(24).toString('hex');
-          voter.voterToken = 'VTOK_' + freshBytes;
-          voter.voterTokenHash = hashVoterTokenServer(voter.voterToken);
-          voter.tokenExpiresAt = election.endDate 
-            ? new Date(new Date(election.endDate).getTime() + 24 * 3600 * 1000).toISOString()
-            : new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
-        }
-
         const personalLink = `${hostOrigin}/?uwalemiVote=${voter.voterToken}`;
         let personalizedMsg = template
           .replace(/{name}/g, voter.fullName)
@@ -5833,16 +5358,25 @@ Lema, Nguvu Moja!`;
         personalizedMsg = personalizedMsg.replace(/ {2,}/g, ' ').trim();
 
         try {
-          await dispatchSMS(voter.phone, personalizedMsg, 'sms', globalSmsSettings);
+          if (effectiveProvider !== 'simulation' && activeApiKey) {
+            await fetch(`http://localhost:3000/api/uwalemi/send-sms`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                recipients: [{ name: voter.fullName, phone: voter.phone, memberNo: voter.memberNo }],
+                message: personalizedMsg,
+                messageType: 'broadcast'
+              })
+            });
+          }
           voter.smsSentAt = nowStr;
           sentCount++;
         } catch (e: any) {
-          console.error(`[UWALEMI ELECTION] Error sending SMS to ${voter.phone}:`, e);
           failedCount++;
         }
       }
 
-      // Save updated voter timestamps & tokens
+      // Save updated voter.smsSentAt timestamps
       db.uwalemiState = state;
       await writeDB(db);
 

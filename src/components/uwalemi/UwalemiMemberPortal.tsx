@@ -81,6 +81,14 @@ export const UwalemiMemberPortal: React.FC<Props> = ({ memberNoOrPhone, onClose,
         <p className="text-sm text-slate-400 mt-1 max-w-sm">
           Namba ya mwanachama "{memberNoOrPhone}" haijasajiliwa kwenye daftari la UWALEMI.
         </p>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="mt-6 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold"
+          >
+            Rudi Nyuma
+          </button>
+        )}
       </div>
     );
   }
