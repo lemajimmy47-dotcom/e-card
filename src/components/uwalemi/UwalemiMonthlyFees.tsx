@@ -1627,7 +1627,7 @@ Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Tafadhali kamilisha malipo yako 
     const activeM = members.filter(m => m.status === 'active');
     const debtors = activeM.filter(m => {
       const debtInfo = calculateMemberFeeDebt(m, state);
-      return (debtInfo.unpaidCount || 0) >= 3;
+      return (debtInfo.totalDebt || 0) > 0;
     }).map(m => {
       const debtInfo = calculateMemberFeeDebt(m, state);
       return {
@@ -1649,7 +1649,7 @@ Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Tafadhali kamilisha malipo yako 
     });
 
     if (debtors.length === 0) {
-      alert('Hakuna mwanachama anayedaiwa ada ya miezi 3 au zaidi!');
+      alert('Hakuna mwanachama anayedaiwa deni lolote (ada au faini) kwa sasa!');
       return;
     }
 
@@ -1739,10 +1739,10 @@ Lipa kupitia M Koba au 0758 219 298 Eva O Lema. Tafadhali kamilisha malipo yako 
                     <button
                       onClick={handleSendThreeMonthsAlert}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600/30 hover:bg-red-600/40 text-red-200 border border-red-500/50 text-xs font-bold transition-all cursor-pointer shadow-sm ring-1 ring-red-500/30"
-                      title="Tuma Alert ya Katiba na Onyo la Faini ya Tarehe 1 kwa wote wenye madeni ya miezi 3+"
+                      title="Tuma Alert ya Katiba na Onyo la Faini ya Tarehe 1 kwa wanachama wote wenye madeni yote (ada na faini)"
                     >
                       <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                      🚨 Alert ya Katiba (Miezi 3+)
+                      🚨 Alert ya Katiba (Wenye Madeni Yote)
                     </button>
                   </>
                 )}

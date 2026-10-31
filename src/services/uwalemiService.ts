@@ -1062,7 +1062,7 @@ ${closingSection}`;
 
 export const UWALEMI_THREE_MONTHS_ALERT_TEMPLATE = `Habari {name},
 
-Uongozi wa UWALEMI unakutaarifu kuwa unadaiwa ada ya jumla ya TZS {feeDebt} ({unpaidMonthsCount} miezi: {unpaidMonths}) pamoja na faini ya TZS {faini}, hivyo jumla ya kiasi chote unachodaiwa (ada + faini) ni TZS {totalDebt}.
+Uongozi wa UWALEMI unakutaarifu kuwa {maelezo_ya_madeni}, hivyo jumla ya kiasi chote unachodaiwa ni TZS {totalDebt}.
 
 ANGALIZO MUHIMU: Kesho tarehe 1 faini itatozwa kwa wanachama wote wanaodaiwa ada zaidi ya miezi mitatu, na kwa wale wenye madeni ya faini ya nyuma ya kuchelewesha ada, faini zao zitaongezeka.
 
@@ -1159,7 +1159,21 @@ export function formatPersonalizedUwalemiSms(
   fullBreakdownParts.push(`- JUMLA KUU UNAYODAIWA: ${formattedTotalDebt}`);
   const fullBreakdownStr = fullBreakdownParts.join('\n');
 
+  let summaryMadeniAlert = '';
+  if (debtInfo.feeDebt > 0 && debtInfo.totalFinesDebt > 0) {
+    summaryMadeniAlert = `unadaiwa ada ya jumla ya ${formattedFeeDebt} (${debtInfo.periodSummary || `${debtInfo.unpaidCount} miezi`}: ${unpaidMonthsDetailed}) pamoja na faini ya ${formattedTotalFines} (${finesSummaryText})`;
+  } else if (debtInfo.feeDebt > 0) {
+    summaryMadeniAlert = `unadaiwa ada ya jumla ya ${formattedFeeDebt} (${debtInfo.periodSummary || `${debtInfo.unpaidCount} miezi`}: ${unpaidMonthsDetailed})`;
+  } else if (debtInfo.totalFinesDebt > 0) {
+    summaryMadeniAlert = `unadaiwa faini ya jumla ya ${formattedTotalFines} (${finesSummaryText})`;
+  } else {
+    summaryMadeniAlert = `unadaiwa jumla ya ${formattedTotalDebt}`;
+  }
+
   let res = template
+    .replace(/{maelezo_ya_madeni}/g, summaryMadeniAlert)
+    .replace(/{mchanganuo_mfupi}/g, summaryMadeniAlert)
+    .replace(/unadaiwa ada ya jumla ya TZS {feeDebt} \({unpaidMonthsCount} miezi: {unpaidMonths}\) pamoja na faini ya TZS {faini}/gi, summaryMadeniAlert)
     .replace(/{name}/g, debtInfo.memberName)
     .replace(/\s*\(\s*{memberNo}\s*\)/g, '')
     .replace(/{memberNo}/g, '')

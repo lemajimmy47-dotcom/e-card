@@ -491,7 +491,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
 
     if (recipientFilter === 'three_months_debt') {
       return memberDebts
-        .filter(d => (d.unpaidCount || 0) >= 3 && d.status === 'active')
+        .filter(d => (d.totalDebt || 0) > 0 && d.status === 'active')
         .map(d => ({
           name: d.memberName,
           phone: d.phone,
@@ -1095,10 +1095,10 @@ Lema, Nguvu Moja!`);
                     handleApplyTemplate('three_months_debt_alert');
                   }}
                   className="px-3 py-1 rounded-lg bg-red-600/30 hover:bg-red-600/40 text-red-200 text-[11px] font-bold border border-red-500/50 cursor-pointer flex items-center gap-1.5 shadow-sm ring-1 ring-red-500/30"
-                  title="Weka ujumbe wa onyo la faini ya tarehe 1 na hatua za kikatiba kwa wenye madeni ya miezi 3+"
+                  title="Weka ujumbe wa Alert ya Katiba na onyo la faini ya tarehe 1 kwa wanachama wote wenye madeni yote (ada na faini)"
                 >
                   <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                  🚨 Alert ya Katiba (Miezi 3+)
+                  🚨 Alert ya Katiba (Wenye Madeni Yote)
                 </button>
                 <button
                   type="button"
@@ -1549,13 +1549,13 @@ Lema, Nguvu Moja!`);
                 />
                 <div>
                   <span className="font-bold text-red-300 flex items-center gap-1.5">
-                    🚨 Madeni ya Miezi 3+ (Alert ya Tarehe 1 & Katiba)
+                    🚨 Alert ya Katiba (Wenye Madeni Yote: Ada & Faini)
                     <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 text-[10px] font-mono">
-                      {memberDebts.filter(d => (d.unpaidCount || 0) >= 3 && d.status === 'active').length}
+                      {memberDebts.filter(d => (d.totalDebt || 0) > 0 && d.status === 'active').length}
                     </span>
                   </span>
                   <span className="text-[11px] text-slate-400 block mt-0.5">
-                    Huchuja wanachama wote wanaodaiwa ada kuanzia miezi 3 na kuendelea kwa ajili ya kuwapa onyo la faini ya tarehe 1 na hatua za kikatiba.
+                    Huchuja wanachama wote wanaodaiwa deni la aina yoyote (ada za miezi, faini za vikao au faini za ada) kwa ajili ya kuwapa onyo la tarehe 1 na hatua za kikatiba.
                   </span>
                 </div>
               </label>
