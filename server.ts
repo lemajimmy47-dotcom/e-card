@@ -2981,12 +2981,14 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
     
     console.log(`[SMS] Notify Africa Dispatch: ${requestUrl}, Recipient: ${formattedPhone}, SenderID: ${senderId}`);
   } else if (effectiveProvider === "swalasms" || actualIsSwala) {
+    if (!apiKey) {
+      throw new Error(`API Key ya SwalaSMS haijawekwa. Tafadhali bonyeza Alama ya Mipangilio (⚙️) kwenye Kutuma Ujumbe kisha uweke SwalaSMS API Key yako kutoka swalasms.com.`);
+    }
     requestUrl = settings.url || "https://swalasms.com/api/v1/sms/quick-message";
-    const effectiveKey = (apiKey && apiKey.startsWith("swl_")) ? apiKey : "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3";
-    const isUwalemiMsg = text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-"));
+    const effectiveKey = apiKey;
     const effectiveSenderId = (senderId && !senderId.includes("-") && senderId !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1")
       ? senderId
-      : (isUwalemiMsg ? "UWALEMI" : "EVENT CARD");
+      : "UWALEMI";
 
     fetchOptions.headers = {
       ...fetchOptions.headers,
@@ -3144,20 +3146,18 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
         else if (p.error) detailMsg = p.error;
       } catch {}
 
-      throw new Error(`Salio la SMS Halitoshi (Insufficient Balance): Akaunti yako ya MESEJI haina salio la kutosha (${detailMsg}). Tafadhali ongeza salio kwenye akaunti yako ya Meseji.co.tz, au washa Hali ya Majaribio (Simulation) kwenye Mipangilio ya SMS, au tuma stakabadhi/ujumbe kupitia WhatsApp.`);
+      const providerName = (effectiveProvider === "swalasms" || actualIsSwala) ? "SwalaSMS" : "SMS";
+      throw new Error(`Salio la SMS Halitoshi (Insufficient Balance): Akaunti yako ya ${providerName} haina salio la kutosha (${detailMsg}). Tafadhali ongeza salio kwenye akaunti yako ya swalasms.com, au washa Hali ya Majaribio (Simulation) kwenye Mipangilio ya SMS.`);
     }
 
     if (isAuthError) {
-      if (actualIsSwala) {
-        throw new Error(`Kifunguo chako cha API cha SwalaSMS kimeisha muda au si sahihi (Invalid SwalaSMS Token). Tafadhali thibitisha salio la SwalaSMS na Token yako. [Jibu la Gateway: ${sanitizedBody}]`);
+      if (actualIsSwala || effectiveProvider === "swalasms") {
+        throw new Error(`API Key ya SwalaSMS si sahihi au imekwisha muda (Unauthorized API Key). Tafadhali ingia kwenye akaunti yako ya swalasms.com > Developers, nakili au utengeneze API Key mpya, kisha uiweke kwenye Mipangilio ya SMS (⚙️). [Jibu la SwalaSMS: ${sanitizedBody}]`);
       }
       if (actualIsEhub) {
-        throw new Error(`Kifunguo chako cha API cha eHub SMS kimeisha muda au si sahihi (Invalid eHub Token). Tafadhali thibitisha salio la eHub na Token yako. [Jibu la Gateway: ${sanitizedBody}]`);
+        throw new Error(`Kifunguo chako cha API cha eHub SMS kimeisha muda au si sahihi. [Jibu: ${sanitizedBody}]`);
       }
-      if (apiKey.startsWith("EAA")) {
-        throw new Error(`Hitilafu ya Usanidi: Ufunguo wako wa API wa SMS unaonekana kuwa ni Token ya Meta WhatsApp (inajumuisha 'EAA...'). Kwa ajili ya kutuma SMS za kawaida, unahitaji kuweka Token ya Meseji.co.tz kwenye Mipangilio ya SMS, sio Token ya Meta WhatsApp. Tafadhali nenda kwenye Alama ya Mipangilio (Settings Icon) kisha weka API Token sahihi ya Meseji.co.tz.`);
-      }
-      throw new Error(`Kifunguo chako cha API kimeisha muda au ni batili (Invalid or Expired Meseji Token). Tafadhali ingia kwenye akaunti yako ya Meseji.co.tz, thibitisha salio la SMS (Credits), na utengeneze token mpya chini ya API Settings. [Jibu la Gateway: ${sanitizedBody}]`);
+      throw new Error(`API Key ya SMS si sahihi au imekwisha muda. Tafadhali ingia kwenye Mipangilio ya SMS (⚙️) na uweke API Key sahihi. [Jibu: ${sanitizedBody}]`);
     }
 
     const lowerContent = responseContent.toLowerCase();
@@ -3177,6 +3177,17 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
         else if (p.errors?.recipient?.[0]) friendlyDetail = p.errors.recipient[0];
       } catch {}
       throw new Error(`Hitilafu ya Nambari ya Simu: ${friendlyDetail || sanitizedBody}. Tafadhali hakikisha namba ya mpokeaji imeandikwa kwa usahihi (mfano: 07XXXXXXXX au +2557XXXXXXXX).`);
+    }
+
+    // Check for SwalaSMS ROUTE_UNAVAILABLE / DEFINITELY_NOT_ACCEPTED
+    const isSwalaRouteError = 
+      (actualIsSwala || effectiveProvider === "swalasms") &&
+      (lowerContent.includes("route_unavailable") || 
+       lowerContent.includes("definitely_not_accepted") || 
+       lowerContent.includes("route unavailable"));
+
+    if (isSwalaRouteError) {
+      throw new Error(`Jina la Mtumaji (Sender ID: "${senderId}") halijaidhinishwa kwenye akaunti yako ya SwalaSMS (Hitilafu: ROUTE_UNAVAILABLE). Mtoa huduma SwalaSMS amekataa ujumbe kwa sababu Sender ID "${senderId}" haina kibali cha TCRA kwenye akaunti yako. Tafadhali ingia kwenye akaunti yako ya SwalaSMS (swalasms.com) > Sender IDs ili kusajili na kuidhinishiwa jina la "${senderId}". [Jibu: ${sanitizedBody}]`);
     }
 
     const isSenderIdError = 
@@ -3209,7 +3220,9 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
       lowerContent.includes("exceeds limit") ||
       lowerContent.includes("max length") ||
       lowerContent.includes("character limit") ||
-      (response.status === 422 && (lowerContent.includes("640") || lowerContent.includes("message")));
+      lowerContent.includes("message length") ||
+      lowerContent.includes("message too long") ||
+      (response.status === 422 && (lowerContent.includes("640") || lowerContent.includes("too long") || lowerContent.includes("character")));
 
     if (isLengthError) {
       throw new Error(`Ujumbe umezidi urefu unaoruhusiwa na mtoa huduma (${effectiveProvider.toUpperCase()}). Tafadhali fupisha ujumbe wako. [Jibu: ${sanitizedBody}]`);
@@ -4182,20 +4195,25 @@ async function startServer() {
       const uwalemiState = db.uwalemiState || {};
       const globalSmsSettings = db.smsGatewaySettings || {};
       const configuredSms = uwalemiState.groupSettings?.smsConfig;
-      // STRICT: User's explicitly chosen provider must be respected 100%!
-      let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'meseji';
+      // Default to SwalaSMS as primary provider
+      let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'swalasms';
       let activeApiKey = (configuredSms?.apiKey ?? (configuredSms?.provider === globalSmsSettings?.provider ? globalSmsSettings?.apiKey : '') ?? '').trim();
       let resolvedSenderId = (configuredSms?.senderId ?? globalSmsSettings?.senderId ?? '').trim();
       let activeSecretKey = configuredSms?.secretKey ?? globalSmsSettings?.apiSecret ?? '';
       let activeBaseUrl = configuredSms?.baseUrl ?? globalSmsSettings?.url ?? '';
 
-      if (effectiveProvider === 'ehub') {
+      if (effectiveProvider === 'swalasms' && (!activeApiKey || activeApiKey === 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3')) {
+        effectiveProvider = 'ehub';
+        activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+        activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+        resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+        activeBaseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
+      } else if (effectiveProvider === 'ehub') {
         if (!activeApiKey) activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
         if (!activeSecretKey) activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
         if (!resolvedSenderId) resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
         if (!activeBaseUrl) activeBaseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
       } else if (effectiveProvider === 'swalasms') {
-        if (!activeApiKey) activeApiKey = 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
         if (!resolvedSenderId) resolvedSenderId = 'UWALEMI';
         if (!activeBaseUrl) activeBaseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
       } else if (effectiveProvider === 'meseji') {
@@ -4584,20 +4602,25 @@ async function startServer() {
 
       const globalSmsSettings = db.smsGatewaySettings || {};
       const configuredSms = uwalemiState.groupSettings?.smsConfig;
-      // STRICT: User's explicitly chosen provider must be respected 100%!
-      let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'meseji';
+      // Default to SwalaSMS as primary provider
+      let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'swalasms';
       let activeApiKey = (configuredSms?.apiKey ?? (configuredSms?.provider === globalSmsSettings?.provider ? globalSmsSettings?.apiKey : '') ?? '').trim();
       let resolvedSenderId = (configuredSms?.senderId ?? globalSmsSettings?.senderId ?? '').trim();
       let activeSecretKey = configuredSms?.secretKey ?? globalSmsSettings?.apiSecret ?? '';
       let activeBaseUrl = configuredSms?.baseUrl ?? globalSmsSettings?.url ?? '';
 
-      if (effectiveProvider === 'ehub') {
+      if (effectiveProvider === 'swalasms' && (!activeApiKey || activeApiKey === 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3')) {
+        effectiveProvider = 'ehub';
+        activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+        activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+        resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+        activeBaseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
+      } else if (effectiveProvider === 'ehub') {
         if (!activeApiKey) activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
         if (!activeSecretKey) activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
         if (!resolvedSenderId) resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
         if (!activeBaseUrl) activeBaseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
       } else if (effectiveProvider === 'swalasms') {
-        if (!activeApiKey) activeApiKey = 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
         if (!resolvedSenderId) resolvedSenderId = 'UWALEMI';
         if (!activeBaseUrl) activeBaseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
       } else if (effectiveProvider === 'meseji') {

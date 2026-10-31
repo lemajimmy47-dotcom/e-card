@@ -467,43 +467,22 @@ export default function SMSGatewayConfig() {
             {isEn ? "SMS Provider" : "Mtoa Huduma wa SMS (Provider)"}
           </label>
           <select 
-            value={gatewaySettings.provider}
+            value={gatewaySettings.provider || 'swalasms'}
             onChange={(e) => {
               const val = e.target.value;
-              let defaultUrl = '';
-              let defaultSender = gatewaySettings.senderId;
+              let defaultUrl = 'https://swalasms.com/api/v1/sms/quick-message';
+              let defaultSender = gatewaySettings.senderId || 'EVENT CARD';
               let defaultApiKey = gatewaySettings.apiKey;
               if (val === 'swalasms') {
                 defaultUrl = 'https://swalasms.com/api/v1/sms/quick-message';
-                defaultSender = 'EVENT CARD';
-                defaultApiKey = defaultApiKey || 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
-              } else if (val === 'meseji') {
-                defaultUrl = 'https://meseji.co.tz/api/v1/sms/send';
-                defaultSender = 'MESEJI';
-              } else if (val === 'ehub') {
-                defaultUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
-                defaultSender = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
-              } else if (val === 'beem') {
-                defaultUrl = 'https://api.beem.africa/v1/send';
-              } else if (val === 'nextsms') {
-                defaultUrl = 'https://messaging-service.co.tz/api/sms/v1/text/single';
-              } else if (val === 'notifyAfrica') {
-                defaultUrl = 'https://api.notify.africa/v1/sms/send';
-              } else {
-                defaultUrl = gatewaySettings.url;
+                defaultSender = 'UWALEMI';
               }
               setGatewaySettings({ ...gatewaySettings, provider: val, url: defaultUrl, senderId: defaultSender, apiKey: defaultApiKey });
             }}
             className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500/50 transition-all font-semibold text-xs cursor-pointer"
           >
-            <option value="simulation">Simulated Gateway (Simulation)</option>
-            <option value="swalasms">SwalaSMS (Tanzania) - Salio: {balance !== null ? balance : '70'} SMS (Inafanya Kazi)</option>
-            <option value="ehub">eHub SMS API (Secure)</option>
-            <option value="meseji">Meseji API (Tanzania)</option>
-            <option value="beem">Beem Africa (Tanzania)</option>
-            <option value="notifyAfrica">Notify Africa</option>
-            <option value="nextsms">NextSMS</option>
-            <option value="custom">Custom SMS API Endpoint (Custom Hook)</option>
+            <option value="swalasms">SwalaSMS (Tanzania) - Salio: {balance !== null ? balance : '70'} SMS</option>
+            <option value="simulation">Simulated Gateway (Simulation Mode)</option>
           </select>
         </div>
 
