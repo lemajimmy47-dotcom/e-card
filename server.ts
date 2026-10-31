@@ -3198,27 +3198,7 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
         }
       }
 
-      // If senderId rejected on current gateway and we are not already using SwalaSMS,
-      // seamlessly failover to SwalaSMS where EVENT CARD and UWALEMI are approved!
-      if (effectiveProvider !== "swalasms") {
-        try {
-          console.log(`[SMS-Fallback] Sender ID error on ${effectiveProvider} for '${senderId}'. Automatically falling over to live SwalaSMS gateway...`);
-          const fallbackSettings = {
-            provider: "swalasms",
-            apiKey: "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3",
-            senderId: (senderId.toUpperCase().includes("UWALEMI") || (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-")))) ? "UWALEMI" : "EVENT CARD",
-            url: "https://swalasms.com/api/v1/sms/quick-message"
-          };
-          const swalaRes = await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime, templateParams, guestId, appOrigin, reqEventId, reqTemplateName, reqImageUrl, lang);
-          console.log(`[SMS-Fallback] SwalaSMS sender ID failover succeeded!`);
-          return swalaRes;
-        } catch (fbErr: any) {
-          console.warn("[SMS-Fallback] SwalaSMS failover failed:", fbErr?.message || fbErr);
-        }
-      }
-
-      throw new Error(`Jina la Aliyetuma (Sender ID) uliyoweka hapa ("${senderId}") haijaidhinishwa (is not approved) kwenye akaunti yako ya ${settings.provider === "meseji" ? "Meseji.co.tz" : (settings.provider === "ehub" ? "eHub SMS" : "SMS Gateway")}. 
-Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii kuwa "MESEJI" (kwa Meseji.co.tz) au "EVENT CARD" (kwa SwalaSMS). [Jibu la Gateway: ${sanitizedBody}]`);
+      throw new Error(`Jina la Aliyetuma (Sender ID: "${senderId}") halijaidhinishwa kwenye akaunti yako ya ${effectiveProvider.toUpperCase()}. Tafadhali tumia Sender ID iliyoidhinishwa kwenye akaunti yako ya ${effectiveProvider.toUpperCase()}. [Jibu: ${sanitizedBody}]`);
     }
 
     const isLengthError = 
@@ -3232,24 +3212,7 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
       (response.status === 422 && (lowerContent.includes("640") || lowerContent.includes("message")));
 
     if (isLengthError) {
-      console.log(`[SMS-Gateway] Message length error detected (${response.status}): ${responseContent}. Truncating to 300 characters and attempting delivery...`);
-      const truncatedText = text.slice(0, 297) + "...";
-      if (effectiveProvider !== "swalasms") {
-        try {
-          const fallbackSettings = {
-            provider: "swalasms",
-            apiKey: "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3",
-            senderId: (senderId.toUpperCase().includes("UWALEMI") || (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-")))) ? "UWALEMI" : "EVENT CARD",
-            url: "https://swalasms.com/api/v1/sms/quick-message"
-          };
-          return await dispatchSMS(formattedPhone, truncatedText, channel, fallbackSettings, scheduleTime, templateParams, guestId, appOrigin, reqEventId, reqTemplateName, reqImageUrl, lang);
-        } catch (swalaErr: any) {
-          console.warn("[SMS-Gateway] SwalaSMS failover failed:", swalaErr?.message || swalaErr);
-        }
-      }
-      
-      // If already SwalaSMS or SwalaSMS failover threw, return truncated simulation or clean notice
-      return "SMS Auto-Truncated Delivered";
+      throw new Error(`Ujumbe umezidi urefu unaoruhusiwa na mtoa huduma (${effectiveProvider.toUpperCase()}). Tafadhali fupisha ujumbe wako. [Jibu: ${sanitizedBody}]`);
     }
     
     if (response.status === 500 && (settings.provider === "meseji" || isMeseji || effectiveProvider === "meseji")) {
@@ -3349,72 +3312,11 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
         console.warn("[SMS-Meseji] Alternate key retry error:", altErr);
       }
 
-      // Failover to SwalaSMS if Meseji has an internal or carrier outage (500 error)
-      try {
-        console.log(`[SMS-Fallback] Meseji 500/carrier outage detected. Automatically falling over to live SwalaSMS gateway...`);
-        const fallbackSettings = {
-          provider: "swalasms",
-          apiKey: "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3",
-          senderId: (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-"))) ? "UWALEMI" : "EVENT CARD",
-          url: "https://swalasms.com/api/v1/sms/quick-message"
-        };
-        const swalaRes = await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime, templateParams, guestId, appOrigin, reqEventId, reqTemplateName, reqImageUrl, lang);
-        console.log(`[SMS-Fallback] Failover to SwalaSMS succeeded!`);
-        return swalaRes;
-      } catch (swalaErr: any) {
-        console.warn("[SMS-Fallback] Failover to SwalaSMS failed:", swalaErr?.message || swalaErr);
-      }
-
-      // Failover to eHub as tertiary fallback
-      try {
-        const db = await readDBLatest();
-        const ehubKey = (db.smsGatewaySettings?.apiKey && !db.smsGatewaySettings.apiKey.startsWith("zs_"))
-          ? db.smsGatewaySettings.apiKey
-          : "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD";
-        const ehubSecret = db.smsGatewaySettings?.apiSecret || "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf";
-        if (ehubKey && ehubSecret) {
-          console.log(`[SMS-Fallback] Attempting failover to eHub after Meseji 500 error...`);
-          let fallbackSenderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
-          if (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("Ada") || text.includes("kikao") || text.includes("kikundi"))) {
-            fallbackSenderId = "19f41b59-19d0-4f98-b8c9-9d5b1ac31308";
-          }
-          const fallbackSettings = {
-            provider: "ehub",
-            apiKey: ehubKey,
-            apiSecret: ehubSecret,
-            senderId: fallbackSenderId,
-            url: "https://sms.ehub.co.tz/api/v1/sms/send"
-          };
-          const ehubRes = await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime, templateParams, guestId, appOrigin, reqEventId, reqTemplateName, reqImageUrl, lang);
-          console.log(`[SMS-Fallback] Failover to eHub succeeded!`);
-          return ehubRes;
-        }
-      } catch (ehubErr: any) {
-        console.warn("[SMS-Fallback] Failover to eHub failed:", ehubErr?.message || ehubErr);
-      }
-
-      const errorMsg = `Mtoa huduma wa SMS (Meseji.co.tz) amerejesha hitilafu (500: Failed to send SMS). Hii husababishwa na hitilafu ya muda kwenye mtandao wa simu wa mtoa huduma (Carrier Gateway) au ukomo wa SMS kwa siku. Unaweza kutuma ujumbe huu kwa WhatsApp papo hapo au kuwasha Hali ya Majaribio (Simulation).`;
+      const errorMsg = `Mtoa huduma wa SMS (Meseji.co.tz) amerejesha hitilafu (500: Server/Carrier Gateway Error). Tafadhali thibitisha salio au mipangilio ya akaunti ya Meseji.`;
       throw new Error(errorMsg);
     }
     
-    if (response.status >= 500 && effectiveProvider !== "swalasms") {
-      try {
-        console.log(`[SMS-Fallback] Gateway status ${response.status} detected on ${effectiveProvider}. Attempting failover to SwalaSMS...`);
-        const fallbackSettings = {
-          provider: "swalasms",
-          apiKey: "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3",
-          senderId: (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-"))) ? "UWALEMI" : "EVENT CARD",
-          url: "https://swalasms.com/api/v1/sms/quick-message"
-        };
-        const swalaRes = await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime, templateParams, guestId, appOrigin, reqEventId, reqTemplateName, reqImageUrl, lang);
-        console.log(`[SMS-Fallback] Failover to SwalaSMS succeeded!`);
-        return swalaRes;
-      } catch (swalaErr: any) {
-        console.warn("[SMS-Fallback] Failover to SwalaSMS failed:", swalaErr?.message || swalaErr);
-      }
-    }
-    
-    throw new Error(`Mtoa huduma alirejesha hitilafu (${response.status}) - ${sanitizedBody}`);
+    throw new Error(`Mtoa huduma (${effectiveProvider.toUpperCase()}) alirejesha hitilafu (${response.status}) - ${sanitizedBody}`);
   }
   
   // Check if response body is JSON and contains failure message even with status 200
@@ -3441,26 +3343,9 @@ Tafadhali badilisha 'Sender ID' kwenye Alama ya Mipangilio (Settings) ya app hii
         throw new Error(`Salio la SMS Halitoshi (Insufficient Balance): ${cleanErrMsg}. Tafadhali ongeza salio kwenye akaunti ya SMS, au washa Hali ya Majaribio (Simulation), au tuma stakabadhi/ujumbe kwa WhatsApp.`);
       }
 
-      if ((cleanErrMsg.toLowerCase().includes("failed to send sms") || cleanErrMsg.toLowerCase().includes("fail") || cleanErrMsg.toLowerCase().includes("error")) && effectiveProvider !== "swalasms") {
-        try {
-          console.log(`[SMS-Fallback] Gateway failure response detected ('${cleanErrMsg}'). Attempting failover to SwalaSMS...`);
-          const fallbackSettings = {
-            provider: "swalasms",
-            apiKey: "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3",
-            senderId: (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-"))) ? "UWALEMI" : "EVENT CARD",
-            url: "https://swalasms.com/api/v1/sms/quick-message"
-          };
-          const swalaRes = await dispatchSMS(formattedPhone, text, channel, fallbackSettings, scheduleTime, templateParams, guestId, appOrigin, reqEventId, reqTemplateName, reqImageUrl, lang);
-          console.log(`[SMS-Fallback] Failover to SwalaSMS succeeded!`);
-          return swalaRes;
-        } catch (swalaErr: any) {
-          console.warn("[SMS-Fallback] Failover to SwalaSMS failed:", swalaErr?.message || swalaErr);
-        }
-      }
-
       cleanErrMsg = cleanErrMsg.replace(/["{}]/g, "").replace(/error/gi, "status_message");
-      console.log(`[SMS-Gateway-Info] Handled gateway response check.`);
-      throw new Error(`Hitilafu toka kwa Mtoa huduma: ${cleanErrMsg}`);
+      console.log(`[SMS-Gateway-Info] Handled gateway response check for ${effectiveProvider}.`);
+      throw new Error(`Hitilafu toka kwa Mtoa huduma (${effectiveProvider.toUpperCase()}): ${cleanErrMsg}`);
     }
   } catch (jsonErr: any) {
     if (jsonErr.message.startsWith("Hitilafu toka kwa Mtoa huduma")) {
@@ -4297,43 +4182,25 @@ async function startServer() {
       const uwalemiState = db.uwalemiState || {};
       const globalSmsSettings = db.smsGatewaySettings || {};
       const configuredSms = uwalemiState.groupSettings?.smsConfig;
+      // STRICT: User's explicitly chosen provider must be respected 100%!
       let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'meseji';
-      let activeApiKey = configuredSms?.apiKey || (configuredSms?.provider === globalSmsSettings?.provider ? globalSmsSettings?.apiKey : '') || '';
-      
-      if (!configuredSms?.provider && !globalSmsSettings?.provider) {
-        if (activeApiKey.startsWith('swl_')) {
-          effectiveProvider = 'swalasms';
-        } else if (activeApiKey.startsWith('sk_')) {
-          effectiveProvider = 'ehub';
-        } else if (activeApiKey.startsWith('zs_')) {
-          effectiveProvider = 'meseji';
-        }
-      }
-
-      let resolvedSenderId = (configuredSms?.senderId || globalSmsSettings?.senderId || '').trim();
-      let activeSecretKey = configuredSms?.secretKey || globalSmsSettings?.apiSecret || '';
-      let activeBaseUrl = configuredSms?.baseUrl || globalSmsSettings?.url || '';
+      let activeApiKey = (configuredSms?.apiKey ?? (configuredSms?.provider === globalSmsSettings?.provider ? globalSmsSettings?.apiKey : '') ?? '').trim();
+      let resolvedSenderId = (configuredSms?.senderId ?? globalSmsSettings?.senderId ?? '').trim();
+      let activeSecretKey = configuredSms?.secretKey ?? globalSmsSettings?.apiSecret ?? '';
+      let activeBaseUrl = configuredSms?.baseUrl ?? globalSmsSettings?.url ?? '';
 
       if (effectiveProvider === 'ehub') {
-        if (!activeApiKey || activeApiKey.startsWith('zs_')) {
-          activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
-        }
-        if (!activeSecretKey) {
-          activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
-        }
-        if (resolvedSenderId === '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' || resolvedSenderId === 'EVENT CARD') {
-          resolvedSenderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
-        } else {
-          resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
-        }
-        activeBaseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
+        if (!activeApiKey) activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+        if (!activeSecretKey) activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+        if (!resolvedSenderId) resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+        if (!activeBaseUrl) activeBaseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
       } else if (effectiveProvider === 'swalasms') {
-        activeApiKey = (activeApiKey && activeApiKey.startsWith('swl_')) ? activeApiKey : 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
-        resolvedSenderId = (resolvedSenderId && !resolvedSenderId.includes('-') && resolvedSenderId !== '00420892-38bd-47b0-9a5f-ea55bef5d2d1') ? resolvedSenderId : 'UWALEMI';
-        activeBaseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
+        if (!activeApiKey) activeApiKey = 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
+        if (!resolvedSenderId) resolvedSenderId = 'UWALEMI';
+        if (!activeBaseUrl) activeBaseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
       } else if (effectiveProvider === 'meseji') {
-        resolvedSenderId = resolvedSenderId || 'MESEJI';
-        activeBaseUrl = 'https://meseji.co.tz/api/v1/sms/send';
+        if (!resolvedSenderId) resolvedSenderId = 'MESEJI';
+        if (!activeBaseUrl) activeBaseUrl = 'https://meseji.co.tz/api/v1/sms/send';
       }
 
       const smsConfig = {
@@ -4717,43 +4584,25 @@ async function startServer() {
 
       const globalSmsSettings = db.smsGatewaySettings || {};
       const configuredSms = uwalemiState.groupSettings?.smsConfig;
+      // STRICT: User's explicitly chosen provider must be respected 100%!
       let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'meseji';
-      let activeApiKey = configuredSms?.apiKey || (configuredSms?.provider === globalSmsSettings?.provider ? globalSmsSettings?.apiKey : '') || '';
-      
-      if (!configuredSms?.provider && !globalSmsSettings?.provider) {
-        if (activeApiKey.startsWith('swl_')) {
-          effectiveProvider = 'swalasms';
-        } else if (activeApiKey.startsWith('sk_')) {
-          effectiveProvider = 'ehub';
-        } else if (activeApiKey.startsWith('zs_')) {
-          effectiveProvider = 'meseji';
-        }
-      }
-
-      let resolvedSenderId = (configuredSms?.senderId || globalSmsSettings?.senderId || '').trim();
-      let activeSecretKey = configuredSms?.secretKey || globalSmsSettings?.apiSecret || '';
-      let activeBaseUrl = configuredSms?.baseUrl || globalSmsSettings?.url || '';
+      let activeApiKey = (configuredSms?.apiKey ?? (configuredSms?.provider === globalSmsSettings?.provider ? globalSmsSettings?.apiKey : '') ?? '').trim();
+      let resolvedSenderId = (configuredSms?.senderId ?? globalSmsSettings?.senderId ?? '').trim();
+      let activeSecretKey = configuredSms?.secretKey ?? globalSmsSettings?.apiSecret ?? '';
+      let activeBaseUrl = configuredSms?.baseUrl ?? globalSmsSettings?.url ?? '';
 
       if (effectiveProvider === 'ehub') {
-        if (!activeApiKey || activeApiKey.startsWith('zs_')) {
-          activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
-        }
-        if (!activeSecretKey) {
-          activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
-        }
-        if (resolvedSenderId === '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' || resolvedSenderId === 'EVENT CARD') {
-          resolvedSenderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
-        } else {
-          resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
-        }
-        activeBaseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
+        if (!activeApiKey) activeApiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
+        if (!activeSecretKey) activeSecretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
+        if (!resolvedSenderId) resolvedSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
+        if (!activeBaseUrl) activeBaseUrl = 'https://sms.ehub.co.tz/api/v1/sms/send';
       } else if (effectiveProvider === 'swalasms') {
-        activeApiKey = (activeApiKey && activeApiKey.startsWith('swl_')) ? activeApiKey : 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
-        resolvedSenderId = (resolvedSenderId && !resolvedSenderId.includes('-') && resolvedSenderId !== '00420892-38bd-47b0-9a5f-ea55bef5d2d1') ? resolvedSenderId : 'UWALEMI';
-        activeBaseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
+        if (!activeApiKey) activeApiKey = 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3';
+        if (!resolvedSenderId) resolvedSenderId = 'UWALEMI';
+        if (!activeBaseUrl) activeBaseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
       } else if (effectiveProvider === 'meseji') {
-        resolvedSenderId = resolvedSenderId || 'MESEJI';
-        activeBaseUrl = 'https://meseji.co.tz/api/v1/sms/send';
+        if (!resolvedSenderId) resolvedSenderId = 'MESEJI';
+        if (!activeBaseUrl) activeBaseUrl = 'https://meseji.co.tz/api/v1/sms/send';
       }
 
       const smsConfig = {
@@ -5294,8 +5143,10 @@ Lema, Nguvu Moja!`;
             const globalSmsSettings = db.smsGatewaySettings || {};
             let activeApiKey = configuredSms?.apiKey || globalSmsSettings?.apiKey || '';
             let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'meseji';
-            if (activeApiKey.startsWith('swl_')) effectiveProvider = 'swalasms';
-            else if (activeApiKey.startsWith('sk_')) effectiveProvider = 'ehub';
+            if (!configuredSms?.provider && !globalSmsSettings?.provider) {
+              if (activeApiKey.startsWith('swl_')) effectiveProvider = 'swalasms';
+              else if (activeApiKey.startsWith('sk_')) effectiveProvider = 'ehub';
+            }
 
             if (effectiveProvider !== 'simulation' && activeApiKey) {
               const smsPayload = {
@@ -5365,8 +5216,10 @@ Lema, Nguvu Moja!`;
       const globalSmsSettings = db.smsGatewaySettings || {};
       let activeApiKey = configuredSms?.apiKey || globalSmsSettings?.apiKey || '';
       let effectiveProvider = configuredSms?.provider || globalSmsSettings?.provider || 'meseji';
-      if (activeApiKey.startsWith('swl_')) effectiveProvider = 'swalasms';
-      else if (activeApiKey.startsWith('sk_')) effectiveProvider = 'ehub';
+      if (!configuredSms?.provider && !globalSmsSettings?.provider) {
+        if (activeApiKey.startsWith('swl_')) effectiveProvider = 'swalasms';
+        else if (activeApiKey.startsWith('sk_')) effectiveProvider = 'ehub';
+      }
 
       let sentCount = 0;
       let failedCount = 0;
@@ -7836,7 +7689,7 @@ Lema, Nguvu Moja!`;
         });
       }
 
-      if (settings.provider === "swalasms" || (settings.apiKey && settings.apiKey.startsWith("swl_"))) {
+      if (settings.provider === "swalasms") {
         const apiKey = (settings.apiKey || "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3").trim();
         try {
           const response = await fetch("https://swalasms.com/api/v1/balance", {
