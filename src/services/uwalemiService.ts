@@ -700,8 +700,8 @@ export function calculateMemberFeeDebt(
   // Mwanachama anayedaiwa zaidi ya miezi 3 kuanzia Mwezi wa 6 (Juni 2026)
   // hutozwa faini ya TZS 5,000 kwa kila mwezi unaozidi miezi 3 ya kwanza kuanzia mwezi huo wa 6.
   // MUHIMU: Faini haitozwi kwa miezi ya mbeleni ambayo bado haijafika (kama Oktoba, Novemba, Desemba).
-  const currentY = now.getFullYear();
-  const currentM = now.getMonth() + 1;
+  const currentY = targetYear || now.getFullYear();
+  const currentM = targetMonth || (now.getMonth() + 1);
   const unpaidFromJuneItems = unpaidItems.filter(item => 
     ((item.year === 2026 && item.month >= 6) || item.year > 2026) &&
     (item.year < currentY || (item.year === currentY && item.month <= currentM))
