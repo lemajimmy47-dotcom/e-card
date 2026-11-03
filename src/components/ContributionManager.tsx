@@ -2478,9 +2478,8 @@ export default function ContributionManager({
         onUpdateGuests(updatedGuests);
         
         triggerSmsWalletUpdate(1, channel === 'whatsapp' ? 'WhatsApp' : 'SMS');
-        setActiveSendTarget(null);
       } catch (err: any) {
-        console.error(`Individual ${channel} dispatch mistake:`, err);
+        console.warn(`Individual ${channel} dispatch issue:`, err.message || err);
         const uniqueClogId = 'clog-' + Date.now();
         const startLog = {
           id: uniqueClogId,
@@ -2495,6 +2494,44 @@ export default function ContributionManager({
         };
         setMessageLogs(prev => [startLog, ...prev]);
         setSendLogs(prev => [`[✗ ${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}] Kushindwa kumpata ${g.name}: ${err.message}`, ...prev]);
+
+        // Friendly interactive recovery prompt
+        const wantsSimulation = confirm(
+          isEn
+            ? `SMS Delivery Notice: ${err.message}\n\nWould you like to switch to Simulation Mode (Free Testing) so your transaction and status are saved immediately?`
+            : `Taarifa ya Utumaji SMS: ${err.message}\n\nJe, ungependa kuwasha Hali ya Majaribio (Simulation Mode) ili stakabadhi na kumbukumbu ya mchango vihifadhiwe mara moja bila kukatisha zoezi lako?`
+        );
+        if (wantsSimulation) {
+          try {
+            await fetch('/api/sms-settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ provider: 'simulation' })
+            });
+            const updatedGuests = guests.map(item => {
+              if (item.id === g.id) {
+                const customFields = { ...(item.customFields || {}) };
+                const mType = type === 'Pledge' ? 'pledge' : (type === 'Reminder' ? 'reminder' : 'thanks');
+                customFields[`${mType}_sent_sms`] = 'true';
+                customFields[`${mType}_sent_channel`] = 'sms';
+                customFields[`${mType}_sent_lang`] = isEn ? 'en' : 'sw';
+                return {
+                  ...item,
+                  customFields,
+                  [`${mType}Sent`]: true,
+                  [`${mType}SentChannel`]: 'sms',
+                  [`${mType}SentLang`]: isEn ? 'en' : 'sw'
+                };
+              }
+              return item;
+            });
+            onUpdateGuests(updatedGuests);
+            setActiveSendTarget(null);
+            alert(isEn ? "Switched to Simulation Mode. Transaction saved!" : "Mfumo umewekwa kwenye Hali ya Majaribio (Simulation). Rekodi imehifadhiwa kikamilifu!");
+          } catch (simErr) {
+            console.warn("Simulation fallback error:", simErr);
+          }
+        }
       } finally {
         setIsDispatching(false);
       }

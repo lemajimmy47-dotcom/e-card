@@ -61,7 +61,18 @@ async function executeQuery<T>(label: string, queryFn: () => Promise<T>, retries
   throw new Error(`Database operation '${label}' failed after ${retries} attempts.`);
 }
 
+export function isSqlConfigured(): boolean {
+  return Boolean(
+    (process.env.SQL_HOST && process.env.SQL_USER && process.env.SQL_PASSWORD) ||
+    process.env.DATABASE_URL ||
+    process.env.SQL_DATABASE_URL
+  );
+}
+
 export async function ensureTablesExist(): Promise<void> {
+  if (!isSqlConfigured()) {
+    return;
+  }
   await executeQuery("ensureTablesExist", async () => {
     console.log("[CloudSQL] Verifying and provisioning database tables if not present...");
     
@@ -260,6 +271,9 @@ export async function ensureTablesExist(): Promise<void> {
 
 // 1. One-time Boot Seeder / Backup File Importer
 export async function seedFromBackupFile(): Promise<boolean> {
+  if (!isSqlConfigured()) {
+    return false;
+  }
   return await executeQuery("seedFromBackupFile", async () => {
     // Check if events or guests are already populated
     const eventCount = await db.select({ count: sql<number>`count(*)` }).from(schema.events);
@@ -542,6 +556,18 @@ export async function seedFromBackupFile(): Promise<boolean> {
 
 // 2. State Reconstruction function
 export async function fetchFullStateFromDB(): Promise<any> {
+  if (!isSqlConfigured()) {
+    if (fs.existsSync(DB_PATH)) {
+      try {
+        const raw = fs.readFileSync(DB_PATH, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return {};
+  }
   try {
     return await executeQuery("fetchFullStateFromDB", async () => {
     let sqlEvents: any[] = [];
@@ -710,23 +736,14 @@ export async function fetchFullStateFromDB(): Promise<any> {
     }
 
     const firstSms = sqlSmsSettings.find(s => s.id === "settings") || sqlSmsSettings[0];
-    let resolvedSenderId = firstSms?.senderId || "";
-    if (resolvedSenderId === "00420892-38bd-47b0-9a5f-ea55bef5d2d1" || (firstSms?.provider === "ehub" && resolvedSenderId === "EVENT CARD")) {
-      resolvedSenderId = "339330f1-4e6a-4bf7-a9f8-eaae2a9dd397";
-    }
-    const isEhub = firstSms?.provider === "ehub";
-    const resolvedApiKey = (isEhub && (!firstSms?.apiKey || firstSms.apiKey.startsWith("zs_")))
-      ? "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD"
-      : (firstSms?.apiKey || "");
-    const resolvedApiSecret = (isEhub && !firstSms?.apiSecret)
-      ? "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf"
-      : (firstSms?.apiSecret || "");
+    let resolvedSenderId = firstSms?.senderId || "EVENT CARD";
+    const resolvedApiKey = firstSms?.apiKey || "";
 
     const smsGatewaySettings = firstSms ? {
-      provider: firstSms.provider || "simulation",
-      url: firstSms.url || (isEhub ? "https://sms.ehub.co.tz/api/v1/sms/send" : ""),
+      provider: firstSms.provider === "simulation" ? "simulation" : "swalasms",
+      url: firstSms.url || "https://swalasms.com/api/v1/sms/quick-message",
       apiKey: resolvedApiKey,
-      apiSecret: resolvedApiSecret,
+      apiSecret: "",
       senderId: resolvedSenderId,
       senderIdStatus: firstSms.senderIdStatus || "approved",
       whatsappUrl: firstSms.whatsappUrl || "",
@@ -804,14 +821,13 @@ export async function fetchFullStateFromDB(): Promise<any> {
       if (!uwalemiState.groupSettings) {
         uwalemiState.groupSettings = {};
       }
-      const uSms = uwalemiState.groupSettings.smsConfig;
-      if (!uSms || !uSms.provider) {
+      if (!uSms || !uSms.provider || uSms.provider === "ehub" || uSms.provider === "meseji") {
         uwalemiState.groupSettings.smsConfig = {
-          provider: "ehub",
-          apiKey: "sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD",
-          secretKey: "CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf",
-          senderId: "19f41b59-19d0-4f98-b8c9-9d5b1ac31308",
-          baseUrl: "https://sms.ehub.co.tz/api/v1/sms/send",
+          provider: "swalasms",
+          apiKey: "",
+          secretKey: "",
+          senderId: "UWALEMI",
+          baseUrl: "https://swalasms.com/api/v1/sms/quick-message",
           autoSendReceipts: uSms?.autoSendReceipts !== undefined ? uSms.autoSendReceipts : true,
           autoSendMeetingAlerts: uSms?.autoSendMeetingAlerts !== undefined ? uSms.autoSendMeetingAlerts : false,
           autoSendMonthlyReminder: uSms?.autoSendMonthlyReminder !== undefined ? uSms.autoSendMonthlyReminder : false,
@@ -836,23 +852,33 @@ export async function fetchFullStateFromDB(): Promise<any> {
     };
   });
   } catch (dbErr: any) {
-    console.warn("[CloudSQL Core] fetchFullStateFromDB notice: SQL query unavailable, using local database.json store:", dbErr?.message || dbErr);
     if (fs.existsSync(DB_PATH)) {
       try {
         const raw = fs.readFileSync(DB_PATH, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object") {
+          console.log("[CloudSQL Core] Falling back to local database.json store.");
           return parsed;
         }
       } catch (e) {}
     }
+    console.warn("[CloudSQL Core] fetchFullStateFromDB notice: SQL query unavailable:", dbErr?.message || dbErr);
     throw dbErr;
   }
 }
 
 // 3. Robust Relational Upsert function
 export async function syncStateToRelationalDB(data: any): Promise<void> {
-  await executeQuery("syncStateToRelationalDB", async () => {
+  if (!isSqlConfigured()) {
+    if (data && typeof data === "object") {
+      try {
+        fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
+      } catch (e) {}
+    }
+    return;
+  }
+  try {
+    await executeQuery("syncStateToRelationalDB", async () => {
     // 3.1. Save events (from eventsList or single eventDetails) (BATCHED)
     const eventsToSync: any[] = [];
     if (data.eventsList && Array.isArray(data.eventsList)) {
@@ -1350,4 +1376,12 @@ export async function syncStateToRelationalDB(data: any): Promise<void> {
 
     console.log("[CloudSQL Core] State was successfully synchronized and written to PostgreSQL.");
   });
+  } catch (err: any) {
+    if (data && typeof data === "object") {
+      try {
+        fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
+      } catch (e) {}
+    }
+    console.log("[CloudSQL Core] SQL sync unavailable, saved state to local database.json store.");
+  }
 }

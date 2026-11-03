@@ -196,7 +196,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
           {
             phone: testSmsPhone.trim(),
             name: 'Majaribio ya SMS',
-            customMessage: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia Meseji (${gatewayConfig.senderId || 'MESEJI'}). Muunganisho uko salama na unafanya kazi kikamilifu.`
+            customMessage: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia SwalaSMS (${gatewayConfig.senderId || 'UWALEMI'}). Muunganisho uko salama na unafanya kazi kikamilifu.`
           }
         ],
         message: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia SwalaSMS.`,
@@ -244,122 +244,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     }
   };
 
-  const handleSetMeseji = async (apiKey = '', senderId = 'MESEJI') => {
-    if (readOnly) return;
-    try {
-      const updatedConfig: UwalemiSmsConfig = {
-        ...gatewayConfig,
-        provider: 'meseji',
-        apiKey: apiKey || (gatewayConfig.provider === 'meseji' ? gatewayConfig.apiKey : ''),
-        secretKey: '',
-        senderId: senderId || (gatewayConfig.senderId?.includes('-') ? 'MESEJI' : (gatewayConfig.senderId || 'MESEJI')),
-        baseUrl: 'https://meseji.co.tz/api/v1/sms/send'
-      };
-      setGatewayConfig(updatedConfig);
-      const updatedSettings = {
-        ...state.groupSettings,
-        smsConfig: updatedConfig
-      };
-      const updatedState = { ...state, groupSettings: updatedSettings };
-      await onSaveState(updatedState);
-      setSendResult(null);
-      if (updatedConfig.apiKey) {
-        setTimeout(() => handleCheckBalance(), 300);
-      }
-      alert('Meseji.co.tz imechaguliwa kama mtoa huduma wa SMS kwa ajili ya UWALEMI!');
-      return updatedConfig;
-    } catch (e: any) {
-      console.warn("handleSetMeseji failed:", e);
-    }
-  };
 
-  const handleSetEhub = async (targetSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308') => {
-    if (readOnly) return;
-    try {
-      const updatedConfig: UwalemiSmsConfig = {
-        ...gatewayConfig,
-        provider: 'ehub',
-        apiKey: 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD',
-        secretKey: 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf',
-        senderId: targetSenderId,
-        baseUrl: 'https://sms.ehub.co.tz/api/v1/sms/send'
-      };
-      setGatewayConfig(updatedConfig);
-      const updatedSettings = {
-        ...state.groupSettings,
-        smsConfig: updatedConfig
-      };
-      const updatedState = { ...state, groupSettings: updatedSettings };
-      await onSaveState(updatedState);
-      setSendResult(null);
-      setTimeout(() => handleCheckBalance(), 300);
-      return updatedConfig;
-    } catch (e: any) {
-      console.warn("handleSetEhub failed:", e);
-    }
-  };
-
-  const handleSyncGlobalEhub = async () => {
-    if (readOnly) return;
-    try {
-      const res = await fetch('/api/state');
-      let apiKey = 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD';
-      let secretKey = 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf';
-      let senderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308';
-      let url = 'https://sms.ehub.co.tz/api/v1/sms/send';
-
-      if (res.ok) {
-        const fullState = await res.json();
-        const globalSms = fullState.smsGatewaySettings;
-        if (globalSms && globalSms.provider === 'ehub' && globalSms.apiKey && !globalSms.apiKey.startsWith('zs_')) {
-          apiKey = globalSms.apiKey;
-          secretKey = globalSms.apiSecret || secretKey;
-          url = globalSms.url || url;
-        }
-      }
-
-      const updatedConfig: UwalemiSmsConfig = {
-        ...gatewayConfig,
-        provider: 'ehub',
-        apiKey,
-        secretKey,
-        senderId,
-        baseUrl: url
-      };
-      setGatewayConfig(updatedConfig);
-      const updatedSettings = {
-        ...state.groupSettings,
-        smsConfig: updatedConfig
-      };
-      const updatedState = { ...state, groupSettings: updatedSettings };
-      await onSaveState(updatedState);
-      setSendResult(null);
-      alert('Mipangilio ya eHub SMS (yenye salio lililothibitishwa) imesawazishwa na kuhifadhiwa kikamilifu kwa ajili ya UWALEMI!');
-      setTimeout(() => handleCheckBalance(), 300);
-    } catch (e: any) {
-      alert('Hitilafu: ' + (e.message || e));
-    }
-  };
-
-  const handleQuickFixSenderId = async (newSenderId = '19f41b59-19d0-4f98-b8c9-9d5b1ac31308') => {
-    if (readOnly) return;
-    const updatedConfig: UwalemiSmsConfig = {
-      ...gatewayConfig,
-      provider: 'ehub',
-      apiKey: (!gatewayConfig.apiKey || gatewayConfig.apiKey.startsWith('zs_')) ? 'sk_Y8rB4E2PzMMOQZ3LyCbf8xYKw1tjniyhae85NX3IxKgLx6GD' : gatewayConfig.apiKey,
-      secretKey: (!gatewayConfig.secretKey) ? 'CDWwiiKKTa44Ql6R4uOO4jZgHVnhmnRivl7SrIYgdbeRSKJ3Z8Q7JoaSqe07miWf' : gatewayConfig.secretKey,
-      senderId: newSenderId
-    };
-    setGatewayConfig(updatedConfig);
-    const updatedSettings = {
-      ...state.groupSettings,
-      smsConfig: updatedConfig
-    };
-    const updatedState = { ...state, groupSettings: updatedSettings };
-    await onSaveState(updatedState);
-    setSendResult(null);
-    alert(`Sender ID ya eHub imewekwa na kuhifadhiwa! Sasa unaweza kutuma ujumbe.`);
-  };
 
   const handleSyncSwalaSms = async () => {
     if (readOnly) return;
@@ -991,7 +876,7 @@ Lema, Nguvu Moja!`);
     };
     const updatedState = { ...state, groupSettings: updatedSettings };
     await onSaveState(updatedState);
-    alert(`Mipangilio ya SMS Gateway (${(gatewayConfig.provider || 'meseji').toUpperCase()}) imehifadhiwa kwa mafanikio! Mfumo utatumia mtoa huduma huyu pekee bila kubadilisha kiotomatiki.`);
+    alert(`Mipangilio ya SMS Gateway (${(gatewayConfig.provider || 'swalasms').toUpperCase()}) imehifadhiwa kwa mafanikio! Mfumo utatumia mtoa huduma huyu pekee bila kubadilisha kiotomatiki.`);
   };
 
   const handleTriggerTestReminders = async () => {
@@ -2025,7 +1910,7 @@ Lema, Nguvu Moja!`);
                 Jaribu Kutuma SMS ya Majaribio (Test SMS)
               </div>
               <p className="text-[11px] text-slate-400">
-                Weka namba ya simu ili kutuma ujumbe wa majaribio wa papo hapo na kuthibitisha kuwa Meseji inatuma ujumbe kikamilifu.
+                Weka namba ya simu ili kutuma ujumbe wa majaribio wa papo hapo na kuthibitisha kuwa SwalaSMS inatuma ujumbe kikamilifu.
               </p>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input

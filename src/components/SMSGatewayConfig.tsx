@@ -458,7 +458,7 @@ export default function SMSGatewayConfig() {
       <p className="text-[11px] text-slate-400 leading-relaxed">
         {isEn 
           ? "Configure your SMS Gateway here once, and it will be used across all modules (Invitations, Save the Date, and Contributions)." 
-          : "Sanidi Gateway ya Meseji hapa mara moja kwa ajili ya mfumo mzima. Sehemu zote za (Mialiko, Save the Date, na Michango) zitatumia Mipangilio hii."}
+          : "Sanidi Gateway ya SMS (SwalaSMS) hapa mara moja kwa ajili ya mfumo mzima. Sehemu zote za (Mialiko, Save the Date, na Michango) zitatumia Mipangilio hii."}
       </p>
 
       <form onSubmit={handleSave} className="space-y-4 pt-2">
@@ -475,13 +475,13 @@ export default function SMSGatewayConfig() {
               let defaultApiKey = gatewaySettings.apiKey;
               if (val === 'swalasms') {
                 defaultUrl = 'https://swalasms.com/api/v1/sms/quick-message';
-                defaultSender = 'UWALEMI';
+                defaultSender = gatewaySettings.senderId || 'EVENT CARD';
               }
               setGatewaySettings({ ...gatewaySettings, provider: val, url: defaultUrl, senderId: defaultSender, apiKey: defaultApiKey });
             }}
             className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500/50 transition-all font-semibold text-xs cursor-pointer"
           >
-            <option value="swalasms">SwalaSMS (Tanzania) - Salio: {balance !== null ? balance : '70'} SMS</option>
+            <option value="swalasms">SwalaSMS (Tanzania) {balance !== null ? `- Salio: ${balance} SMS` : ''}</option>
             <option value="simulation">Simulated Gateway (Simulation Mode)</option>
           </select>
         </div>
@@ -491,34 +491,19 @@ export default function SMSGatewayConfig() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                SwalaSMS Imeunganishwa (Live)
+                SwalaSMS Imeunganishwa (Live Gateway)
               </span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-                Salio: {balance !== null ? balance : '70'} SMS
-              </span>
+              {balance !== null && (
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                  Salio: {balance} SMS
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-emerald-200/80 leading-relaxed">
               {isEn 
-                ? "Your SwalaSMS Live Application is configured with approved Sender ID 'EVENT CARD'. Click below to auto-fill verified credentials."
-                : "Akaunti yako ya SwalaSMS imesanidiwa na Sender ID iliyoidhinishwa ya 'EVENT CARD'. Bonyeza hapa chini kuweka taarifa zilizothibitishwa kiotomatiki."}
+                ? "Your SMS Gateway is powered by SwalaSMS. Enter your SwalaSMS API Key from swalasms.com to send live SMS."
+                : "Huduma yako ya SMS inaendeshwa na SwalaSMS (swalasms.com). Weka API Key yako toka SwalaSMS ili kutuma SMS halisi."}
             </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setGatewaySettings({
-                    ...gatewaySettings,
-                    provider: 'swalasms',
-                    senderId: 'EVENT CARD',
-                    apiKey: 'swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3',
-                    url: 'https://swalasms.com/api/v1/sms/quick-message'
-                  });
-                }}
-                className="text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                ✓ Weka Mipangilio ya EVENT CARD (SwalaSMS)
-              </button>
-            </div>
           </div>
         )}
 
@@ -530,14 +515,14 @@ export default function SMSGatewayConfig() {
               </label>
               <input 
                 type="text" 
-                maxLength={gatewaySettings.provider === 'ehub' ? 40 : 11}
-                placeholder={gatewaySettings.provider === 'ehub' ? "UUID ya eHub (e.g. 0042...)" : "Ex. EVENT CARD"}
+                maxLength={11}
+                placeholder="Ex. EVENT CARD"
                 value={gatewaySettings.senderId}
                 onChange={(e) => {
-                  const val = gatewaySettings.provider === 'ehub' ? e.target.value.trim() : e.target.value.toUpperCase().trim();
+                  const val = e.target.value.toUpperCase().trim();
                   setGatewaySettings({ ...gatewaySettings, senderId: val });
                 }}
-                className={`w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${gatewaySettings.provider === 'ehub' ? '' : 'uppercase font-mono tracking-wider'} transition-all`}
+                className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 uppercase font-mono tracking-wider transition-all"
               />
               {gatewaySettings.provider === 'swalasms' && (
                 <div className="mt-2 space-y-2">
@@ -587,161 +572,46 @@ export default function SMSGatewayConfig() {
                   )}
                 </div>
               )}
-              {gatewaySettings.provider === 'ehub' && (
-                <div className="mt-1 space-y-1">
-                  <p className="text-[10px] text-amber-400 font-medium leading-relaxed bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-                    {isEn 
-                      ? "⚠️ eHub requires a valid Sender ID UUID from your eHub account (not a word like 'EVENT CARD'). Click 'Fetch Sender IDs' below to select your real approved UUID." 
-                      : "⚠️ eHub inahitaji 'UUID' ya Sender ID kutoka akaunti yako ya eHub (sio neno kama 'EVENT CARD'). Bonyeza 'Tafuta Sender IDs' hapo chini ili kuchagua UUID yako halisi iliyoidhinishwa."}
-                  </p>
-                  {(gatewaySettings.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(gatewaySettings.senderId)) && (
-                    <p className="text-[10px] text-red-400 font-bold bg-red-500/10 p-2 rounded-lg border border-red-500/20">
-                      {isEn
-                        ? "⚠️ Current Sender ID is invalid or sample placeholder. Please click 'Fetch Sender IDs' below to load your active eHub ID."
-                        : "⚠️ Sender ID iliyopo sasa si sahihi au ni mfano tu. Tafadhali bonyeza 'Tafuta Sender IDs' hapo chini kupata ID yako halisi."}
-                    </p>
-                  )}
-                </div>
-              )}
-              {gatewaySettings.provider === 'meseji' && (
-                <div className="mt-2 space-y-1.5">
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'EVENT CARD' })}
-                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'EVENT CARD' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
-                    >
-                      ✓ EVENT CARD (Approved)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'MESEJI' })}
-                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'MESEJI' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
-                    >
-                      ✓ MESEJI (Default)
-                    </button>
-                  </div>
-                </div>
-              )}
-              {gatewaySettings.provider === 'ehub' && (
-                <div className="mt-2 space-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397' })}
-                      className="text-[10px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/30 transition-all font-semibold cursor-pointer"
-                    >
-                      ✓ EVENT CARD (eHub)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: '19f41b59-19d0-4f98-b8c9-9d5b1ac31308' })}
-                      className="text-[10px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/30 transition-all font-semibold cursor-pointer"
-                    >
-                      ✓ UWALEMI (eHub)
-                    </button>
-                  </div>
-                  <button
-                    onClick={fetchEhubIds}
-                    disabled={isFetchingIds || !gatewaySettings.apiKey || !gatewaySettings.apiSecret}
-                    className="text-[10px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 px-3 py-1.5 rounded-lg border border-emerald-500/30 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isFetchingIds ? (
-                      <span className="animate-spin text-lg">↻</span>
-                    ) : (
-                      <Search size={12} />
-                    )}
-                    {isEn ? "Fetch Sender IDs (Find UUIDs)" : "Tafuta Sender IDs (Pata UUIDs)"}
-                  </button>
-
-                  {availableIds.length > 0 ? (
-                    <div className="bg-black/40 border border-white/5 rounded-lg p-2 space-y-2 max-h-40 overflow-y-auto">
-                      {availableIds.map((item, idx) => (
-                          <div 
-                            key={item.id || item.sender_id || idx}
-                            className="flex flex-col border-b border-white/5 pb-2 last:border-0 last:pb-0 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
-                            onClick={() => {
-                              setGatewaySettings({ ...gatewaySettings, senderId: item.id });
-                              setAvailableIds([]);
-                              setHasFetchedIds(false);
-                            }}
-                          >
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] font-bold text-white">{item.sender_id}</span>
-                              <span className={`text-[8px] px-1.5 py-0.5 rounded ${item.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                                {item.status}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <code className="text-[9px] text-slate-400 break-all bg-white/5 px-1 rounded flex-1">{item.id}</code>
-                              <span className="text-[9px] text-emerald-500 font-medium">
-                                {isEn ? "Select" : "Chagua"}
-                              </span>
-                            </div>
-                          </div>
-                      ))}
-                    </div>
-                  ) : (
-                    isFetchingIds === false && hasFetchedIds && availableIds.length === 0 && (
-                      <p className="text-[9px] text-slate-500 italic">
-                        {isEn ? "No IDs found. Check your API keys." : "Hakuna ID zilizopatikana. Angalia API Keys zako."}
-                      </p>
-                    )
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="space-y-1 mt-3">
               <label className="font-bold text-slate-300 block text-xs">
-                {isEn ? "API Key / Token Secret" : "Ufunguo wa API (API Key / Token)"}
+                {isEn ? "SwalaSMS API Key" : "Ufunguo wa API wa SwalaSMS (API Key)"}
               </label>
               <input 
                 type="password" 
-                placeholder="Weka ufunguo wako wa API hapa..."
+                placeholder="swl_live_..."
                 value={gatewaySettings.apiKey}
                 onChange={(e) => setGatewaySettings({ ...gatewaySettings, apiKey: e.target.value.trim() })}
-                className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-mono transition-all"
+                className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-mono transition-all text-xs"
               />
+              <p className="text-[10px] text-slate-400 mt-1">
+                {isEn 
+                  ? "Get your API key from swalasms.com > Developers (starts with swl_live_...)" 
+                  : "Pata API key yako kutoka swalasms.com > Developers (inayoanza na swl_live_...)"}
+              </p>
               {gatewaySettings.apiKey.startsWith('EAA') && (
                 <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[10.5px] text-amber-300 leading-normal space-y-1 mt-1">
                   <p className="font-bold">⚠️ {isEn ? "Possible Configuration Mistake!" : "Uwezekano wa Hitilafu ya Usanidi!"}</p>
                   <p>
                     {isEn 
-                      ? "This API Key starts with 'EAA...', which looks like a Meta WhatsApp Access Token. This field is for your SMS Gateway API Key (e.g., Meseji.co.tz API Key). Please enter your correct SMS token here, and place your Meta WhatsApp Token in the WhatsApp section below." 
-                      : "Ufunguo huu unaanza na 'EAA...', unaofanana na Token ya Meta WhatsApp. Sehemu hii ni kwa ajili ya Ufunguo wa Mtoa Huduma wa SMS za Kawaida (kama Meseji.co.tz). Tafadhali weka ufunguo wako sahihi wa SMS hapa, kisha weka token yako ya Meta WhatsApp chini kwenye sehemu ya WhatsApp."}
+                      ? "This API Key starts with 'EAA...', which looks like a Meta WhatsApp Access Token. This field is for your SwalaSMS API Key. Please enter your correct SwalaSMS key here, and place your Meta WhatsApp Token in the WhatsApp section below." 
+                      : "Ufunguo huu unaanza na 'EAA...', unaofanana na Token ya Meta WhatsApp. Sehemu hii ni kwa ajili ya Ufunguo wa SwalaSMS (inayoanza na swl_live_...). Tafadhali weka ufunguo wako sahihi wa SwalaSMS hapa, kisha weka token yako ya Meta WhatsApp chini kwenye sehemu ya WhatsApp."}
                   </p>
                 </div>
               )}
             </div>
 
-            {(gatewaySettings.provider === 'beem' || gatewaySettings.provider === 'nextsms' || gatewaySettings.provider === 'ehub') && (
-              <div className="space-y-1 mt-3">
-                <label className="font-bold text-slate-300 block text-xs">
-                  {isEn ? "API Secret Key" : "Ufunguo wa Siri wa API (API Secret)"}
-                </label>
-                <input 
-                  type="password" 
-                  placeholder="Weka ufunguo wa siri wa API..."
-                  value={gatewaySettings.apiSecret || ''}
-                  onChange={(e) => setGatewaySettings({ ...gatewaySettings, apiSecret: e.target.value.trim() })}
-                  className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-mono transition-all"
-                />
-              </div>
-            )}
-
-            {(gatewaySettings.provider !== 'meseji') && (
-              <div className="space-y-1 mt-3">
-                <label className="font-bold text-slate-300 block text-xs">API Endpoint URL</label>
-                <input 
-                  type="url" 
-                  placeholder="https://api.example.com/sms/send"
-                  value={gatewaySettings.url}
-                  onChange={(e) => setGatewaySettings({ ...gatewaySettings, url: e.target.value })}
-                  className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-[10px]"
-                />
-              </div>
-            )}
+            <div className="space-y-1 mt-3">
+              <label className="font-bold text-slate-300 block text-xs">API Endpoint URL</label>
+              <input 
+                type="url" 
+                placeholder="https://swalasms.com/api/v1/sms/quick-message"
+                value={gatewaySettings.url || "https://swalasms.com/api/v1/sms/quick-message"}
+                onChange={(e) => setGatewaySettings({ ...gatewaySettings, url: e.target.value })}
+                className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-[10px]"
+              />
+            </div>
 
             {gatewaySettings.provider === 'custom' && (
               <div className="space-y-4 bg-black/20 p-4 border border-white/5 rounded-xl mt-3">
