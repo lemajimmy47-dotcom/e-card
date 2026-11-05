@@ -246,6 +246,30 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
 
 
 
+  const handleSyncMesejiSms = async () => {
+    if (readOnly) return;
+    const userKey = gatewayConfig.apiKey || '';
+    const updatedConfig: UwalemiSmsConfig = {
+      provider: 'meseji',
+      apiKey: userKey,
+      secretKey: '',
+      senderId: 'UWALEMI',
+      baseUrl: 'https://meseji.co.tz/api/v1/sms/send',
+      autoSendReceipts: gatewayConfig.autoSendReceipts ?? true,
+      autoSendMeetingAlerts: gatewayConfig.autoSendMeetingAlerts ?? true,
+      autoSendMonthlyReminder: gatewayConfig.autoSendMonthlyReminder ?? true,
+    };
+    setGatewayConfig(updatedConfig);
+    const updatedSettings = {
+      ...state.groupSettings,
+      smsConfig: updatedConfig
+    };
+    const updatedState = { ...state, groupSettings: updatedSettings };
+    await onSaveState(updatedState);
+    setSendResult(null);
+    alert('Meseji.co.tz (Sender ID: UWALEMI) imewekwa na kuunganishwa kikamilifu!');
+  };
+
   const handleSyncSwalaSms = async () => {
     if (readOnly) return;
     const userKey = gatewayConfig.apiKey && !gatewayConfig.apiKey.startsWith('swl_live_vtWJ') ? gatewayConfig.apiKey : '';
@@ -1699,7 +1723,7 @@ Lema, Nguvu Moja!`);
                 Mipangilio ya Mtoa Huduma wa SMS (SMS Gateway)
               </h3>
               <p className="text-xs text-slate-400 mt-1">
-                Chagua mtoa huduma na uweke taarifa za API za SwalaSMS.com ili ujumbe wa kikundi cha UWALEMI uende moja kwa moja kwa simu za wajumbe.
+                Chagua mtoa huduma (Meseji.co.tz au SwalaSMS) na uweke taarifa za API ili ujumbe wa kikundi cha UWALEMI uende moja kwa moja kwa simu za wajumbe.
               </p>
             </div>
           </div>
@@ -1708,23 +1732,39 @@ Lema, Nguvu Moja!`);
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2">
             <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
               <span>Chagua Mtoa Huduma kwa Haraka (Quick Switch):</span>
-              <span className="text-[10px] text-emerald-400 font-normal">Chaguo rasmi: SwalaSMS.com</span>
+              <span className="text-[10px] text-emerald-400 font-normal">Chaguo rasmi: Meseji.co.tz</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={handleSyncSwalaSms}
+                onClick={handleSyncMesejiSms}
                 className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
-                  gatewayConfig.provider === 'swalasms' || !gatewayConfig.provider
+                  gatewayConfig.provider === 'meseji' || !gatewayConfig.provider
                     ? 'bg-emerald-950/80 border-emerald-500 text-white ring-1 ring-emerald-500 shadow-md shadow-emerald-950/50'
                     : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
               >
                 <div className="font-bold text-xs flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'swalasms' || !gatewayConfig.provider ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'meseji' || !gatewayConfig.provider ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  Meseji.co.tz
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Tanzania SMS API</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSyncSwalaSms}
+                className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
+                  gatewayConfig.provider === 'swalasms'
+                    ? 'bg-emerald-950/80 border-emerald-500 text-white ring-1 ring-emerald-500 shadow-md shadow-emerald-950/50'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="font-bold text-xs flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'swalasms' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
                   SwalaSMS.com
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Sender ID: UWALEMI</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Sender: UWALEMI</div>
               </button>
 
               <button
@@ -1754,9 +1794,11 @@ Lema, Nguvu Moja!`);
             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
             <div className="text-xs space-y-1">
               <div className="font-bold flex items-center gap-2">
-                Hali ya Sasa: {gatewayConfig.provider !== 'simulation'
-                  ? 'Imeunganishwa na SwalaSMS.com (SMS Halisi Zitatumwa)'
-                  : 'Hali ya Majaribio (Simulation Mode)'}
+                Hali ya Sasa: {gatewayConfig.provider === 'meseji' || (!gatewayConfig.provider && gatewayConfig.apiKey?.startsWith('zs_'))
+                  ? 'Imeunganishwa na MESEJI.CO.TZ (SMS Halisi Zitatumwa)'
+                  : gatewayConfig.provider === 'swalasms'
+                    ? 'Imeunganishwa na SWALASMS (SMS Halisi Zitatumwa)'
+                    : 'Hali ya Majaribio (Simulation Mode)'}
               </div>
               <p className="text-slate-300 leading-relaxed">
                 {gatewayConfig.provider !== 'simulation'
@@ -1770,21 +1812,24 @@ Lema, Nguvu Moja!`);
             <div>
               <label className="block text-slate-300 font-semibold mb-1">Mtoa Huduma (Provider):</label>
               <select
-                value={gatewayConfig.provider || 'swalasms'}
+                value={gatewayConfig.provider || 'meseji'}
                 onChange={(e) => {
                   const val = e.target.value as any;
                   const newConfig = { ...gatewayConfig, provider: val };
-                  if (val === 'swalasms') {
+                  if (val === 'meseji') {
+                    newConfig.baseUrl = 'https://meseji.co.tz/api/v1/sms/send';
+                    newConfig.senderId = 'UWALEMI';
+                    newConfig.secretKey = '';
+                  } else if (val === 'swalasms') {
                     newConfig.baseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
-                    if (!newConfig.senderId || newConfig.senderId.includes('-')) {
-                      newConfig.senderId = 'UWALEMI';
-                    }
+                    newConfig.senderId = 'UWALEMI';
                     newConfig.secretKey = '';
                   }
                   setGatewayConfig(newConfig);
                 }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-emerald-500"
               >
+                <option value="meseji">Meseji.co.tz (Tanzania SMS Gateway - API Key: zs_...)</option>
                 <option value="swalasms">SwalaSMS (SwalaSMS.com - Tanzania)</option>
                 <option value="simulation">Mwigizo wa Kujaribu (Simulation Mode)</option>
               </select>
@@ -1813,7 +1858,7 @@ Lema, Nguvu Moja!`);
               <input
                 type="text"
                 value={gatewayConfig.senderId || 'UWALEMI'}
-                onChange={(e) => setGatewayConfig({ ...gatewayConfig, senderId: e.target.value })}
+                onChange={(e) => setGatewayConfig({ ...gatewayConfig, senderId: e.target.value.trim().toUpperCase() })}
                 placeholder="mf. UWALEMI au TAARIFA"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
               />
@@ -1824,17 +1869,21 @@ Lema, Nguvu Moja!`);
 
             <div>
               <label className="block text-slate-300 font-semibold mb-1">
-                SwalaSMS API Key:
+                {gatewayConfig.provider === 'swalasms' ? 'SwalaSMS API Key:' : 'Meseji API Key (x-api-key):'}
               </label>
               <input
                 type="password"
                 value={gatewayConfig.apiKey || ''}
-                onChange={(e) => setGatewayConfig({ ...gatewayConfig, apiKey: e.target.value })}
-                placeholder="Weka SwalaSMS API Key yako hapa (mf. swl_live_...)"
+                onChange={(e) => setGatewayConfig({ ...gatewayConfig, apiKey: e.target.value.trim() })}
+                placeholder={gatewayConfig.provider === 'swalasms' ? 'Weka SwalaSMS API Key yako hapa (mf. swl_live_...)' : 'Weka Meseji API Key yako hapa (inayoanza na zs_...)'}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                🔑 API Key ya SwalaSMS inapatikana kwenye <a href="https://swalasms.com" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">swalasms.com</a> &gt; Developers / API Settings (inayoanza na <span className="font-mono text-emerald-400 font-bold">swl_live_...</span>).
+                {gatewayConfig.provider === 'swalasms' ? (
+                  <>🔑 API Key ya SwalaSMS inapatikana kwenye <a href="https://swalasms.com" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">swalasms.com</a> &gt; Developers / API Settings (inayoanza na <span className="font-mono text-emerald-400 font-bold">swl_live_...</span>).</>
+                ) : (
+                  <>🔑 API Key ya Meseji inapatikana kwenye <a href="https://meseji.co.tz" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">meseji.co.tz</a> &gt; Developer Settings &gt; Generate API Key (inayoanza na <span className="font-mono text-emerald-400 font-bold">zs_...</span>).</>
+                )}
               </p>
             </div>
 

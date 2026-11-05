@@ -740,8 +740,8 @@ export async function fetchFullStateFromDB(): Promise<any> {
     const resolvedApiKey = firstSms?.apiKey || "";
 
     const smsGatewaySettings = firstSms ? {
-      provider: firstSms.provider === "simulation" ? "simulation" : "swalasms",
-      url: firstSms.url || "https://swalasms.com/api/v1/sms/quick-message",
+      provider: firstSms.provider === "simulation" ? "simulation" : (firstSms.provider === "meseji" ? "meseji" : "swalasms"),
+      url: firstSms.url || (firstSms.provider === "meseji" ? "https://meseji.co.tz/api/v1/sms/send" : "https://swalasms.com/api/v1/sms/quick-message"),
       apiKey: resolvedApiKey,
       apiSecret: "",
       senderId: resolvedSenderId,
@@ -821,13 +821,14 @@ export async function fetchFullStateFromDB(): Promise<any> {
       if (!uwalemiState.groupSettings) {
         uwalemiState.groupSettings = {};
       }
-      if (!uSms || !uSms.provider || uSms.provider === "ehub" || uSms.provider === "meseji") {
+      const uSms = uwalemiState.groupSettings.smsConfig;
+      if (!uSms || !uSms.provider || uSms.provider === "ehub") {
         uwalemiState.groupSettings.smsConfig = {
-          provider: "swalasms",
+          provider: "meseji",
           apiKey: "",
           secretKey: "",
           senderId: "UWALEMI",
-          baseUrl: "https://swalasms.com/api/v1/sms/quick-message",
+          baseUrl: "https://meseji.co.tz/api/v1/sms/send",
           autoSendReceipts: uSms?.autoSendReceipts !== undefined ? uSms.autoSendReceipts : true,
           autoSendMeetingAlerts: uSms?.autoSendMeetingAlerts !== undefined ? uSms.autoSendMeetingAlerts : false,
           autoSendMonthlyReminder: uSms?.autoSendMonthlyReminder !== undefined ? uSms.autoSendMonthlyReminder : false,

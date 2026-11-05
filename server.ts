@@ -2580,20 +2580,103 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
 
   const apiKey = (settings.apiKey || "").trim();
   const rawSenderId = (settings.senderId || "").trim();
-  const actualProviderType = (settings.provider || "swalasms").toLowerCase();
+  const actualProviderType = (settings.provider || "meseji").toLowerCase();
 
   // If simulation mode or provider is simulation
   if (actualProviderType === "simulation") {
     return "SMS Simulation";
   }
 
+  const isUwalemiContext = (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-"))) || rawSenderId.toUpperCase() === "UWALEMI";
+
+  // Provider: Meseji.co.tz (Tanzania SMS Gateway)
+  if (actualProviderType === "meseji") {
+    if (!apiKey) {
+      throw new Error(`API Key ya Meseji.co.tz haijawekwa au si sahihi. Tafadhali bonyeza Alama ya Mipangilio (⚙️) kisha uweke Meseji API Key yako kutoka meseji.co.tz (inayoanza na 'zs_...'), au badilisha mfumo kuwa Hali ya Majaribio (Simulation Mode).`);
+    }
+
+    let senderId = isUwalemiContext ? "UWALEMI" : (rawSenderId && !rawSenderId.includes("-") ? rawSenderId : "MESEJI");
+
+    const mesejiPhones = formattedPhone.split(',').map(p => {
+      let clean = p.trim().replace(/[^0-9]/g, '');
+      if (clean.startsWith('0')) clean = '255' + clean.substring(1);
+      if (!clean.startsWith('255') && (clean.startsWith('7') || clean.startsWith('6'))) clean = '255' + clean;
+      if (clean.length === 9) clean = '255' + clean;
+      return clean;
+    }).filter(p => p.length >= 10 && p.startsWith('255'));
+
+    if (mesejiPhones.length === 0) {
+      throw new Error(`Namba ya simu ya mpokeaji ("${formattedPhone}") si sahihi. Namba lazima iwe mfano: 07XXXXXXXX au 2557XXXXXXXX.`);
+    }
+
+    const contactsStr = mesejiPhones.join(', ');
+    const requestUrl = settings.url || "https://meseji.co.tz/api/v1/sms/send";
+
+    console.log(`[SMS] Meseji.co.tz Dispatch: ${requestUrl}, SenderID: ${senderId}, Contacts: ${contactsStr}`);
+
+    let response;
+    let responseContent = "";
+    try {
+      response = await fetch(requestUrl, {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          sender_id: senderId,
+          message: text,
+          contacts: contactsStr
+        })
+      });
+      responseContent = await response.text();
+    } catch (err: any) {
+      console.error("[SMS-Meseji] Fetch issue:", err);
+      throw new Error(`Imeshindwa kufungua mawasiliano na Meseji.co.tz (Fetch Failed): ${err.message || err}. Tafadhali angalia mtandao wako au washa Hali ya Majaribio (Simulation Mode).`);
+    }
+
+    let parsedMeseji: any = null;
+    try {
+      parsedMeseji = JSON.parse(responseContent);
+    } catch {}
+
+    if (!response.ok) {
+      const sanitizedBody = responseContent.replace(/["{}]/g, "").slice(0, 160);
+      const lowerContent = responseContent.toLowerCase();
+
+      if (response.status === 401 || lowerContent.includes("unauthorized") || lowerContent.includes("invalid api key")) {
+        throw new Error(`API Key ya Meseji.co.tz si sahihi au imekwisha muda (Unauthorized - 401). Tafadhali ingia kwenye Mipangilio ya SMS (⚙️) na uweke API Key sahihi inayoanza na 'zs_' kutoka meseji.co.tz > Developer Settings.`);
+      }
+
+      if (response.status === 402 || lowerContent.includes("insufficient") || lowerContent.includes("balance") || lowerContent.includes("credit") || lowerContent.includes("salio")) {
+        throw new Error(`Salio la SMS Halitoshi (Insufficient Balance): Akaunti yako ya Meseji.co.tz haina salio la kutosha kutuma SMS. Tafadhali ongeza salio kwenye meseji.co.tz au washa Hali ya Majaribio (Simulation).`);
+      }
+
+      if (lowerContent.includes("sender_id") || lowerContent.includes("sender id") || lowerContent.includes("unregistered") || lowerContent.includes("pending")) {
+        throw new Error(`Jina la Mtumaji (Sender ID: "${senderId}") halijaidhinishwa au halijasajiliwa kwenye Meseji.co.tz. Tafadhali omba usajili wa Sender ID kwenye meseji.co.tz au tumia "MESEJI".`);
+      }
+
+      throw new Error(`Mtoa huduma wa Meseji.co.tz alirejesha hitilafu (${response.status}): ${sanitizedBody}. Tafadhali kagua salio na mipangilio ya Meseji au washa Hali ya Majaribio.`);
+    }
+
+    if (parsedMeseji) {
+      const isFail = parsedMeseji.status === "failed" || parsedMeseji.status === "error" || parsedMeseji.success === false;
+      if (isFail) {
+        const errMsg = parsedMeseji.message || parsedMeseji.error || responseContent;
+        throw new Error(`Hitilafu toka Meseji.co.tz: ${typeof errMsg === 'object' ? JSON.stringify(errMsg) : errMsg}`);
+      }
+    }
+
+    return responseContent;
+  }
+
   // Provider is SwalaSMS
   // Check if API key is missing or is an invalid legacy token from previous gateways
-  if (!apiKey || apiKey.startsWith("sk_") || apiKey.startsWith("zs_")) {
+  if (!apiKey || apiKey.startsWith("sk_")) {
     throw new Error(`API Key ya SwalaSMS haijawekwa au si sahihi. Tafadhali bonyeza Alama ya Mipangilio (⚙️) kwenye Kutuma Ujumbe kisha uweke SwalaSMS API Key yako kutoka swalasms.com (inayoanza na swl_live_...), au badilisha mfumo kuwa Hali ya Majaribio (Simulation Mode).`);
   }
 
-  const isUwalemiContext = (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-"))) || rawSenderId.toUpperCase() === "UWALEMI";
   let senderId = isUwalemiContext ? "UWALEMI" : (rawSenderId && !rawSenderId.includes("-") && rawSenderId !== "00420892-38bd-47b0-9a5f-ea55bef5d2d1" ? rawSenderId : "EVENT CARD");
 
   const requestUrl = settings.url || "https://swalasms.com/api/v1/sms/quick-message";
@@ -4507,6 +4590,7 @@ Lema, Nguvu Moja!`;
             const configuredSms = state.groupSettings?.smsConfig;
             const globalSmsSettings = db.smsGatewaySettings || {};
             let effectiveProvider = configuredSms?.provider === 'simulation' ? 'simulation' : 'swalasms';
+            const activeApiKey = configuredSms?.apiKey || globalSmsSettings?.apiKey || '';
 
             if (effectiveProvider !== 'simulation' && activeApiKey) {
               const smsPayload = {
@@ -4575,6 +4659,7 @@ Lema, Nguvu Moja!`;
       const configuredSms = state.groupSettings?.smsConfig;
       const globalSmsSettings = db.smsGatewaySettings || {};
       let effectiveProvider = configuredSms?.provider === 'simulation' ? 'simulation' : 'swalasms';
+      const activeApiKey = configuredSms?.apiKey || globalSmsSettings?.apiKey || '';
 
       let sentCount = 0;
       let failedCount = 0;
@@ -5120,12 +5205,16 @@ Lema, Nguvu Moja!`;
       }
 
       if (settings.provider !== "simulation") {
-        settings.provider = "swalasms";
+        if (settings.provider !== "meseji" && settings.provider !== "swalasms") {
+          settings.provider = "meseji";
+        }
         if (!settings.senderId) {
-          settings.senderId = "EVENT CARD";
+          settings.senderId = settings.provider === "meseji" ? "MESEJI" : "EVENT CARD";
         }
         if (!settings.url) {
-          settings.url = "https://swalasms.com/api/v1/sms/quick-message";
+          settings.url = settings.provider === "meseji" 
+            ? "https://meseji.co.tz/api/v1/sms/send" 
+            : "https://swalasms.com/api/v1/sms/quick-message";
         }
       }
 
@@ -5173,9 +5262,13 @@ Lema, Nguvu Moja!`;
       }
 
       if (newSettings.provider !== 'simulation') {
-        newSettings.provider = 'swalasms';
+        if (newSettings.provider !== 'meseji' && newSettings.provider !== 'swalasms') {
+          newSettings.provider = 'meseji';
+        }
         if (!newSettings.url) {
-          newSettings.url = 'https://swalasms.com/api/v1/sms/quick-message';
+          newSettings.url = newSettings.provider === 'meseji'
+            ? 'https://meseji.co.tz/api/v1/sms/send'
+            : 'https://swalasms.com/api/v1/sms/quick-message';
         }
       }
 
@@ -6766,11 +6859,9 @@ Lema, Nguvu Moja!`;
         };
       }
 
-      if (!settings.provider || settings.provider !== "simulation") {
-        settings.provider = "swalasms";
-      }
+      const prov = (settings.provider || 'meseji').toLowerCase();
 
-      if (settings.provider === "simulation") {
+      if (prov === "simulation") {
         return res.json({ 
           provider: "simulation", 
           isSimulation: true,
@@ -6780,6 +6871,72 @@ Lema, Nguvu Moja!`;
       }
 
       const apiKey = (settings.apiKey || "").trim();
+
+      // Provider: Meseji.co.tz
+      if (prov === "meseji") {
+        if (!apiKey) {
+          return res.status(400).json({ 
+            provider: "meseji",
+            isSimulation: false,
+            balance: null,
+            error: "API Key ya Meseji.co.tz haijawekwa. Tafadhali weka API Key yako inayoanza na 'zs_...' kutoka meseji.co.tz > Developer Settings, au washa Hali ya Majaribio (Simulation)." 
+          });
+        }
+
+        try {
+          const response = await fetch("https://meseji.co.tz/api/v1/sms/user-stats", {
+            method: "GET",
+            headers: {
+              "x-api-key": apiKey,
+              "Accept": "application/json"
+            }
+          });
+
+          const dataText = await response.text();
+          let parsed: any = null;
+          try { parsed = JSON.parse(dataText); } catch { }
+
+          if (response.status === 401 || (parsed && (parsed.message === "Unauthorized API key." || parsed.error_code === "AUTHENTICATION_FAILED"))) {
+            return res.status(401).json({
+              provider: "meseji",
+              isSimulation: false,
+              balance: null,
+              error: `API Key ya Meseji.co.tz si sahihi au imekwisha muda (Unauthorized - 401). Tafadhali weka API Key sahihi toka meseji.co.tz (inayoanza na 'zs_...').`,
+              status: 401,
+              raw: parsed || dataText
+            });
+          }
+
+          let balance: number | null = null;
+          if (parsed && typeof parsed.balance !== "undefined") {
+            balance = Number(parsed.balance);
+          } else if (parsed && typeof parsed.credits !== "undefined") {
+            balance = Number(parsed.credits);
+          }
+
+          if (balance !== null && !isNaN(balance)) {
+            balance = Math.floor(balance);
+          }
+
+          return res.json({
+            provider: "meseji",
+            isSimulation: false,
+            balance: balance !== null ? balance : 0,
+            stats: parsed,
+            raw: parsed || dataText,
+            status: response.status
+          });
+        } catch (mesejiErr: any) {
+          return res.status(500).json({
+            provider: "meseji",
+            isSimulation: false,
+            balance: null,
+            error: `Hitilafu ya kuunganisha na Meseji.co.tz: ${mesejiErr.message}`,
+          });
+        }
+      }
+
+      // Provider: SwalaSMS
       if (!apiKey) {
         return res.status(400).json({ 
           provider: "swalasms",
@@ -6843,6 +7000,37 @@ Lema, Nguvu Moja!`;
     } catch (e: any) {
       console.error("SMS Balance error:", e.message);
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API: Fetch Meseji Sender IDs
+  app.post("/api/fetch-meseji-sender-ids", async (req, res) => {
+    try {
+      const apiKey = (req.body?.apiKey || "").trim();
+      if (!apiKey) {
+        return res.status(400).json({ error: "API Key inahitajika" });
+      }
+      const response = await fetch("https://meseji.co.tz/api/v1/sms/sender-ids", {
+        method: "GET",
+        headers: {
+          "x-api-key": apiKey,
+          "Accept": "application/json"
+        }
+      });
+      const dataText = await response.text();
+      let parsed: any = [];
+      try {
+        parsed = JSON.parse(dataText);
+      } catch {}
+
+      let items = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.data) ? parsed.data : []);
+      // Always include default approved MESEJI
+      if (!items.some((it: any) => it.sender_id === 'MESEJI')) {
+        items.unshift({ id: 'default-meseji', sender_id: 'MESEJI', status: 'approved' });
+      }
+      return res.json({ success: true, data: items });
+    } catch (e: any) {
+      return res.json({ success: true, data: [{ id: 'default-meseji', sender_id: 'MESEJI', status: 'approved' }] });
     }
   });
 
