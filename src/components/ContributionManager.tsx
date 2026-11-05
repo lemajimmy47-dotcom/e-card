@@ -560,6 +560,19 @@ export default function ContributionManager({
     channel: 'SMS' | 'WhatsApp';
   } | null>(null);
 
+  const [bulkConfirmModal, setBulkConfirmModal] = useState<{
+    type: 'Pledge' | 'Reminder' | 'Thanks';
+    count: number;
+    channel: 'SMS' | 'WhatsApp';
+  } | null>(null);
+
+  const [bulkCompletedModal, setBulkCompletedModal] = useState<{
+    sent: number;
+    failed: number;
+    channel: string;
+    type: string;
+  } | null>(null);
+
   const triggerSmsWalletUpdate = (count: number, channel: 'SMS' | 'WhatsApp') => {
     if (channel === 'SMS') {
       let newBalance: number | string = smsWalletBalance;
@@ -1440,16 +1453,16 @@ export default function ContributionManager({
   ];
 
   // Real messaging dispatch engine linked to API gateway
-  const handleBulkSend = async (type: 'Pledge' | 'Reminder' | 'Thanks') => {
+  const handleBulkSend = (type: 'Pledge' | 'Reminder' | 'Thanks') => {
     if (selectedGuests.length === 0) {
-      alert(isEn ? 'Please select guests first.' : 'Tafadhali chagua wageni kwanza.');
+      setSendLogs(prev => [`[⚠️] ${isEn ? 'Please select guests first.' : 'Tafadhali chagua wageni kwanza kwenye orodha.'}`, ...prev]);
       return;
     }
 
     if (sendingChannel === 'WhatsApp') {
       const dispatchList = guests.filter(g => selectedGuests.includes(g.id));
       if (dispatchList.length === 0) {
-        alert(isEn ? 'No candidates selected for WhatsApp sending. Please check guests first.' : 'Hakuna watu walioteuliwa kwa ajili ya WhatsApp. Tafadhali chagua wageni kwanza.');
+        setSendLogs(prev => [`[⚠️] ${isEn ? 'No candidates selected for WhatsApp sending. Please check guests first.' : 'Hakuna wageni walioteuliwa kwa ajili ya WhatsApp.'}`, ...prev]);
         return;
       }
       setWaInteractiveQueue({
@@ -1460,14 +1473,16 @@ export default function ContributionManager({
       return;
     }
 
-    const confirmMsg = isEn 
-      ? `Are you sure you want to send ${selectedGuests.length} ${type} messages via ${sendingChannel}?`
-      : `Je, una uhakika unataka kutuma mialiko/ujumbe wa ${type === 'Pledge' ? 'Ombi la Ahadi' : (type === 'Reminder' ? 'Kumbusho la Makusanyo' : 'Shukrani')} kwa wageni ${selectedGuests.length} kupitia njia ya ${sendingChannel}?`;
+    // Open sleek in-app confirmation modal (avoids browser iframe blocked window.confirm)
+    setBulkConfirmModal({
+      type,
+      count: selectedGuests.length,
+      channel: sendingChannel
+    });
+  };
 
-    if (!confirm(confirmMsg)) {
-      return;
-    }
-
+  const executeConfirmedBulkSend = async (type: 'Pledge' | 'Reminder' | 'Thanks') => {
+    setBulkConfirmModal(null);
     setIsSendingAll(true);
     setSendingProgress(0);
     setSendLogs([`[0.00s] Kuanza kutuma ${type} kwa wageni (${selectedGuests.length}) kupitia ${sendingChannel}...`]);
@@ -1553,7 +1568,7 @@ export default function ContributionManager({
                   const lipa = event.paymentMethods.filter(m => m.type === 'Lipa Namba');
                   const bank = event.paymentMethods.filter(m => m.type === 'Bank');
                   
-                  const isMixx = (provider) => {
+                  const isMixx = (provider: any) => {
                     const p = String(provider || '').trim().toLowerCase();
                     return p === 'mixx by yas' || p === 'mixx by yass' || p.includes('mixx') || p.includes('yas');
                   };
@@ -1631,8 +1646,8 @@ export default function ContributionManager({
           data = JSON.parse(responseText);
         } catch (jsonErr) {
           throw new Error(isEn 
-            ? `Server returned an invalid non-JSON response. It might be starting up or under maintenance.`
-            : `Mtoa huduma amerejesha jibu ambalo si JSON. Server inaweza kuwa inaanza au kufanyiwa matengenezo.`);
+            ? `Server returned an invalid non-JSON response.`
+            : `Mtoa huduma amerejesha jibu lisilo sahihi.`);
         }
         
         if (!res.ok) {
@@ -1689,17 +1704,12 @@ export default function ContributionManager({
     setIsSendingAll(false);
     setSendingProgress(100);
 
-    if (failedCount > 0) {
-      alert(isEn
-        ? `Bulk dispatch completed. Successful: ${sentSuccessfully}, Failed: ${failedCount}. Please look at the 'Message Center' history trace logs for detailed error answers!`
-        : `Zoezi la kutuma kikundi limekamilika. Zilizofanikiwa: ${sentSuccessfully}, Zilizoshindwa: ${failedCount}. Tafadhali angalia sehemu ya 'Kituo cha Ujumbe' kwa kupitia logi za hitilafu!`
-      );
-    } else {
-      alert(isEn
-        ? `Successfully sent all ${sentSuccessfully} reminders via ${sendingChannel}!`
-        : `Ujumbe wote ${sentSuccessfully} imetumwa vyema kwa mafanikio kupitia ${sendingChannel}!`
-      );
-    }
+    setBulkCompletedModal({
+      sent: sentSuccessfully,
+      failed: failedCount,
+      channel: sendingChannel,
+      type: type === 'Pledge' ? (isEn ? 'Pledge Requests' : 'Maombi ya Ahadi') : (type === 'Reminder' ? (isEn ? 'Reminders' : 'Vikumbusho') : (isEn ? 'Thank You' : 'Shukrani'))
+    });
     
     if (sendingChannel === 'SMS' && !isSimulationBalance) {
       setTimeout(fetchRealSmsBalance, 2000);
@@ -1770,12 +1780,6 @@ export default function ContributionManager({
   };
 
   const handleResetTemplateText = () => {
-    const isConfirmed = window.confirm(
-      isEn
-        ? "Are you sure you want to reset the current message template back to its default text?"
-        : "Je, una uhakika unataka kurudisha kiolezo hiki cha sasa kwenye ujumbe wa asili wa default?"
-    );
-    if (!isConfirmed) return;
 
     if (subTab === 'pledge-requests') {
       if (messageTemplateIndex === 0) {
@@ -4885,14 +4889,10 @@ export default function ContributionManager({
             </div>
             <button
               onClick={() => {
-                const confirmMsg = isEn 
-                  ? 'Are you sure you want to clear all contribution dispatch logs?' 
-                  : 'Je unasafisha log zote za mawasiliano ya michango ya sasa?';
-                if(confirm(confirmMsg)) {
-                  setMessageLogs([]);
-                }
+                setMessageLogs([]);
+                setSendLogs([]);
               }}
-              className="text-[9px] font-mono font-bold text-red-500 hover:text-white bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg transition uppercase"
+              className="text-[9px] font-mono font-bold text-red-500 hover:text-white bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg transition uppercase cursor-pointer"
             >
               <Trash2 className="w-3 h-3 inline mr-1" />
               {isEn ? "Clear All" : "Safisha"}
@@ -5135,8 +5135,11 @@ export default function ContributionManager({
                   <h3 className="text-xs font-black text-white uppercase font-mono tracking-wider">{isEn ? "Recent Activity" : "Mwenendo wa Hivi Karibuni"}</h3>
                 </div>
                 <button 
-                  onClick={() => {if(confirm(isEn ? 'Clear all logs?' : 'Safisha log zote?')) setMessageLogs([]);}}
-                  className="text-[9px] font-bold text-rose-500 hover:text-rose-400 uppercase font-mono"
+                  onClick={() => {
+                    setMessageLogs([]);
+                    setSendLogs([]);
+                  }}
+                  className="text-[9px] font-bold text-rose-500 hover:text-rose-400 uppercase font-mono cursor-pointer"
                 >
                   {isEn ? "Clear" : "Safisha"}
                 </button>
@@ -5842,6 +5845,121 @@ export default function ContributionManager({
         )}
       </AnimatePresence>
 
+      {/* 5C. In-App Confirmation Modal for Bulk Sending */}
+      <AnimatePresence>
+        {bulkConfirmModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              className="bg-slate-900 border border-amber-500/30 w-full max-w-md rounded-2xl p-6 space-y-5 shadow-2xl text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center text-amber-400">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-white text-sm">
+                    {isEn ? "Confirm Bulk Dispatch" : "Thibitisha Kutuma kwa Mkupuo"}
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {isEn ? "Review sending details before dispatching" : "Kagua taarifa kabla ya kuanza utumaji"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/80 rounded-xl p-4 border border-white/5 space-y-2.5 text-xs font-mono">
+                <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                  <span className="text-slate-400">{isEn ? "Recipients:" : "Idadi ya Wageni:"}</span>
+                  <span className="font-bold text-amber-400 text-sm">{bulkConfirmModal.count} {isEn ? "guests" : "waliochaguliwa"}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                  <span className="text-slate-400">{isEn ? "Channel:" : "Njia ya Utumaji:"}</span>
+                  <span className="font-bold text-emerald-400">{bulkConfirmModal.channel}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">{isEn ? "Message Type:" : "Aina ya Ujumbe:"}</span>
+                  <span className="font-bold text-indigo-300">
+                    {bulkConfirmModal.type === 'Pledge' ? (isEn ? 'Pledge Request' : 'Ombi la Ahadi') : (bulkConfirmModal.type === 'Reminder' ? (isEn ? 'Payment Reminder' : 'Kumbusho la Malipo') : (isEn ? 'Thank You' : 'Shukrani'))}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                {isEn
+                  ? `Messages will be delivered sequentially via ${bulkConfirmModal.channel}. You can track progress in real-time below.`
+                  : `Ujumbe utatumwa mmoja baada ya mwingine kupitia njia ya ${bulkConfirmModal.channel}. Utaratibu na maendeleo vitaonekana kwenye skrini hapo chini.`
+                }
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setBulkConfirmModal(null)}
+                  className="w-full py-3 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-xl font-bold uppercase font-mono text-[11px] transition border border-white/10 cursor-pointer"
+                >
+                  {isEn ? "Cancel" : "Ghairi"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => executeConfirmedBulkSend(bulkConfirmModal.type)}
+                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-rose-500 hover:brightness-110 text-white rounded-xl font-extrabold uppercase font-mono text-[11px] transition shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {isEn ? `Send Now (${bulkConfirmModal.count})` : `Tuma Sasa (${bulkConfirmModal.count})`}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 5D. In-App Bulk Completed Modal */}
+      <AnimatePresence>
+        {bulkCompletedModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              className="bg-slate-900 border border-emerald-500/30 w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-2xl text-center"
+            >
+              <div className="mx-auto w-12 h-12 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center text-emerald-400">
+                <CheckCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-white text-base">
+                  {isEn ? "Bulk Dispatch Completed!" : "Zoezi la Kutuma Limekamilika!"}
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  {isEn ? `Finished sending ${bulkCompletedModal.type} notifications.` : `Utumaji wa ${bulkCompletedModal.type} umekamilika.`}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 bg-slate-950 p-3 rounded-xl border border-white/5 font-mono text-xs">
+                <div className="text-emerald-400">
+                  <div className="text-[10px] text-slate-500 uppercase">{isEn ? "Delivered" : "Zilizofanikiwa"}</div>
+                  <div className="text-lg font-bold">{bulkCompletedModal.sent}</div>
+                </div>
+                <div className={bulkCompletedModal.failed > 0 ? "text-rose-400" : "text-slate-400"}>
+                  <div className="text-[10px] text-slate-500 uppercase">{isEn ? "Failed" : "Zilizofeli"}</div>
+                  <div className="text-lg font-bold">{bulkCompletedModal.failed}</div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setBulkCompletedModal(null)}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold uppercase font-mono text-[10px] transition cursor-pointer shadow-lg shadow-emerald-600/30"
+              >
+                {isEn ? "Done / Continue" : "Sawa / Endelea"}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* 5B. Interactive WhatsApp Multi-Send Bulk Queue Assistant */}
       <AnimatePresence>
         {waInteractiveQueue && (() => {
@@ -5906,10 +6024,6 @@ export default function ContributionManager({
 
           // Action to automatically mark all remaining guests as sent in 1-click
           const handleAutoAllBackground = async () => {
-            if (!confirm(isEn 
-              ? `Are you sure you want to instantly mark all remaining ${total - queue.currentIndex} guests as sent in the database?` 
-              : `Je, una uhakika unataka kusajili wageni wote waliobaki ${total - queue.currentIndex} kuwa wametumiwa tayari kiotomatiki?`
-            )) return;
 
             let updatedGuests = [...guests];
             for (let i = queue.currentIndex; i < total; i++) {
