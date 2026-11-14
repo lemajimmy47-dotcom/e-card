@@ -160,12 +160,20 @@ export interface UwalemiMeeting {
   status: 'upcoming' | 'completed' | 'cancelled';
 }
 
+export interface UwalemiSmsProviderProfile {
+  apiKey: string;
+  senderId: string;
+  baseUrl: string;
+}
+
 export interface UwalemiSmsConfig {
-  provider: 'swalasms' | 'meseji' | 'beem' | 'nextsms' | 'ehub' | 'custom' | 'simulation';
+  provider: 'swalasms' | 'meseji' | 'simulation';
   apiKey: string;
   secretKey: string;
   senderId: string;
   baseUrl?: string;
+  swalasmsConfig?: UwalemiSmsProviderProfile;
+  mesejiConfig?: UwalemiSmsProviderProfile;
   autoSendReceipts: boolean;
   autoSendMeetingAlerts: boolean;
   autoSendMonthlyReminder: boolean;

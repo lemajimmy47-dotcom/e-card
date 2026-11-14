@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 export default function SMSGatewayConfig() {
   const { language, t } = useLanguage();
   const isEn = language === 'en';
-  const [gatewaySettings, setGatewaySettings] = useState({
+  const [gatewaySettings, setGatewaySettings] = useState<any>({
     provider: 'simulation',
     url: '',
     apiKey: '',
@@ -14,11 +14,16 @@ export default function SMSGatewayConfig() {
     senderIdStatus: 'approved',
     whatsappUrl: '',
     customHeaders: '{}',
-    customBody: '{\n  "to": "{to}",\n  "message": "{message}"\n}'
+    customBody: '{\n  "to": "{to}",\n  "message": "{message}"\n}',
+    swalasmsConfig: { apiKey: '', senderId: 'EVENT CARD', url: 'https://swalasms.com/api/v1/sms/quick-message' },
+    mesejiConfig: { apiKey: '', senderId: 'MESEJI', url: 'https://meseji.co.tz/api/v1/sms/send' }
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [balance, setBalance] = useState<number | string | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [smsSaveFeedback, setSmsSaveFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [senderIdFetchError, setSenderIdFetchError] = useState<string | null>(null);
 
   // New WhatsApp Integration sub-states
   const [whatsappProvider, setWhatsappProvider] = useState<'simulation' | 'meta' | 'custom_webhook'>('simulation');
@@ -112,16 +117,18 @@ export default function SMSGatewayConfig() {
   useEffect(() => {
     setAvailableIds([]);
     setHasFetchedIds(false);
+    setSenderIdFetchError(null);
   }, [gatewaySettings.provider]);
 
   const fetchEhubIds = async (overrideSettings?: any) => {
     const settingsToUse = overrideSettings || gatewaySettings;
     if (!settingsToUse.apiKey || !settingsToUse.apiSecret) {
-      if (!overrideSettings) alert(isEn ? "Please enter API Key and Secret first" : "Tafadhali weka API Key na Secret kwanza");
+      if (!overrideSettings) setSenderIdFetchError(isEn ? "Please enter API Key and Secret first" : "Tafadhali weka API Key na Secret kwanza");
       return;
     }
     setIsFetchingIds(true);
     setHasFetchedIds(true);
+    setSenderIdFetchError(null);
     try {
       const res = await fetch('/api/fetch-ehub-sender-ids', {
         method: 'POST',
@@ -144,34 +151,38 @@ export default function SMSGatewayConfig() {
 
       if (items.length > 0) {
         setAvailableIds(items);
-        // Auto-select first approved UUID if current senderId is sample placeholder or non-UUID
         const approvedItem = items.find((it: any) => !it.status || it.status === 'approved' || it.status === 'active') || items[0];
         if (approvedItem) {
           const candidateUuid = approvedItem.id || approvedItem.sender_id;
           if (candidateUuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidateUuid)) {
             if (settingsToUse.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(settingsToUse.senderId)) {
-              setGatewaySettings(prev => ({ ...prev, senderId: candidateUuid }));
+              setGatewaySettings((prev: any) => ({ ...prev, senderId: candidateUuid }));
             }
           }
         }
       } else if (data.success === false || data.error || data.message) {
         const errorMsg = data.message || data.error || (isEn ? "No approved Sender IDs found" : "Hakuna Sender ID zilizoidhinishwa");
-        if (!overrideSettings) alert(isEn ? "Imeshindwa: " + errorMsg : "Imeshindwa: " + errorMsg);
+        if (!overrideSettings) setSenderIdFetchError(errorMsg);
         setAvailableIds([]);
       } else {
         setAvailableIds([]);
       }
-    } catch (err) {
-      if (!overrideSettings) alert(isEn ? "Connection error" : "Hitilafu ya mtandao");
+    } catch {
+      if (!overrideSettings) setSenderIdFetchError(isEn ? "Connection error" : "Hitilafu ya mtandao");
     } finally {
       setIsFetchingIds(false);
     }
   };
 
   const fetchSwalaIds = async (apiKeyOverride?: string) => {
-    const keyToUse = apiKeyOverride || gatewaySettings.apiKey || "swl_live_vtWJVXNYyVpjhUcu3PNFuOvL1WX6nXzE0yz9qVImRwNCP5a3";
+    const keyToUse = (apiKeyOverride || gatewaySettings.apiKey || '').trim();
+    if (!keyToUse) {
+      setSenderIdFetchError(isEn ? "Please enter your SwalaSMS API Key first (swl_live_...)" : "[SWALASMS] Tafadhali weka API Key ya SwalaSMS kwanza (swl_live_...)");
+      return;
+    }
     setIsFetchingIds(true);
     setHasFetchedIds(true);
+    setSenderIdFetchError(null);
     try {
       const res = await fetch('/api/fetch-swalasms-sender-ids', {
         method: 'POST',
@@ -179,6 +190,11 @@ export default function SMSGatewayConfig() {
         body: JSON.stringify({ apiKey: keyToUse })
       });
       const data = await res.json();
+      if (!res.ok || data.success === false) {
+        setSenderIdFetchError(data.error || `[SWALASMS] Hitilafu (${res.status})`);
+        setAvailableIds([]);
+        return;
+      }
       const items = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
       if (items.length > 0) {
         setAvailableIds(items.map((it: any) => ({
@@ -188,22 +204,25 @@ export default function SMSGatewayConfig() {
         })));
       } else {
         setAvailableIds([]);
+        setSenderIdFetchError("[SWALASMS] Hakuna Sender ID zilizopatikana kwenye akaunti hii.");
       }
-    } catch {
+    } catch (e: any) {
       setAvailableIds([]);
+      setSenderIdFetchError(e.message || "[SWALASMS] Hitilafu ya mtandao");
     } finally {
       setIsFetchingIds(false);
     }
   };
 
   const fetchMesejiIds = async (apiKeyOverride?: string) => {
-    const keyToUse = apiKeyOverride || gatewaySettings.apiKey;
+    const keyToUse = (apiKeyOverride || gatewaySettings.apiKey || '').trim();
     if (!keyToUse) {
-      alert(isEn ? "Please enter your Meseji API Key first" : "Tafadhali weka API Key ya Meseji kwanza (inayoanza na zs_...)");
+      setSenderIdFetchError(isEn ? "Please enter your Meseji API Key first (zs_...)" : "[MESEJI.CO.TZ] Tafadhali weka API Key ya Meseji kwanza (zs_...)");
       return;
     }
     setIsFetchingIds(true);
     setHasFetchedIds(true);
+    setSenderIdFetchError(null);
     try {
       const res = await fetch('/api/fetch-meseji-sender-ids', {
         method: 'POST',
@@ -211,6 +230,11 @@ export default function SMSGatewayConfig() {
         body: JSON.stringify({ apiKey: keyToUse })
       });
       const data = await res.json();
+      if (!res.ok || data.success === false) {
+        setSenderIdFetchError(data.error || `[MESEJI.CO.TZ] Hitilafu (${res.status})`);
+        setAvailableIds([]);
+        return;
+      }
       const items = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
       if (items.length > 0) {
         setAvailableIds(items.map((it: any) => ({
@@ -221,22 +245,35 @@ export default function SMSGatewayConfig() {
       } else {
         setAvailableIds([{ id: 'MESEJI', sender_id: 'MESEJI', status: 'approved' }]);
       }
-    } catch {
-      setAvailableIds([{ id: 'MESEJI', sender_id: 'MESEJI', status: 'approved' }]);
+    } catch (e: any) {
+      setAvailableIds([]);
+      setSenderIdFetchError(e.message || "[MESEJI.CO.TZ] Hitilafu ya mtandao");
     } finally {
       setIsFetchingIds(false);
     }
   };
 
-  const fetchBalance = () => {
-    fetch('/api/sms-balance')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.balance !== undefined) {
-          setBalance(data.balance);
+  const fetchBalance = (overrideProvider?: string, overrideApiKey?: string) => {
+    const prov = overrideProvider ?? gatewaySettings.provider;
+    const key = overrideApiKey ?? gatewaySettings.apiKey;
+    setBalanceError(null);
+    const params = new URLSearchParams();
+    if (prov) params.set('provider', prov);
+    if (key !== undefined) params.set('apiKey', key);
+    fetch(`/api/sms-balance?${params.toString()}`)
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          setBalance(null);
+          setBalanceError(data.error || `Hitilafu (${res.status})`);
+          return;
         }
+        setBalance(data.balance !== undefined ? data.balance : null);
       })
-      .catch(err => console.warn("Failed to fetch balance:", err));
+      .catch(err => {
+        setBalance(null);
+        setBalanceError(err.message || "Imeshindwa kukagua salio");
+      });
   };
 
   useEffect(() => {
@@ -247,7 +284,29 @@ export default function SMSGatewayConfig() {
           if (data.senderId === '00420892-38bd-47b0-9a5f-ea55bef5d2d1') {
             data.senderId = '339330f1-4e6a-4bf7-a9f8-eaae2a9dd397';
           }
-          setGatewaySettings(prev => ({ ...prev, ...data }));
+          const swalasmsConfig = data.swalasmsConfig || {
+            apiKey: data.provider === 'swalasms' ? (data.apiKey || '') : '',
+            senderId: data.provider === 'swalasms' ? (data.senderId || 'EVENT CARD') : 'EVENT CARD',
+            url: 'https://swalasms.com/api/v1/sms/quick-message'
+          };
+          const mesejiConfig = data.mesejiConfig || {
+            apiKey: data.provider === 'meseji' ? (data.apiKey || '') : '',
+            senderId: data.provider === 'meseji' ? (data.senderId || 'MESEJI') : 'MESEJI',
+            url: 'https://meseji.co.tz/api/v1/sms/send'
+          };
+          const activeProf = data.provider === 'meseji'
+            ? mesejiConfig
+            : (data.provider === 'swalasms' ? swalasmsConfig : null);
+
+          setGatewaySettings((prev: any) => ({
+            ...prev,
+            ...data,
+            apiKey: activeProf ? activeProf.apiKey : (data.apiKey || ''),
+            senderId: activeProf ? activeProf.senderId : (data.senderId || ''),
+            url: activeProf ? activeProf.url : (data.url || ''),
+            swalasmsConfig,
+            mesejiConfig
+          }));
           
           // Deserialize WhatsApp Cloud API settings if packed as generic JSON
           const wUrl = data.whatsappUrl || '';
@@ -328,9 +387,30 @@ export default function SMSGatewayConfig() {
     return () => clearInterval(interval);
   }, [gatewaySettings.senderIdStatus, gatewaySettings.provider]);
 
+  const updateActiveProviderSetting = (patch: Partial<{ apiKey: string; senderId: string; url: string }>) => {
+    setGatewaySettings((prev: any) => {
+      const next = { ...prev, ...patch };
+      if (prev.provider === 'meseji') {
+        next.mesejiConfig = {
+          apiKey: patch.apiKey !== undefined ? patch.apiKey : (prev.mesejiConfig?.apiKey ?? prev.apiKey ?? ''),
+          senderId: patch.senderId !== undefined ? patch.senderId : (prev.mesejiConfig?.senderId ?? prev.senderId ?? 'MESEJI'),
+          url: patch.url !== undefined ? patch.url : (prev.mesejiConfig?.url ?? 'https://meseji.co.tz/api/v1/sms/send')
+        };
+      } else if (prev.provider === 'swalasms') {
+        next.swalasmsConfig = {
+          apiKey: patch.apiKey !== undefined ? patch.apiKey : (prev.swalasmsConfig?.apiKey ?? prev.apiKey ?? ''),
+          senderId: patch.senderId !== undefined ? patch.senderId : (prev.swalasmsConfig?.senderId ?? prev.senderId ?? 'EVENT CARD'),
+          url: patch.url !== undefined ? patch.url : (prev.swalasmsConfig?.url ?? 'https://swalasms.com/api/v1/sms/quick-message')
+        };
+      }
+      return next;
+    });
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    setSmsSaveFeedback(null);
 
     // Serialize WhatsApp settings before dispatching to backend
     let finalWhatsappUrl = '';
@@ -351,8 +431,17 @@ export default function SMSGatewayConfig() {
       finalWhatsappUrl = whatsappUrlInput.trim();
     }
 
+    const updatedSwala = gatewaySettings.provider === 'swalasms'
+      ? { apiKey: gatewaySettings.apiKey, senderId: gatewaySettings.senderId || 'EVENT CARD', url: 'https://swalasms.com/api/v1/sms/quick-message' }
+      : gatewaySettings.swalasmsConfig;
+    const updatedMeseji = gatewaySettings.provider === 'meseji'
+      ? { apiKey: gatewaySettings.apiKey, senderId: gatewaySettings.senderId || 'MESEJI', url: 'https://meseji.co.tz/api/v1/sms/send' }
+      : gatewaySettings.mesejiConfig;
+
     const payload = {
       ...gatewaySettings,
+      swalasmsConfig: updatedSwala,
+      mesejiConfig: updatedMeseji,
       adminWhatsAppPhone: adminWhatsAppPhone.trim(),
       autoRsvpAlertsEnabled,
       guestRsvpConfirmEnabled,
@@ -364,15 +453,25 @@ export default function SMSGatewayConfig() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
-      .then(res => {
-        if (!res.ok) throw new Error("Kuhifadhi kulishindwa");
-        return res.json();
+      .then(async res => {
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || "Kuhifadhi kulishindwa");
+        return d;
       })
       .then(() => {
-        alert(isEn ? "Gateway configuration saved successfully!" : "Mipangilio ya Gateway imehifadhiwa vizuri!");
+        setSmsSaveFeedback({
+          success: true,
+          message: isEn
+            ? `Saved (${(gatewaySettings.provider || 'simulation').toUpperCase()}). Strictly isolated without auto-failover.`
+            : `Mipangilio ya ${(gatewaySettings.provider || 'simulation').toUpperCase()} imehifadhiwa na kujitegemea 100%!`
+        });
+        fetchBalance();
       })
       .catch(err => {
-        alert((isEn ? "Error saving: " : "Hitilafu imetokea: ") + err.message);
+        setSmsSaveFeedback({
+          success: false,
+          message: (isEn ? "Error saving: " : "Hitilafu imetokea: ") + err.message
+        });
       })
       .finally(() => {
         setIsSaving(false);
@@ -489,9 +588,26 @@ export default function SMSGatewayConfig() {
 
       <p className="text-[11px] text-slate-400 leading-relaxed">
         {isEn 
-          ? "Configure your SMS Gateway here once, and it will be used across all modules (Invitations, Save the Date, and Contributions)." 
-          : "Sanidi Gateway ya SMS (SwalaSMS) hapa mara moja kwa ajili ya mfumo mzima. Sehemu zote za (Mialiko, Save the Date, na Michango) zitatumia Mipangilio hii."}
+          ? "Configure your active SMS Gateway here. Each gateway (Meseji.co.tz and SwalaSMS) keeps completely separate credentials with zero automatic switching on failure." 
+          : "Sanidi Gateway ya SMS hapa. Kila mtoa huduma (Meseji.co.tz na SwalaSMS) ana mipangilio yake inayojitegemea na mfumo hautahamia kwa mwingine kiotomatiki."}
       </p>
+
+      {balanceError && gatewaySettings.provider !== 'simulation' && (
+        <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/30 text-[11px] text-rose-300">
+          {balanceError}
+        </div>
+      )}
+
+      {smsSaveFeedback && (
+        <div className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 ${
+          smsSaveFeedback.success
+            ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
+            : 'bg-rose-950/60 border-rose-500/30 text-rose-300'
+        }`}>
+          {smsSaveFeedback.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span>{smsSaveFeedback.message}</span>
+        </div>
+      )}
 
       <form onSubmit={handleSave} className="space-y-4 pt-2">
         <div className="space-y-1">
@@ -499,13 +615,35 @@ export default function SMSGatewayConfig() {
             {isEn ? "SMS Provider" : "Mtoa Huduma wa SMS (Provider)"}
           </label>
           <select 
-            value={gatewaySettings.provider || 'meseji'}
+            value={gatewaySettings.provider || 'simulation'}
             onChange={(e) => {
               const val = e.target.value;
-              let defaultUrl = val === 'meseji' ? 'https://meseji.co.tz/api/v1/sms/send' : 'https://swalasms.com/api/v1/sms/quick-message';
-              let defaultSender = val === 'meseji' ? 'MESEJI' : (gatewaySettings.senderId || 'EVENT CARD');
-              let defaultApiKey = gatewaySettings.apiKey;
-              setGatewaySettings({ ...gatewaySettings, provider: val, url: defaultUrl, senderId: defaultSender, apiKey: defaultApiKey });
+              setSmsSaveFeedback(null);
+              setBalance(null);
+              setBalanceError(null);
+              setSenderIdFetchError(null);
+              setGatewaySettings((prev: any) => {
+                const swalaProf = prev.provider === 'swalasms'
+                  ? { apiKey: prev.apiKey || '', senderId: prev.senderId || 'EVENT CARD', url: 'https://swalasms.com/api/v1/sms/quick-message' }
+                  : (prev.swalasmsConfig || { apiKey: '', senderId: 'EVENT CARD', url: 'https://swalasms.com/api/v1/sms/quick-message' });
+                const mesejiProf = prev.provider === 'meseji'
+                  ? { apiKey: prev.apiKey || '', senderId: prev.senderId || 'MESEJI', url: 'https://meseji.co.tz/api/v1/sms/send' }
+                  : (prev.mesejiConfig || { apiKey: '', senderId: 'MESEJI', url: 'https://meseji.co.tz/api/v1/sms/send' });
+
+                const target = val === 'meseji'
+                  ? mesejiProf
+                  : (val === 'swalasms' ? swalaProf : { apiKey: '', senderId: '', url: '' });
+
+                return {
+                  ...prev,
+                  provider: val,
+                  apiKey: target.apiKey,
+                  senderId: target.senderId,
+                  url: target.url,
+                  swalasmsConfig: swalaProf,
+                  mesejiConfig: mesejiProf
+                };
+              });
             }}
             className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:ring-2 focus:ring-emerald-500/50 transition-all font-semibold text-xs cursor-pointer"
           >
@@ -520,7 +658,7 @@ export default function SMSGatewayConfig() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Meseji.co.tz Imeunganishwa (Live SMS Gateway)
+                Meseji.co.tz Imeunganishwa (Inajitegemea)
               </span>
               {balance !== null && (
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
@@ -530,8 +668,8 @@ export default function SMSGatewayConfig() {
             </div>
             <p className="text-[11px] text-emerald-200/80 leading-relaxed">
               {isEn 
-                ? "Your SMS Gateway is powered by Meseji.co.tz. Enter your API Key (starts with zs_...) from meseji.co.tz > Developer Settings."
-                : "Huduma yako ya SMS inaendeshwa na Meseji.co.tz. Weka API Key yako (inayoanza na zs_...) kutoka meseji.co.tz > Developer Settings."}
+                ? "Your SMS Gateway is powered strictly by Meseji.co.tz. Enter your API Key (starts with zs_...) from meseji.co.tz > Developer Settings."
+                : "Huduma yako ya SMS inatumia Meseji.co.tz pekee. Weka API Key yako (inayoanza na zs_...) kutoka meseji.co.tz > Developer Settings."}
             </p>
           </div>
         )}
@@ -541,7 +679,7 @@ export default function SMSGatewayConfig() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                SwalaSMS Imeunganishwa (Live Gateway)
+                SwalaSMS Imeunganishwa (Inajitegemea)
               </span>
               {balance !== null && (
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
@@ -551,8 +689,8 @@ export default function SMSGatewayConfig() {
             </div>
             <p className="text-[11px] text-emerald-200/80 leading-relaxed">
               {isEn 
-                ? "Your SMS Gateway is powered by SwalaSMS. Enter your SwalaSMS API Key from swalasms.com to send live SMS."
-                : "Huduma yako ya SMS inaendeshwa na SwalaSMS (swalasms.com). Weka API Key yako toka SwalaSMS ili kutuma SMS halisi."}
+                ? "Your SMS Gateway is powered strictly by SwalaSMS. Enter your SwalaSMS API Key (starts with swl_live_...) from swalasms.com."
+                : "Huduma yako ya SMS inatumia SwalaSMS (swalasms.com) pekee. Weka API Key yako (inayoanza na swl_live_...) kutuma SMS halisi."}
             </p>
           </div>
         )}
@@ -570,16 +708,21 @@ export default function SMSGatewayConfig() {
                 value={gatewaySettings.senderId}
                 onChange={(e) => {
                   const val = e.target.value.toUpperCase().trim();
-                  setGatewaySettings({ ...gatewaySettings, senderId: val });
+                  updateActiveProviderSetting({ senderId: val });
                 }}
                 className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 uppercase font-mono tracking-wider transition-all"
               />
+              {senderIdFetchError && (
+                <div className="mt-1.5 p-2 rounded-lg bg-rose-950/60 border border-rose-500/30 text-[11px] text-rose-300">
+                  {senderIdFetchError}
+                </div>
+              )}
               {gatewaySettings.provider === 'meseji' && (
                 <div className="mt-2 space-y-2">
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'MESEJI' })}
+                      onClick={() => updateActiveProviderSetting({ senderId: 'MESEJI' })}
                       className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'MESEJI' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
                     >
                       ✓ MESEJI (Default)
@@ -600,7 +743,7 @@ export default function SMSGatewayConfig() {
                         <div 
                           key={item.sender_id || idx}
                           onClick={() => {
-                            setGatewaySettings({ ...gatewaySettings, senderId: item.sender_id });
+                            updateActiveProviderSetting({ senderId: item.sender_id });
                             setAvailableIds([]);
                           }}
                           className="flex justify-between items-center p-1.5 rounded hover:bg-white/5 cursor-pointer text-xs"
@@ -621,14 +764,14 @@ export default function SMSGatewayConfig() {
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'EVENT CARD' })}
+                      onClick={() => updateActiveProviderSetting({ senderId: 'EVENT CARD' })}
                       className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'EVENT CARD' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
                     >
                       ✓ EVENT CARD (Approved)
                     </button>
                     <button
                       type="button"
-                      onClick={() => setGatewaySettings({ ...gatewaySettings, senderId: 'TAARIFA' })}
+                      onClick={() => updateActiveProviderSetting({ senderId: 'TAARIFA' })}
                       className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all font-semibold cursor-pointer ${gatewaySettings.senderId === 'TAARIFA' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 hover:bg-white/10 text-emerald-300 border-white/10'}`}
                     >
                       ✓ TAARIFA (Approved)
@@ -649,7 +792,7 @@ export default function SMSGatewayConfig() {
                         <div 
                           key={item.sender_id || idx}
                           onClick={() => {
-                            setGatewaySettings({ ...gatewaySettings, senderId: item.sender_id });
+                            updateActiveProviderSetting({ senderId: item.sender_id });
                             setAvailableIds([]);
                           }}
                           className="flex justify-between items-center p-1.5 rounded hover:bg-white/5 cursor-pointer text-xs"
@@ -676,9 +819,17 @@ export default function SMSGatewayConfig() {
                 type="password" 
                 placeholder={gatewaySettings.provider === 'meseji' ? "zs_..." : "swl_live_..."}
                 value={gatewaySettings.apiKey}
-                onChange={(e) => setGatewaySettings({ ...gatewaySettings, apiKey: e.target.value.trim() })}
+                onChange={(e) => updateActiveProviderSetting({ apiKey: e.target.value.trim() })}
                 className="w-full bg-[#050b18] border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-mono transition-all text-xs"
               />
+              {((gatewaySettings.provider === 'meseji' && String(gatewaySettings.apiKey || '').startsWith('swl_')) ||
+                (gatewaySettings.provider === 'swalasms' && String(gatewaySettings.apiKey || '').startsWith('zs_'))) && (
+                <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-[10.5px] text-rose-300 leading-normal mt-1">
+                  <strong>⚠️ Mgongano wa Ufunguo (API Key Mismatch):</strong> Ufunguo huu ni wa{' '}
+                  {gatewaySettings.provider === 'meseji' ? 'SwalaSMS (swl_...)' : 'Meseji.co.tz (zs_...)'}. Weka ufunguo sahihi wa{' '}
+                  {gatewaySettings.provider === 'meseji' ? 'Meseji.co.tz (zs_...)' : 'SwalaSMS (swl_live_...)'}.
+                </div>
+              )}
               <p className="text-[10px] text-slate-400 mt-1">
                 {gatewaySettings.provider === 'meseji'
                   ? (isEn 
@@ -688,13 +839,13 @@ export default function SMSGatewayConfig() {
                       ? "Get your API key from swalasms.com > Developers (starts with swl_live_...)" 
                       : "Pata API key yako kutoka swalasms.com > Developers (inayoanza na swl_live_...)")}
               </p>
-              {gatewaySettings.apiKey.startsWith('EAA') && (
+              {String(gatewaySettings.apiKey || '').startsWith('EAA') && (
                 <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[10.5px] text-amber-300 leading-normal space-y-1 mt-1">
                   <p className="font-bold">⚠️ {isEn ? "Possible Configuration Mistake!" : "Uwezekano wa Hitilafu ya Usanidi!"}</p>
                   <p>
                     {isEn 
-                      ? "This API Key starts with 'EAA...', which looks like a Meta WhatsApp Access Token. This field is for your SMS Gateway API Key. Please enter your correct SMS key here, and place your Meta WhatsApp Token in the WhatsApp section below." 
-                      : "Ufunguo huu unaanza na 'EAA...', unaofanana na Token ya Meta WhatsApp. Sehemu hii ni kwa ajili ya Ufunguo wa SMS Gateway. Tafadhali weka ufunguo wako sahihi wa SMS hapa, kisha weka token yako ya Meta WhatsApp chini kwenye sehemu ya WhatsApp."}
+                      ? "This API Key starts with 'EAA...', which looks like a Meta WhatsApp Access Token. This field is for your SMS Gateway API Key." 
+                      : "Ufunguo huu unaanza na 'EAA...', unaofanana na Token ya Meta WhatsApp. Sehemu hii ni kwa ajili ya Ufunguo wa SMS Gateway."}
                   </p>
                 </div>
               )}
@@ -704,9 +855,9 @@ export default function SMSGatewayConfig() {
               <label className="font-bold text-slate-300 block text-xs">API Endpoint URL</label>
               <input 
                 type="url" 
-                placeholder="https://swalasms.com/api/v1/sms/quick-message"
-                value={gatewaySettings.url || "https://swalasms.com/api/v1/sms/quick-message"}
-                onChange={(e) => setGatewaySettings({ ...gatewaySettings, url: e.target.value })}
+                placeholder={gatewaySettings.provider === 'meseji' ? "https://meseji.co.tz/api/v1/sms/send" : "https://swalasms.com/api/v1/sms/quick-message"}
+                value={gatewaySettings.url || (gatewaySettings.provider === 'meseji' ? "https://meseji.co.tz/api/v1/sms/send" : "https://swalasms.com/api/v1/sms/quick-message")}
+                onChange={(e) => updateActiveProviderSetting({ url: e.target.value })}
                 className="w-full bg-[#050b18] border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-[10px]"
               />
             </div>

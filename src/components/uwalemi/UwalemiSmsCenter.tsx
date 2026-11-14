@@ -134,30 +134,108 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     }
   }, [initialTemplate, initialRecipients]);
 
-  // Gateway Config State
-  const [gatewayConfig, setGatewayConfig] = useState<UwalemiSmsConfig>(() => {
-    const existing = state.groupSettings?.smsConfig;
-    if (existing && existing.provider) {
-      return { ...existing, provider: 'swalasms', senderId: existing.senderId || 'UWALEMI' };
-    }
-    return {
-      provider: 'swalasms',
-      apiKey: '',
-      secretKey: '',
-      senderId: 'UWALEMI',
-      baseUrl: 'https://swalasms.com/api/v1/sms/quick-message',
-      autoSendReceipts: true,
-      autoSendMeetingAlerts: true,
-      autoSendMonthlyReminder: true
-    };
-  });
+  // Strict Gateway Profile Isolation Helpers
+  const hydrateUwalemiSmsConfig = (existing?: Partial<UwalemiSmsConfig> | null): UwalemiSmsConfig => {
+    const rawProv = String(existing?.provider || 'simulation').toLowerCase();
+    const provider: 'swalasms' | 'meseji' | 'simulation' =
+      rawProv === 'meseji' ? 'meseji' : (rawProv === 'swalasms' ? 'swalasms' : 'simulation');
 
-  // Keep gatewayConfig synced with state.groupSettings.smsConfig if updated
+    const swalaSenderRaw = existing?.swalasmsConfig?.senderId || (rawProv === 'swalasms' ? existing?.senderId : '') || 'UWALEMI';
+    const swalaSender = (swalaSenderRaw && !swalaSenderRaw.includes('-') && swalaSenderRaw !== 'EVENT CARD' && swalaSenderRaw !== 'MESEJI')
+      ? swalaSenderRaw
+      : 'UWALEMI';
+
+    const mesejiSenderRaw = existing?.mesejiConfig?.senderId || (rawProv === 'meseji' ? existing?.senderId : '') || 'UWALEMI';
+    const mesejiSender = (mesejiSenderRaw && !mesejiSenderRaw.includes('-') && mesejiSenderRaw !== 'EVENT CARD')
+      ? mesejiSenderRaw
+      : 'UWALEMI';
+
+    const swalasmsConfig = {
+      apiKey: (existing?.swalasmsConfig?.apiKey ?? (rawProv === 'swalasms' ? existing?.apiKey : '') ?? '').trim(),
+      senderId: swalaSender,
+      baseUrl: existing?.swalasmsConfig?.baseUrl && existing.swalasmsConfig.baseUrl.includes('swalasms.com')
+        ? existing.swalasmsConfig.baseUrl
+        : 'https://swalasms.com/api/v1/sms/quick-message'
+    };
+
+    const mesejiConfig = {
+      apiKey: (existing?.mesejiConfig?.apiKey ?? (rawProv === 'meseji' ? existing?.apiKey : '') ?? '').trim(),
+      senderId: mesejiSender,
+      baseUrl: existing?.mesejiConfig?.baseUrl && existing.mesejiConfig.baseUrl.includes('meseji.co.tz')
+        ? existing.mesejiConfig.baseUrl
+        : 'https://meseji.co.tz/api/v1/sms/send'
+    };
+
+    const activeProfile = provider === 'meseji'
+      ? mesejiConfig
+      : (provider === 'swalasms' ? swalasmsConfig : { apiKey: '', senderId: 'UWALEMI', baseUrl: '' });
+
+    return {
+      provider,
+      apiKey: activeProfile.apiKey,
+      secretKey: '',
+      senderId: activeProfile.senderId,
+      baseUrl: activeProfile.baseUrl,
+      swalasmsConfig,
+      mesejiConfig,
+      autoSendReceipts: existing?.autoSendReceipts ?? true,
+      autoSendMeetingAlerts: existing?.autoSendMeetingAlerts ?? true,
+      autoSendMonthlyReminder: existing?.autoSendMonthlyReminder ?? true
+    };
+  };
+
+  const switchIsolatedGateway = (current: UwalemiSmsConfig, targetProvider: 'swalasms' | 'meseji' | 'simulation'): UwalemiSmsConfig => {
+    const swalasmsProfile = current.swalasmsConfig || {
+      apiKey: current.provider === 'swalasms' ? (current.apiKey || '').trim() : '',
+      senderId: current.provider === 'swalasms' ? (current.senderId || 'UWALEMI') : 'UWALEMI',
+      baseUrl: 'https://swalasms.com/api/v1/sms/quick-message'
+    };
+    const mesejiProfile = current.mesejiConfig || {
+      apiKey: current.provider === 'meseji' ? (current.apiKey || '').trim() : '',
+      senderId: current.provider === 'meseji' ? (current.senderId || 'UWALEMI') : 'UWALEMI',
+      baseUrl: 'https://meseji.co.tz/api/v1/sms/send'
+    };
+
+    if (current.provider === 'swalasms') {
+      swalasmsProfile.apiKey = (current.apiKey || '').trim();
+      swalasmsProfile.senderId = (current.senderId && current.senderId !== 'EVENT CARD' && current.senderId !== 'MESEJI') ? current.senderId : 'UWALEMI';
+      swalasmsProfile.baseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
+    } else if (current.provider === 'meseji') {
+      mesejiProfile.apiKey = (current.apiKey || '').trim();
+      mesejiProfile.senderId = (current.senderId && current.senderId !== 'EVENT CARD') ? current.senderId : 'UWALEMI';
+      mesejiProfile.baseUrl = 'https://meseji.co.tz/api/v1/sms/send';
+    }
+
+    const nextActive = targetProvider === 'meseji'
+      ? mesejiProfile
+      : (targetProvider === 'swalasms' ? swalasmsProfile : { apiKey: '', senderId: 'UWALEMI', baseUrl: '' });
+
+    return {
+      ...current,
+      provider: targetProvider,
+      apiKey: nextActive.apiKey,
+      secretKey: '',
+      senderId: nextActive.senderId,
+      baseUrl: nextActive.baseUrl,
+      swalasmsConfig: { ...swalasmsProfile },
+      mesejiConfig: { ...mesejiProfile }
+    };
+  };
+
+  // Gateway Config State (preserves exact provider without coercion)
+  const [gatewayConfig, setGatewayConfig] = useState<UwalemiSmsConfig>(() => hydrateUwalemiSmsConfig(state.groupSettings?.smsConfig));
+
+  // Keep gatewayConfig synced with state.groupSettings.smsConfig if updated externally
   useEffect(() => {
     if (state.groupSettings?.smsConfig) {
-      setGatewayConfig(state.groupSettings.smsConfig);
+      setGatewayConfig(hydrateUwalemiSmsConfig(state.groupSettings.smsConfig));
     }
   }, [state.groupSettings?.smsConfig]);
+
+  const [gatewaySaveFeedback, setGatewaySaveFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [providerSenderIds, setProviderSenderIds] = useState<{ sender_id: string; status: string }[]>([]);
+  const [senderIdsFetchError, setSenderIdsFetchError] = useState<string | null>(null);
+  const [isFetchingSenderIds, setIsFetchingSenderIds] = useState(false);
 
   const [isTestingReminders, setIsTestingReminders] = useState(false);
   const [reminderTestResult, setReminderTestResult] = useState<{
@@ -183,35 +261,75 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
   const [testSmsPhone, setTestSmsPhone] = useState('');
   const [testSmsStatus, setTestSmsStatus] = useState<{ loading: boolean; success?: boolean; message?: string } | null>(null);
 
+  const activeProviderDisplay = gatewayConfig.provider === 'meseji'
+    ? 'Meseji.co.tz'
+    : (gatewayConfig.provider === 'swalasms' ? 'SwalaSMS' : 'Simulation Mode');
+
+  const updateActiveGatewayField = (patch: Partial<{ apiKey: string; senderId: string; baseUrl: string }>) => {
+    setGatewayConfig(prev => {
+      const next = { ...prev, ...patch };
+      if (prev.provider === 'meseji') {
+        next.mesejiConfig = {
+          apiKey: patch.apiKey !== undefined ? patch.apiKey : (prev.mesejiConfig?.apiKey ?? prev.apiKey ?? ''),
+          senderId: patch.senderId !== undefined ? patch.senderId : (prev.mesejiConfig?.senderId ?? prev.senderId ?? 'UWALEMI'),
+          baseUrl: patch.baseUrl !== undefined ? patch.baseUrl : (prev.mesejiConfig?.baseUrl ?? 'https://meseji.co.tz/api/v1/sms/send')
+        };
+      } else if (prev.provider === 'swalasms') {
+        next.swalasmsConfig = {
+          apiKey: patch.apiKey !== undefined ? patch.apiKey : (prev.swalasmsConfig?.apiKey ?? prev.apiKey ?? ''),
+          senderId: patch.senderId !== undefined ? patch.senderId : (prev.swalasmsConfig?.senderId ?? prev.senderId ?? 'UWALEMI'),
+          baseUrl: patch.baseUrl !== undefined ? patch.baseUrl : (prev.swalasmsConfig?.baseUrl ?? 'https://swalasms.com/api/v1/sms/quick-message')
+        };
+      }
+      return next;
+    });
+  };
+
   const handleSendQuickTestSms = async () => {
     if (readOnly) return;
     if (!testSmsPhone.trim()) {
-      alert('Tafadhali weka namba ya simu ya kupokea SMS ya majaribio (mf. 07XXXXXXXX au 2557XXXXXXXX).');
+      setTestSmsStatus({
+        loading: false,
+        success: false,
+        message: 'Tafadhali weka namba ya simu ya kupokea SMS ya majaribio (mf. 07XXXXXXXX au 2557XXXXXXXX).'
+      });
       return;
     }
     setTestSmsStatus({ loading: true });
     try {
+      // Save current isolated gateway settings first so test dispatches through the exact selected gateway
+      const updatedState = {
+        ...state,
+        groupSettings: {
+          ...state.groupSettings,
+          smsConfig: gatewayConfig
+        }
+      };
+      await onSaveState(updatedState);
+
       const result = await sendUwalemiSms({
         recipients: [
           {
             phone: testSmsPhone.trim(),
             name: 'Majaribio ya SMS',
-            customMessage: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia SwalaSMS (${gatewayConfig.senderId || 'UWALEMI'}). Muunganisho uko salama na unafanya kazi kikamilifu.`
+            customMessage: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia ${activeProviderDisplay} (${gatewayConfig.senderId || 'UWALEMI'}). Muunganisho uko salama.`
           }
         ],
-        message: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia SwalaSMS.`,
+        message: `Habari! Hii ni SMS ya majaribio kutoka UWALEMI kupitia ${activeProviderDisplay}.`,
         messageType: 'receipt'
       });
       setTestSmsStatus({
         loading: false,
         success: result.success,
-        message: result.message || (result.success ? 'SMS ya majaribio imetumwa kikamilifu!' : 'Imeshindwa kutuma SMS ya majaribio.')
+        message: result.message || result.error || (result.success
+          ? `[${activeProviderDisplay.toUpperCase()}] SMS ya majaribio imetumwa kikamilifu!`
+          : `[${activeProviderDisplay.toUpperCase()}] Imeshindwa kutuma SMS ya majaribio.`)
       });
     } catch (e: any) {
       setTestSmsStatus({
         loading: false,
         success: false,
-        message: e.message || 'Hitilafu ya mtandao wakati wa kutuma SMS ya majaribio'
+        message: e.message || `[${activeProviderDisplay.toUpperCase()}] Hitilafu ya mtandao wakati wa kutuma SMS ya majaribio`
       });
     }
   };
@@ -222,7 +340,7 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
     try {
       const q = new URLSearchParams({
         source: 'uwalemi',
-        provider: gatewayConfig.provider || 'swalasms',
+        provider: gatewayConfig.provider || 'simulation',
         apiKey: gatewayConfig.apiKey || '',
         senderId: gatewayConfig.senderId || 'UWALEMI'
       });
@@ -234,81 +352,92 @@ export const UwalemiSmsCenter: React.FC<Props> = ({
         setBalanceInfo({ 
           error: data.error || 'Imeshindwa kupata salio', 
           status: res.status, 
-          provider: data.provider
+          provider: data.provider || gatewayConfig.provider
         });
       }
     } catch (e: any) {
-      setBalanceInfo({ error: e.message || 'Hitilafu ya mtandao' });
+      setBalanceInfo({ error: e.message || 'Hitilafu ya mtandao', provider: gatewayConfig.provider });
     } finally {
       setIsCheckingBalance(false);
     }
   };
 
+  const handleFetchProviderSenderIds = async () => {
+    if (gatewayConfig.provider === 'simulation') return;
+    setIsFetchingSenderIds(true);
+    setSenderIdsFetchError(null);
+    setProviderSenderIds([]);
+    try {
+      const endpoint = gatewayConfig.provider === 'meseji'
+        ? '/api/fetch-meseji-sender-ids'
+        : '/api/fetch-swalasms-sender-ids';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: gatewayConfig.apiKey || '' })
+      });
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        setSenderIdsFetchError(data.error || `Imeshindwa kukagua Sender IDs (HTTP ${res.status})`);
+        return;
+      }
+      const items = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      const normalized = items
+        .map((it: any) => ({
+          sender_id: String(it.sender_id || it.id || '').trim(),
+          status: String(it.status || 'approved')
+        }))
+        .filter((it: any) => it.sender_id && it.sender_id.toUpperCase() !== 'EVENT CARD');
+      setProviderSenderIds(normalized);
+      if (normalized.length === 0) {
+        setSenderIdsFetchError(`Hakuna Sender ID zilizopatikana kwenye akaunti yako ya ${activeProviderDisplay}.`);
+      }
+    } catch (e: any) {
+      setSenderIdsFetchError(e.message || `Hitilafu ya mtandao wakati wa kukagua Sender IDs za ${activeProviderDisplay}.`);
+    } finally {
+      setIsFetchingSenderIds(false);
+    }
+  };
 
+  const persistGatewaySelection = async (nextProvider: 'swalasms' | 'meseji' | 'simulation', noticeText: string) => {
+    if (readOnly) return;
+    const nextConfig = switchIsolatedGateway(gatewayConfig, nextProvider);
+    setGatewayConfig(nextConfig);
+    setBalanceInfo(null);
+    setTestSmsStatus(null);
+    setProviderSenderIds([]);
+    setSenderIdsFetchError(null);
+    setSendResult(null);
+    const updatedState = {
+      ...state,
+      groupSettings: {
+        ...state.groupSettings,
+        smsConfig: nextConfig
+      }
+    };
+    await onSaveState(updatedState);
+    setGatewaySaveFeedback({ success: true, message: noticeText });
+  };
 
   const handleSyncMesejiSms = async () => {
-    if (readOnly) return;
-    const userKey = gatewayConfig.apiKey || '';
-    const updatedConfig: UwalemiSmsConfig = {
-      provider: 'meseji',
-      apiKey: userKey,
-      secretKey: '',
-      senderId: 'UWALEMI',
-      baseUrl: 'https://meseji.co.tz/api/v1/sms/send',
-      autoSendReceipts: gatewayConfig.autoSendReceipts ?? true,
-      autoSendMeetingAlerts: gatewayConfig.autoSendMeetingAlerts ?? true,
-      autoSendMonthlyReminder: gatewayConfig.autoSendMonthlyReminder ?? true,
-    };
-    setGatewayConfig(updatedConfig);
-    const updatedSettings = {
-      ...state.groupSettings,
-      smsConfig: updatedConfig
-    };
-    const updatedState = { ...state, groupSettings: updatedSettings };
-    await onSaveState(updatedState);
-    setSendResult(null);
-    alert('Meseji.co.tz (Sender ID: UWALEMI) imewekwa na kuunganishwa kikamilifu!');
+    await persistGatewaySelection(
+      'meseji',
+      'Meseji.co.tz imechaguliwa na kujitegemea (SwalaSMS haiwezi kutumika badala yake).'
+    );
   };
 
   const handleSyncSwalaSms = async () => {
-    if (readOnly) return;
-    const userKey = gatewayConfig.apiKey && !gatewayConfig.apiKey.startsWith('swl_live_vtWJ') ? gatewayConfig.apiKey : '';
-    const updatedConfig: UwalemiSmsConfig = {
-      provider: 'swalasms',
-      apiKey: userKey,
-      secretKey: '',
-      senderId: 'UWALEMI',
-      baseUrl: 'https://swalasms.com/api/v1/sms/quick-message',
-      autoSendReceipts: gatewayConfig.autoSendReceipts ?? true,
-      autoSendMeetingAlerts: gatewayConfig.autoSendMeetingAlerts ?? true,
-      autoSendMonthlyReminder: gatewayConfig.autoSendMonthlyReminder ?? true,
-    };
-    setGatewayConfig(updatedConfig);
-    const updatedSettings = {
-      ...state.groupSettings,
-      smsConfig: updatedConfig
-    };
-    const updatedState = { ...state, groupSettings: updatedSettings };
-    await onSaveState(updatedState);
-    setSendResult(null);
-    alert('SwalaSMS (Sender ID: UWALEMI) imewekwa na kuunganishwa kikamilifu!');
+    await persistGatewaySelection(
+      'swalasms',
+      'SwalaSMS imechaguliwa na kujitegemea (Meseji.co.tz haiwezi kutumika badala yake).'
+    );
   };
 
   const handleSwitchToSimulation = async () => {
-    if (readOnly) return;
-    const updatedConfig: UwalemiSmsConfig = {
-      ...gatewayConfig,
-      provider: 'simulation'
-    };
-    setGatewayConfig(updatedConfig);
-    const updatedSettings = {
-      ...state.groupSettings,
-      smsConfig: updatedConfig
-    };
-    const updatedState = { ...state, groupSettings: updatedSettings };
-    await onSaveState(updatedState);
-    setSendResult(null);
-    alert('Mfumo umebadilishwa kuwa Hali ya Majaribio (Simulation Mode). Ujumbe utarekodiwa kwenye mfumo bila makato ya salio la SMS.');
+    await persistGatewaySelection(
+      'simulation',
+      'Mfumo umewekwa kwenye Simulation Mode. Ujumbe utarekodiwa kwenye kumbukumbu bila kutumia Meseji.co.tz wala SwalaSMS.'
+    );
   };
 
   const members = useMemo(() => sortMembersByLeadership(state.members || []), [state.members]);
@@ -894,13 +1023,18 @@ Lema, Nguvu Moja!`);
   const handleSaveGateway = async (e: React.FormEvent) => {
     e.preventDefault();
     if (readOnly) return;
+    const syncedConfig = switchIsolatedGateway(gatewayConfig, gatewayConfig.provider);
+    setGatewayConfig(syncedConfig);
     const updatedSettings = {
       ...state.groupSettings,
-      smsConfig: gatewayConfig
+      smsConfig: syncedConfig
     };
     const updatedState = { ...state, groupSettings: updatedSettings };
     await onSaveState(updatedState);
-    alert(`Mipangilio ya SMS Gateway (${(gatewayConfig.provider || 'swalasms').toUpperCase()}) imehifadhiwa kwa mafanikio! Mfumo utatumia mtoa huduma huyu pekee bila kubadilisha kiotomatiki.`);
+    setGatewaySaveFeedback({
+      success: true,
+      message: `Mipangilio ya ${activeProviderDisplay} (${(syncedConfig.provider || 'simulation').toUpperCase()}) imehifadhiwa. Mfumo utatumia mtoa huduma huyu pekee bila kubadilisha kiotomatiki endapo hitilafu itatokea.`
+    });
   };
 
   const handleTriggerTestReminders = async () => {
@@ -1728,27 +1862,29 @@ Lema, Nguvu Moja!`);
             </div>
           </div>
 
-          {/* Quick Preset Selector Buttons */}
+          {/* Quick Preset Selector Buttons (Strictly Isolated Gateways) */}
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2">
-            <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
-              <span>Chagua Mtoa Huduma kwa Haraka (Quick Switch):</span>
-              <span className="text-[10px] text-emerald-400 font-normal">Chaguo rasmi: Meseji.co.tz</span>
+            <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between gap-2 flex-wrap">
+              <span>Chagua Mtoa Huduma Anayejitegemea (Strict Isolation):</span>
+              <span className="text-[10px] text-emerald-400 font-normal">Kila mtoa huduma anajitegemea bila kubadilishana</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={handleSyncMesejiSms}
                 className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${
-                  gatewayConfig.provider === 'meseji' || !gatewayConfig.provider
+                  gatewayConfig.provider === 'meseji'
                     ? 'bg-emerald-950/80 border-emerald-500 text-white ring-1 ring-emerald-500 shadow-md shadow-emerald-950/50'
                     : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
               >
                 <div className="font-bold text-xs flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'meseji' || !gatewayConfig.provider ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'meseji' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
                   Meseji.co.tz
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Tanzania SMS API</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {gatewayConfig.mesejiConfig?.apiKey ? `Key imewekwa (${gatewayConfig.mesejiConfig.senderId || 'UWALEMI'})` : 'Haina Key bado (zs_...)'}
+                </div>
               </button>
 
               <button
@@ -1764,7 +1900,9 @@ Lema, Nguvu Moja!`);
                   <span className={`w-2 h-2 rounded-full ${gatewayConfig.provider === 'swalasms' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
                   SwalaSMS.com
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Sender: UWALEMI</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {gatewayConfig.swalasmsConfig?.apiKey ? `Key imewekwa (${gatewayConfig.swalasmsConfig.senderId || 'UWALEMI'})` : 'Haina Key bado (swl_live_...)'}
+                </div>
               </button>
 
               <button
@@ -1785,6 +1923,28 @@ Lema, Nguvu Moja!`);
             </div>
           </div>
 
+          {gatewaySaveFeedback && (
+            <div className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+              gatewaySaveFeedback.success
+                ? 'bg-emerald-950/60 border-emerald-700/70 text-emerald-200'
+                : 'bg-rose-950/60 border-rose-700/70 text-rose-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                {gatewaySaveFeedback.success
+                  ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  : <XCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+                <span>{gatewaySaveFeedback.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGatewaySaveFeedback(null)}
+                className="text-slate-400 hover:text-white text-[10px] px-1.5 py-0.5 cursor-pointer"
+              >
+                Funga
+              </button>
+            </div>
+          )}
+
           {/* Status Banner */}
           <div className={`p-4 rounded-xl border flex items-start gap-3 ${
             gatewayConfig.provider !== 'simulation'
@@ -1794,16 +1954,16 @@ Lema, Nguvu Moja!`);
             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
             <div className="text-xs space-y-1">
               <div className="font-bold flex items-center gap-2">
-                Hali ya Sasa: {gatewayConfig.provider === 'meseji' || (!gatewayConfig.provider && gatewayConfig.apiKey?.startsWith('zs_'))
-                  ? 'Imeunganishwa na MESEJI.CO.TZ (SMS Halisi Zitatumwa)'
+                Mtoa Huduma Aliyeidhinishwa Sasa: {gatewayConfig.provider === 'meseji'
+                  ? 'MESEJI.CO.TZ Pekee (Inajitegemea 100%)'
                   : gatewayConfig.provider === 'swalasms'
-                    ? 'Imeunganishwa na SWALASMS (SMS Halisi Zitatumwa)'
-                    : 'Hali ya Majaribio (Simulation Mode)'}
+                    ? 'SWALASMS Pekee (Inajitegemea 100%)'
+                    : 'Simulation Mode (Majaribio Pekee)'}
               </div>
               <p className="text-slate-300 leading-relaxed">
                 {gatewayConfig.provider !== 'simulation'
-                  ? `Ujumbe na stakabadhi za kiotomatiki zitatumwa moja kwa moja kwenye simu za wajumbe kwa kutumia jina la "${gatewayConfig.senderId || 'UWALEMI'}".`
-                  : 'Kwa sasa mfumo unarekodi stakabadhi na jumbe zote kwenye tab ya "Kumbukumbu za Ujumbe (Logs)" bila kukata salio.'}
+                  ? `SMS zitatumwa kupitia ${activeProviderDisplay} pekee (Sender ID: "${gatewayConfig.senderId || 'UWALEMI'}"). Endapo ${activeProviderDisplay} itashindwa, mfumo utakupa hitilafu na chanzo chake halisi bila kuhama kwenda gateway nyingine.`
+                  : 'Kwa sasa mfumo unarekodi stakabadhi na jumbe zote kwenye tab ya "Kumbukumbu za Ujumbe (Logs)" bila kutuma nje.'}
               </p>
             </div>
           </div>
@@ -1812,87 +1972,153 @@ Lema, Nguvu Moja!`);
             <div>
               <label className="block text-slate-300 font-semibold mb-1">Mtoa Huduma (Provider):</label>
               <select
-                value={gatewayConfig.provider || 'meseji'}
+                value={gatewayConfig.provider || 'simulation'}
                 onChange={(e) => {
-                  const val = e.target.value as any;
-                  const newConfig = { ...gatewayConfig, provider: val };
-                  if (val === 'meseji') {
-                    newConfig.baseUrl = 'https://meseji.co.tz/api/v1/sms/send';
-                    newConfig.senderId = 'UWALEMI';
-                    newConfig.secretKey = '';
-                  } else if (val === 'swalasms') {
-                    newConfig.baseUrl = 'https://swalasms.com/api/v1/sms/quick-message';
-                    newConfig.senderId = 'UWALEMI';
-                    newConfig.secretKey = '';
-                  }
-                  setGatewayConfig(newConfig);
+                  const val = e.target.value as 'meseji' | 'swalasms' | 'simulation';
+                  setGatewayConfig(prev => switchIsolatedGateway(prev, val));
+                  setBalanceInfo(null);
+                  setTestSmsStatus(null);
+                  setProviderSenderIds([]);
+                  setSenderIdsFetchError(null);
+                  setGatewaySaveFeedback(null);
                 }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-emerald-500"
               >
                 <option value="meseji">Meseji.co.tz (Tanzania SMS Gateway - API Key: zs_...)</option>
-                <option value="swalasms">SwalaSMS (SwalaSMS.com - Tanzania)</option>
+                <option value="swalasms">SwalaSMS (SwalaSMS.com - API Key: swl_live_...)</option>
                 <option value="simulation">Mwigizo wa Kujaribu (Simulation Mode)</option>
               </select>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-slate-300 font-semibold">Jina la Mtumaji (Sender ID):</label>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'UWALEMI' })}
-                    className="text-[10px] text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded cursor-pointer transition-colors font-bold"
-                  >
-                    UWALEMI (Default)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGatewayConfig({ ...gatewayConfig, senderId: 'TAARIFA' })}
-                    className="text-[10px] text-indigo-300 hover:text-white bg-indigo-950/60 border border-indigo-800/60 px-2 py-0.5 rounded cursor-pointer transition-colors"
-                  >
-                    TAARIFA
-                  </button>
+            {gatewayConfig.provider !== 'simulation' && (
+              <>
+                <div>
+                  <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                    <label className="block text-slate-300 font-semibold">
+                      Jina la Mtumaji ({activeProviderDisplay} Sender ID):
+                    </label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => updateActiveGatewayField({ senderId: 'UWALEMI' })}
+                        className={`text-[10px] px-2.5 py-0.5 rounded border cursor-pointer transition-colors font-bold ${
+                          gatewayConfig.senderId === 'UWALEMI'
+                            ? 'bg-emerald-600 text-white border-emerald-500'
+                            : 'text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 border-emerald-800/60'
+                        }`}
+                      >
+                        UWALEMI
+                      </button>
+                      {gatewayConfig.provider === 'meseji' && (
+                        <button
+                          type="button"
+                          onClick={() => updateActiveGatewayField({ senderId: 'MESEJI' })}
+                          className={`text-[10px] px-2.5 py-0.5 rounded border cursor-pointer transition-colors font-bold ${
+                            gatewayConfig.senderId === 'MESEJI'
+                              ? 'bg-emerald-600 text-white border-emerald-500'
+                              : 'text-cyan-300 hover:text-white bg-cyan-950/60 border-cyan-800/60'
+                          }`}
+                        >
+                          MESEJI (Default)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => updateActiveGatewayField({ senderId: 'TAARIFA' })}
+                        className={`text-[10px] px-2 py-0.5 rounded border cursor-pointer transition-colors ${
+                          gatewayConfig.senderId === 'TAARIFA'
+                            ? 'bg-indigo-600 text-white border-indigo-500'
+                            : 'text-indigo-300 hover:text-white bg-indigo-950/60 border-indigo-800/60'
+                        }`}
+                      >
+                        TAARIFA
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleFetchProviderSenderIds}
+                        disabled={isFetchingSenderIds}
+                        className="text-[10px] text-indigo-300 hover:text-white bg-indigo-950/80 border border-indigo-700/70 px-2.5 py-0.5 rounded cursor-pointer transition-colors disabled:opacity-50"
+                      >
+                        {isFetchingSenderIds ? 'Inakagua...' : `Kagua Sender IDs za ${activeProviderDisplay}`}
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="text"
+                    value={gatewayConfig.senderId || 'UWALEMI'}
+                    onChange={(e) => {
+                      const clean = e.target.value.trim().toUpperCase();
+                      updateActiveGatewayField({ senderId: clean === 'EVENT CARD' ? 'UWALEMI' : clean });
+                    }}
+                    placeholder={gatewayConfig.provider === 'meseji' ? 'mf. UWALEMI au MESEJI' : 'mf. UWALEMI au TAARIFA'}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                  {senderIdsFetchError && (
+                    <div className="mt-1.5 p-2 rounded-lg bg-rose-950/60 border border-rose-800/70 text-[11px] text-rose-300">
+                      {senderIdsFetchError}
+                    </div>
+                  )}
+                  {providerSenderIds.length > 0 && (
+                    <div className="mt-1.5 bg-slate-950 border border-slate-800 rounded-lg p-2 space-y-1 max-h-32 overflow-y-auto">
+                      {providerSenderIds.map((it, idx) => (
+                        <button
+                          key={`${it.sender_id}-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            updateActiveGatewayField({ senderId: it.sender_id });
+                            setProviderSenderIds([]);
+                          }}
+                          className="w-full flex items-center justify-between px-2 py-1 rounded hover:bg-slate-800 text-left cursor-pointer"
+                        >
+                          <span className="font-mono font-bold text-white">{it.sender_id}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{it.status}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {gatewayConfig.provider === 'meseji'
+                      ? '💡 Tumia Sender ID iliyoidhinishwa kwenye akaunti yako ya Meseji.co.tz (mf. UWALEMI au MESEJI).'
+                      : '💡 Tumia Sender ID iliyoidhinishwa kwenye akaunti yako ya SwalaSMS (mf. UWALEMI au TAARIFA).'}
+                  </p>
                 </div>
-              </div>
-              <input
-                type="text"
-                value={gatewayConfig.senderId || 'UWALEMI'}
-                onChange={(e) => setGatewayConfig({ ...gatewayConfig, senderId: e.target.value.trim().toUpperCase() })}
-                placeholder="mf. UWALEMI au TAARIFA"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                💡 <strong>Jina la Mtumaji:</strong> Mfumo wa UWALEMI unatumia Sender ID ya <span className="font-mono text-emerald-400 font-bold">UWALEMI</span> kwa ajili ya kutuma SMS na taarifa zote kwa wanachama.
-              </p>
-            </div>
 
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                {gatewayConfig.provider === 'swalasms' ? 'SwalaSMS API Key:' : 'Meseji API Key (x-api-key):'}
-              </label>
-              <input
-                type="password"
-                value={gatewayConfig.apiKey || ''}
-                onChange={(e) => setGatewayConfig({ ...gatewayConfig, apiKey: e.target.value.trim() })}
-                placeholder={gatewayConfig.provider === 'swalasms' ? 'Weka SwalaSMS API Key yako hapa (mf. swl_live_...)' : 'Weka Meseji API Key yako hapa (inayoanza na zs_...)'}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                {gatewayConfig.provider === 'swalasms' ? (
-                  <>🔑 API Key ya SwalaSMS inapatikana kwenye <a href="https://swalasms.com" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">swalasms.com</a> &gt; Developers / API Settings (inayoanza na <span className="font-mono text-emerald-400 font-bold">swl_live_...</span>).</>
-                ) : (
-                  <>🔑 API Key ya Meseji inapatikana kwenye <a href="https://meseji.co.tz" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">meseji.co.tz</a> &gt; Developer Settings &gt; Generate API Key (inayoanza na <span className="font-mono text-emerald-400 font-bold">zs_...</span>).</>
-                )}
-              </p>
-            </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    {gatewayConfig.provider === 'swalasms' ? 'SwalaSMS API Key (swl_live_...):' : 'Meseji.co.tz API Key (zs_...):'}
+                  </label>
+                  <input
+                    type="password"
+                    value={gatewayConfig.apiKey || ''}
+                    onChange={(e) => updateActiveGatewayField({ apiKey: e.target.value.trim() })}
+                    placeholder={gatewayConfig.provider === 'swalasms' ? 'Weka SwalaSMS API Key yako hapa (swl_live_...)' : 'Weka Meseji API Key yako hapa (zs_...)'}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                  {((gatewayConfig.provider === 'meseji' && gatewayConfig.apiKey?.startsWith('swl_')) ||
+                    (gatewayConfig.provider === 'swalasms' && gatewayConfig.apiKey?.startsWith('zs_'))) && (
+                    <div className="mt-1.5 p-2.5 rounded-lg bg-rose-950/70 border border-rose-700 text-[11px] text-rose-200">
+                      ⚠️ <strong>Mgongano wa API Key:</strong> Ufunguo huu ni wa{' '}
+                      {gatewayConfig.provider === 'meseji' ? 'SwalaSMS (swl_...)' : 'Meseji.co.tz (zs_...)'}{' '}
+                      wakati umeruhusu <strong>{activeProviderDisplay}</strong>. Tafadhali weka ufunguo sahihi wa {activeProviderDisplay} au badili mtoa huduma.
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {gatewayConfig.provider === 'swalasms' ? (
+                      <>🔑 API Key ya SwalaSMS inapatikana kwenye <a href="https://swalasms.com" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">swalasms.com</a> &gt; Developers / API Settings (inayoanza na <span className="font-mono text-emerald-400 font-bold">swl_live_...</span>).</>
+                    ) : (
+                      <>🔑 API Key ya Meseji inapatikana kwenye <a href="https://meseji.co.tz" target="_blank" rel="noopener noreferrer" className="underline text-emerald-400 font-semibold">meseji.co.tz</a> &gt; Developer Settings &gt; Generate API Key (inayoanza na <span className="font-mono text-emerald-400 font-bold">zs_...</span>).</>
+                    )}
+                  </p>
+                </div>
+              </>
+            )}
 
             {/* Test Connection & Balance Checker */}
             <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
                   <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
-                  Uhakiki wa Salio & Muunganisho (Live Gateway Status)
+                  Uhakiki wa Salio & Muunganisho ({activeProviderDisplay})
                 </span>
                 <button
                   type="button"
@@ -1901,7 +2127,7 @@ Lema, Nguvu Moja!`);
                   className="px-3 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 text-white font-medium text-[11px] flex items-center gap-1.5 transition-all cursor-pointer shadow disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3 h-3 ${isCheckingBalance ? 'animate-spin' : ''}`} />
-                  {isCheckingBalance ? 'Inahakiki...' : 'Kagua Salio Sasa'}
+                  {isCheckingBalance ? 'Inahakiki...' : `Kagua Salio (${activeProviderDisplay})`}
                 </button>
               </div>
 
@@ -1915,7 +2141,7 @@ Lema, Nguvu Moja!`);
                     <div className="space-y-2">
                       <div className="font-bold flex items-center gap-1.5">
                         <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                        <span>Hitilafu ya Muunganisho / Salio ({balanceInfo.provider?.toUpperCase()}):</span>
+                        <span>Hitilafu ya Muunganisho / Salio ({(balanceInfo.provider || gatewayConfig.provider)?.toUpperCase()}):</span>
                       </div>
                       <div className="text-[11px] text-slate-200 leading-relaxed bg-black/30 p-2.5 rounded-lg border border-rose-900/50">
                         {balanceInfo.error}
@@ -1943,7 +2169,7 @@ Lema, Nguvu Moja!`);
                       </div>
                       {balanceInfo.balance === 0 && (
                         <div className="text-[11px] text-amber-300 mt-1">
-                          ⚠️ Salio lako la SMS ni 0. Ili SMS zitumwe kwa wanachama, tafadhali ongeza salio kwenye akaunti yako ya SMS.
+                          ⚠️ Salio lako la SMS ni 0. Ili SMS zitumwe kwa wanachama, tafadhali ongeza salio kwenye akaunti yako ya {activeProviderDisplay}.
                         </div>
                       )}
                     </div>
@@ -1956,10 +2182,10 @@ Lema, Nguvu Moja!`);
             <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5">
               <div className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
                 <Send className="w-3.5 h-3.5 text-emerald-400" />
-                Jaribu Kutuma SMS ya Majaribio (Test SMS)
+                Jaribu Kutuma SMS ya Majaribio ({activeProviderDisplay})
               </div>
               <p className="text-[11px] text-slate-400">
-                Weka namba ya simu ili kutuma ujumbe wa majaribio wa papo hapo na kuthibitisha kuwa SwalaSMS inatuma ujumbe kikamilifu.
+                Weka namba ya simu kutuma SMS kupitia <strong>{activeProviderDisplay}</strong> pekee. Kama kutakuwa na changamoto yoyote, chanzo cha hitilafu kitaonekana wazi hapa bila kutumia gateway nyingine.
               </p>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
@@ -1976,7 +2202,7 @@ Lema, Nguvu Moja!`);
                   className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow disabled:opacity-50 shrink-0"
                 >
                   <Send className={`w-3 h-3 ${testSmsStatus?.loading ? 'animate-spin' : ''}`} />
-                  {testSmsStatus?.loading ? 'Inatuma...' : 'Tuma SMS ya Jaribio'}
+                  {testSmsStatus?.loading ? 'Inatuma...' : `Tuma Jaribio (${activeProviderDisplay})`}
                 </button>
               </div>
 
