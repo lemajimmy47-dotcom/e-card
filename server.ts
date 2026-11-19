@@ -2591,7 +2591,7 @@ async function dispatchSMS(phone: string, text: string, channel: 'sms' | 'whatsa
     throw new Error(`[SMS Gateway] Mtoa huduma "${settings.provider}" hatambuliki. Tafadhali chagua Meseji.co.tz, SwalaSMS au Simulation Mode pekee.`);
   }
 
-  const isUwalemiContext = (text && (text.includes("UWALEMI") || text.includes("Uwalemi") || text.includes("ada") || text.includes("kikao") || text.includes("UWL-"))) || rawSenderId.toUpperCase() === "UWALEMI";
+  const isUwalemiContext = settings?.context === "uwalemi" || settings?.isUwalemi === true || rawSenderId.toUpperCase() === "UWALEMI";
 
   // Provider: Meseji.co.tz (Tanzania SMS Gateway) - strictly isolated
   if (actualProviderType === "meseji") {
@@ -4022,6 +4022,7 @@ async function startServer() {
           try {
             // Dispatch strictly through the single authorized UWALEMI gateway with zero fallback
             const gatewaySettings: any = {
+              context: 'uwalemi',
               provider: smsConfig.provider,
               apiKey: smsConfig.apiKey,
               apiSecret: smsConfig.secretKey,
@@ -4275,6 +4276,7 @@ Lema, Nguvu Moja!`;
         } else {
           try {
             const gatewaySettings: any = {
+              context: 'uwalemi',
               provider: smsConfig.provider,
               apiKey: smsConfig.apiKey,
               apiSecret: smsConfig.secretKey,
