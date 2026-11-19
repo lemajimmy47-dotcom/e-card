@@ -45,6 +45,12 @@ export interface EventDetails {
     generalThanksEn?: string;
     reminderTemplateSw?: string;
     reminderTemplateEn?: string;
+    meetingTemplateSw?: string;
+    meetingTemplateEn?: string;
+    meetingVenue?: string;
+    meetingDay?: string;
+    meetingDate?: string;
+    meetingTime?: string;
   } | null;
 
   paymentMethods?: {
@@ -216,6 +222,8 @@ export interface Guest {
   reminderWhatsappStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
   thankYouSmsStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
   thankYouWhatsappStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
+  meetingSmsStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
+  meetingWhatsappStatus?: 'Sijatuma' | 'Inatuma' | 'Imetumia';
 
   stdSent?: boolean;
   stdSentChannel?: string;

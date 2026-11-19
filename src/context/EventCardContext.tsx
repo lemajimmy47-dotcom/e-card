@@ -124,6 +124,8 @@ export function EventCardProvider({ children }: { children: ReactNode }) {
                 reminderWhatsappStatus: cg.reminderWhatsappStatus || cf.reminderWhatsappStatus || "Sijatuma",
                 thankYouSmsStatus: cg.thankYouSmsStatus || cf.thankYouSmsStatus || "Sijatuma",
                 thankYouWhatsappStatus: cg.thankYouWhatsappStatus || cf.thankYouWhatsappStatus || "Sijatuma",
+                meetingSmsStatus: cg.meetingSmsStatus || cf.meetingSmsStatus || "Sijatuma",
+                meetingWhatsappStatus: cg.meetingWhatsappStatus || cf.meetingWhatsappStatus || "Sijatuma",
               };
             }
 
@@ -141,6 +143,9 @@ export function EventCardProvider({ children }: { children: ReactNode }) {
             const mergedThkSms = isStatusSent(cg.thankYouSmsStatus) ? cg.thankYouSmsStatus : (isStatusSent(localG.thankYouSmsStatus) ? localG.thankYouSmsStatus : (cg.thankYouSmsStatus || cf.thankYouSmsStatus || localG.thankYouSmsStatus || localCf.thankYouSmsStatus || 'Sijatuma'));
             const mergedThkWa = isStatusSent(cg.thankYouWhatsappStatus) ? cg.thankYouWhatsappStatus : (isStatusSent(localG.thankYouWhatsappStatus) ? localG.thankYouWhatsappStatus : (cg.thankYouWhatsappStatus || cf.thankYouWhatsappStatus || localG.thankYouWhatsappStatus || localCf.thankYouWhatsappStatus || 'Sijatuma'));
 
+            const mergedMtgSms = isStatusSent(cg.meetingSmsStatus) ? cg.meetingSmsStatus : (isStatusSent(localG.meetingSmsStatus) ? localG.meetingSmsStatus : (cg.meetingSmsStatus || cf.meetingSmsStatus || localG.meetingSmsStatus || localCf.meetingSmsStatus || 'Sijatuma'));
+            const mergedMtgWa = isStatusSent(cg.meetingWhatsappStatus) ? cg.meetingWhatsappStatus : (isStatusSent(localG.meetingWhatsappStatus) ? localG.meetingWhatsappStatus : (cg.meetingWhatsappStatus || cf.meetingWhatsappStatus || localG.meetingWhatsappStatus || localCf.meetingWhatsappStatus || 'Sijatuma'));
+
             return {
               ...cg,
               cardImageUrl: localG.cardImageUrl || cg.cardImageUrl,
@@ -152,6 +157,8 @@ export function EventCardProvider({ children }: { children: ReactNode }) {
               reminderWhatsappStatus: mergedRemWa,
               thankYouSmsStatus: mergedThkSms,
               thankYouWhatsappStatus: mergedThkWa,
+              meetingSmsStatus: mergedMtgSms,
+              meetingWhatsappStatus: mergedMtgWa,
               smsCount: Math.max(cg.smsCount || 0, localG.smsCount || 0),
               whatsappCount: Math.max(cg.whatsappCount || 0, localG.whatsappCount || 0),
               lastSentChannel: cg.lastSentChannel || localG.lastSentChannel,

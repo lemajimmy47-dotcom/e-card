@@ -74,7 +74,7 @@ export default function SendMessages({ event, settings, guests, language, onUpda
   const [currentSendingIndex, setCurrentSendingIndex] = useState(-1);
   const [sendLogs, setSendLogs] = useState<string[]>([]);
   const [sendingProgress, setSendingProgress] = useState(0);
-  const [messageType, setMessageType] = useState<'invitation' | 'reminder' | 'thank-you'>('invitation');
+  const [messageType, setMessageType] = useState<'invitation' | 'meeting' | 'reminder' | 'thank-you'>('invitation');
   const [thankYouAudience, setThankYouAudience] = useState<'all' | 'confirmed' | 'attended'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending-sms' | 'pending-wa' | 'sent' | 'wa-only' | 'sms-only'>('all');
@@ -407,9 +407,23 @@ Karibu sana!`;
     }
   }, [event?.id, event?.smsTemplates]);
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = (overrides?: Partial<{
+    meetingVenue: string;
+    meetingDay: string;
+    meetingDate: string;
+    meetingTime: string;
+    meetingTemplateSw: string;
+    meetingTemplateEn: string;
+  }>) => {
     setIsTemplateSaving(true);
     setTemplateSavedSuccess(false);
+
+    const nextMeetingVenue = overrides?.meetingVenue ?? meetingVenue;
+    const nextMeetingDay = overrides?.meetingDay ?? meetingDay;
+    const nextMeetingDate = overrides?.meetingDate ?? meetingDate;
+    const nextMeetingTime = overrides?.meetingTime ?? meetingTime;
+    const nextMeetingTemplateSw = overrides?.meetingTemplateSw ?? meetingTemplateSw;
+    const nextMeetingTemplateEn = overrides?.meetingTemplateEn ?? meetingTemplateEn;
 
     // Save to local storage
     if (event?.id) {
@@ -419,6 +433,12 @@ Karibu sana!`;
       safeLocalStorage.setItem(`kadi_thanks_template_${event.id}_en`, thankYouTemplateEn);
       safeLocalStorage.setItem(`kadi_reminder_template_${event.id}_sw`, reminderTemplateSw);
       safeLocalStorage.setItem(`kadi_reminder_template_${event.id}_en`, reminderTemplateEn);
+      safeLocalStorage.setItem(`kadi_meeting_template_${event.id}_sw`, nextMeetingTemplateSw);
+      safeLocalStorage.setItem(`kadi_meeting_template_${event.id}_en`, nextMeetingTemplateEn);
+      safeLocalStorage.setItem(`kadi_meeting_venue_${event.id}`, nextMeetingVenue);
+      safeLocalStorage.setItem(`kadi_meeting_day_${event.id}`, nextMeetingDay);
+      safeLocalStorage.setItem(`kadi_meeting_date_${event.id}`, nextMeetingDate);
+      safeLocalStorage.setItem(`kadi_meeting_time_${event.id}`, nextMeetingTime);
     }
     safeLocalStorage.setItem('kadi_message_template_sw', invitationTemplateSw);
     safeLocalStorage.setItem('kadi_message_template_en', invitationTemplateEn);
@@ -426,6 +446,12 @@ Karibu sana!`;
     safeLocalStorage.setItem('kadi_thanks_template_en', thankYouTemplateEn);
     safeLocalStorage.setItem('kadi_reminder_template_sw', reminderTemplateSw);
     safeLocalStorage.setItem('kadi_reminder_template_en', reminderTemplateEn);
+    safeLocalStorage.setItem('kadi_meeting_template_sw', nextMeetingTemplateSw);
+    safeLocalStorage.setItem('kadi_meeting_template_en', nextMeetingTemplateEn);
+    safeLocalStorage.setItem('kadi_meeting_venue', nextMeetingVenue);
+    safeLocalStorage.setItem('kadi_meeting_day', nextMeetingDay);
+    safeLocalStorage.setItem('kadi_meeting_date', nextMeetingDate);
+    safeLocalStorage.setItem('kadi_meeting_time', nextMeetingTime);
 
     // Save to general database state
     if (onUpdateEvent && event) {
@@ -438,7 +464,13 @@ Karibu sana!`;
           generalThanksSw: thankYouTemplateSw,
           generalThanksEn: thankYouTemplateEn,
           reminderTemplateSw,
-          reminderTemplateEn
+          reminderTemplateEn,
+          meetingTemplateSw: nextMeetingTemplateSw,
+          meetingTemplateEn: nextMeetingTemplateEn,
+          meetingVenue: nextMeetingVenue,
+          meetingDay: nextMeetingDay,
+          meetingDate: nextMeetingDate,
+          meetingTime: nextMeetingTime
         }
       });
     }
@@ -618,8 +650,116 @@ Thank you - EVENT CARD`;
     safeLocalStorage.setItem('kadi_reminder_template_en', reminderTemplateEn);
   }, [reminderTemplateSw, reminderTemplateEn, event?.id]);
 
+  const defaultMeetingSwText = `Habari {name},
+
+Tunakukumbusha na kukukaribisha kwenye kikao cha maandalizi ya {eventName}.
+
+Mahali: {ukumbi_kikao}
+Siku: {siku_kikao}, tarehe {tarehe_kikao}
+Muda: Kuanzia {muda_kikao}
+
+Mnakaribishwa wote na tuwahi kwa wakati. Uwepo wako ni muhimu sana katika kufanikisha shughuli hii.
+Kwa mawasiliano: {mwasiliano}`;
+
+  const defaultMeetingEnText = `Hello {name},
+
+We warmly remind and invite you to the preparation meeting for {eventName}.
+
+Venue: {ukumbi_kikao}
+Day: {siku_kikao}, date {tarehe_kikao}
+Time: Starting from {muda_kikao}
+
+You are all welcome and please arrive on time. Your presence is very important for the success of this event.
+For inquiries: {mwasiliano}`;
+
+  const [meetingVenue, setMeetingVenue] = useState<string>(() => {
+    if (event?.smsTemplates?.meetingVenue) return event.smsTemplates.meetingVenue;
+    const key = event?.id ? `kadi_meeting_venue_${event.id}` : 'kadi_meeting_venue';
+    return safeLocalStorage.getItem(key) || 'Kimara Korogwe Resort Pub';
+  });
+
+  const [meetingDay, setMeetingDay] = useState<string>(() => {
+    if (event?.smsTemplates?.meetingDay) return event.smsTemplates.meetingDay;
+    const key = event?.id ? `kadi_meeting_day_${event.id}` : 'kadi_meeting_day';
+    return safeLocalStorage.getItem(key) || 'Jumapili';
+  });
+
+  const [meetingDate, setMeetingDate] = useState<string>(() => {
+    if (event?.smsTemplates?.meetingDate) return event.smsTemplates.meetingDate;
+    const key = event?.id ? `kadi_meeting_date_${event.id}` : 'kadi_meeting_date';
+    return safeLocalStorage.getItem(key) || '22/11/2026';
+  });
+
+  const [meetingTime, setMeetingTime] = useState<string>(() => {
+    if (event?.smsTemplates?.meetingTime) return event.smsTemplates.meetingTime;
+    const key = event?.id ? `kadi_meeting_time_${event.id}` : 'kadi_meeting_time';
+    return safeLocalStorage.getItem(key) || 'saa 10:00 jioni';
+  });
+
+  const [meetingTemplateSw, setMeetingTemplateSw] = useState<string>(() => {
+    const fromEvent = event?.smsTemplates?.meetingTemplateSw;
+    if (fromEvent) return fromEvent;
+    const key = event?.id ? `kadi_meeting_template_${event.id}_sw` : 'kadi_meeting_template_sw';
+    return safeLocalStorage.getItem(key) || defaultMeetingSwText;
+  });
+
+  const [meetingTemplateEn, setMeetingTemplateEn] = useState<string>(() => {
+    const fromEvent = event?.smsTemplates?.meetingTemplateEn;
+    if (fromEvent) return fromEvent;
+    const key = event?.id ? `kadi_meeting_template_${event.id}_en` : 'kadi_meeting_template_en';
+    return safeLocalStorage.getItem(key) || defaultMeetingEnText;
+  });
+
+  useEffect(() => {
+    if (event?.smsTemplates?.meetingTemplateSw) {
+      setMeetingTemplateSw(event.smsTemplates.meetingTemplateSw);
+    }
+    if (event?.smsTemplates?.meetingTemplateEn) {
+      setMeetingTemplateEn(event.smsTemplates.meetingTemplateEn);
+    }
+    if (event?.smsTemplates?.meetingVenue !== undefined) {
+      setMeetingVenue(event.smsTemplates.meetingVenue);
+    }
+    if (event?.smsTemplates?.meetingDay !== undefined) {
+      setMeetingDay(event.smsTemplates.meetingDay);
+    }
+    if (event?.smsTemplates?.meetingDate !== undefined) {
+      setMeetingDate(event.smsTemplates.meetingDate);
+    }
+    if (event?.smsTemplates?.meetingTime !== undefined) {
+      setMeetingTime(event.smsTemplates.meetingTime);
+    }
+  }, [
+    event?.id,
+    event?.smsTemplates?.meetingTemplateSw,
+    event?.smsTemplates?.meetingTemplateEn,
+    event?.smsTemplates?.meetingVenue,
+    event?.smsTemplates?.meetingDay,
+    event?.smsTemplates?.meetingDate,
+    event?.smsTemplates?.meetingTime
+  ]);
+
+  useEffect(() => {
+    if (event?.id) {
+      safeLocalStorage.setItem(`kadi_meeting_template_${event.id}_sw`, meetingTemplateSw);
+      safeLocalStorage.setItem(`kadi_meeting_template_${event.id}_en`, meetingTemplateEn);
+      safeLocalStorage.setItem(`kadi_meeting_venue_${event.id}`, meetingVenue);
+      safeLocalStorage.setItem(`kadi_meeting_day_${event.id}`, meetingDay);
+      safeLocalStorage.setItem(`kadi_meeting_date_${event.id}`, meetingDate);
+      safeLocalStorage.setItem(`kadi_meeting_time_${event.id}`, meetingTime);
+    }
+    safeLocalStorage.setItem('kadi_meeting_template_sw', meetingTemplateSw);
+    safeLocalStorage.setItem('kadi_meeting_template_en', meetingTemplateEn);
+    safeLocalStorage.setItem('kadi_meeting_venue', meetingVenue);
+    safeLocalStorage.setItem('kadi_meeting_day', meetingDay);
+    safeLocalStorage.setItem('kadi_meeting_date', meetingDate);
+    safeLocalStorage.setItem('kadi_meeting_time', meetingTime);
+  }, [meetingTemplateSw, meetingTemplateEn, meetingVenue, meetingDay, meetingDate, meetingTime, event?.id]);
+
   const activeTemplateValue = messageType === 'thank-you' 
     ? (language === 'en' ? thankYouTemplateEn : thankYouTemplateSw)
+    : messageType === 'meeting'
+    ? (language === 'en' ? meetingTemplateEn : meetingTemplateSw)
     : messageType === 'reminder'
     ? (language === 'en' ? reminderTemplateEn : reminderTemplateSw)
     : (language === 'en' ? invitationTemplateEn : invitationTemplateSw);
@@ -632,6 +772,12 @@ Thank you - EVENT CARD`;
         setThankYouTemplateEn(cleanVal);
       } else {
         setThankYouTemplateSw(cleanVal);
+      }
+    } else if (messageType === 'meeting') {
+      if (language === 'en') {
+        setMeetingTemplateEn(cleanVal);
+      } else {
+        setMeetingTemplateSw(cleanVal);
       }
     } else if (messageType === 'reminder') {
       if (language === 'en') {
@@ -804,6 +950,12 @@ Asante sana na Mungu akubariki!
 Unatayarisha Harusi, Sendoff au Sherehe? Pata kadi za kisasa za kidijitali za QR Code, mfumo wa kukumbusha michango na kutuma SMS za mialiko kwa bei nafuu kabisa!
 Piga / WhatsApp: 0653578184`);
       }
+    } else if (messageType === 'meeting') {
+      if (language === 'en') {
+        setMeetingTemplateEn(defaultMeetingEnText);
+      } else {
+        setMeetingTemplateSw(defaultMeetingSwText);
+      }
     } else if (messageType === 'reminder') {
       if (language === 'en') {
         setReminderTemplateEn(defaultReminderEnText);
@@ -856,6 +1008,12 @@ Karibu sana!`);
 
   // Get delivery status for guest based on active messageType
   const getGuestSmsStatus = (g: Guest): 'Sijatuma' | 'Inatuma' | 'Imetumia' => {
+    if (messageType === 'meeting') {
+      const st = g.meetingSmsStatus || g.customFields?.meetingSmsStatus;
+      if (isStatusSent(st)) return 'Imetumia';
+      if (st === 'Inatuma') return 'Inatuma';
+      return 'Sijatuma';
+    }
     if (messageType === 'reminder') {
       if (isStatusSent(g.reminderSmsStatus)) return 'Imetumia';
       if (g.reminderSmsStatus === 'Inatuma') return 'Inatuma';
@@ -872,6 +1030,12 @@ Karibu sana!`);
   };
 
   const getGuestWhatsappStatus = (g: Guest): 'Sijatuma' | 'Inatuma' | 'Imetumia' => {
+    if (messageType === 'meeting') {
+      const st = g.meetingWhatsappStatus || g.customFields?.meetingWhatsappStatus;
+      if (isStatusSent(st)) return 'Imetumia';
+      if (st === 'Inatuma') return 'Inatuma';
+      return 'Sijatuma';
+    }
     if (messageType === 'reminder') {
       if (isStatusSent(g.reminderWhatsappStatus)) return 'Imetumia';
       if (g.reminderWhatsappStatus === 'Inatuma') return 'Inatuma';
@@ -893,7 +1057,11 @@ Karibu sana!`);
         if (channel === 'sms') {
           const cur = getGuestSmsStatus(g);
           const next = isStatusSent(cur) ? 'Sijatuma' : 'Imetumia';
-          if (messageType === 'reminder') {
+          if (messageType === 'meeting') {
+            const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+            cf.meetingSmsStatus = next;
+            return { ...g, customFields: cf, meetingSmsStatus: next as any };
+          } else if (messageType === 'reminder') {
             return { ...g, reminderSmsStatus: next as any };
           } else if (messageType === 'thank-you') {
             return { ...g, thankYouSmsStatus: next as any };
@@ -903,7 +1071,11 @@ Karibu sana!`);
         } else {
           const cur = getGuestWhatsappStatus(g);
           const next = isStatusSent(cur) ? 'Sijatuma' : 'Imetumia';
-          if (messageType === 'reminder') {
+          if (messageType === 'meeting') {
+            const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+            cf.meetingWhatsappStatus = next;
+            return { ...g, customFields: cf, meetingWhatsappStatus: next as any };
+          } else if (messageType === 'reminder') {
             return { ...g, reminderWhatsappStatus: next as any };
           } else if (messageType === 'thank-you') {
             return { ...g, thankYouWhatsappStatus: next as any };
@@ -922,7 +1094,17 @@ Karibu sana!`);
     const label = channel === 'sms' ? 'SMS' : channel === 'whatsapp' ? 'WhatsApp' : 'SMS na WhatsApp';
     const updated = guests.map(g => {
       if (g.id === guestId) {
-        if (messageType === 'reminder') {
+        if (messageType === 'meeting') {
+          const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+          if (channel === 'sms' || channel === 'all') cf.meetingSmsStatus = 'Sijatuma';
+          if (channel === 'whatsapp' || channel === 'all') cf.meetingWhatsappStatus = 'Sijatuma';
+          return {
+            ...g,
+            customFields: cf,
+            ...(channel === 'sms' || channel === 'all' ? { meetingSmsStatus: 'Sijatuma' as const } : {}),
+            ...(channel === 'whatsapp' || channel === 'all' ? { meetingWhatsappStatus: 'Sijatuma' as const } : {})
+          };
+        } else if (messageType === 'reminder') {
           return {
             ...g,
             ...(channel === 'sms' || channel === 'all' ? { reminderSmsStatus: 'Sijatuma' as const } : {}),
@@ -1057,10 +1239,14 @@ Karibu sana!`);
 
     let text = messageType === 'thank-you' 
       ? (language === 'en' ? thankYouTemplateEn : thankYouTemplateSw)
+      : messageType === 'meeting'
+      ? (language === 'en' ? meetingTemplateEn : meetingTemplateSw)
       : messageType === 'reminder'
       ? (language === 'en' ? reminderTemplateEn : reminderTemplateSw)
       : (language === 'en' ? invitationTemplateEn : invitationTemplateSw);
-    const contacts = [event.contact1, event.contact2, event.contact3].filter(Boolean).join('\n');
+    const contacts = messageType === 'meeting'
+      ? [event.contact1, event.contact2, event.contact3].filter(Boolean).join(', ')
+      : [event.contact1, event.contact2, event.contact3].filter(Boolean).join('\n');
 
     const translatePeriod = (p: string | null | undefined, lang: string) => {
       if (!p) return lang === 'en' ? "Afternoon" : "Mchana";
@@ -1216,6 +1402,18 @@ Karibu sana!`);
       '{13}': event.contact3Name || "",
       '{{14}}': event.contact3 || "",
       '{14}': event.contact3 || "",
+      '{ukumbi_kikao}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+      '{meetingVenue}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+      '{meeting_venue}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+      '{siku_kikao}': (meetingDay || 'Jumapili').trim(),
+      '{meetingDay}': (meetingDay || 'Jumapili').trim(),
+      '{meeting_day}': (meetingDay || 'Jumapili').trim(),
+      '{tarehe_kikao}': (meetingDate || '22/11/2026').trim(),
+      '{meetingDate}': (meetingDate || '22/11/2026').trim(),
+      '{meeting_date}': (meetingDate || '22/11/2026').trim(),
+      '{muda_kikao}': (meetingTime || 'saa 10:00 jioni').trim(),
+      '{meetingTime}': (meetingTime || 'saa 10:00 jioni').trim(),
+      '{meeting_time}': (meetingTime || 'saa 10:00 jioni').trim(),
       '{contact_3_name}': event.contact3Name || "",
       '{contact_3_phone}': event.contact3 || ""
     };
@@ -1223,6 +1421,11 @@ Karibu sana!`);
     Object.keys(replacements).forEach(key => {
       text = text.split(key).join(replacements[key]);
     });
+
+    // Clean up empty contact label if no contact numbers exist on the event
+    if (!contacts) {
+      text = text.replace(/^(Kwa mawasiliano|For inquiries):\s*$/gim, '');
+    }
 
     // Clean up potential duplicate phrases if hostName or eventName already contains prefix words
     text = text.replace(/Familia\s+ya\s+Familia\s+ya/gi, 'Familia ya');
@@ -1380,6 +1583,8 @@ Karibu sana!`);
       if (channel === 'whatsapp') {
         const rawTemplate = messageType === 'thank-you' 
           ? (language === 'en' ? thankYouTemplateEn : thankYouTemplateSw)
+          : messageType === 'meeting'
+          ? (language === 'en' ? meetingTemplateEn : meetingTemplateSw)
           : (messageType === 'reminder'
               ? (language === 'en' ? reminderTemplateEn : reminderTemplateSw)
               : (language === 'en' ? invitationTemplateEn : invitationTemplateSw));
@@ -1387,7 +1592,9 @@ Karibu sana!`);
           ? window.location.origin 
           : 'https://eventcard.co.tz';
         const appUrl = `${currentOrigin}/?invite=${target.code || target.id}&eventId=${event.id}&lang=${language}`;
-        const contacts = [event.contact1, event.contact2, event.contact3].filter(Boolean).join('\n');
+        const contacts = messageType === 'meeting'
+          ? [event.contact1, event.contact2, event.contact3].filter(Boolean).join(', ')
+          : [event.contact1, event.contact2, event.contact3].filter(Boolean).join('\n');
 
         const translatePeriod = (p: string | null | undefined, lang: string) => {
           if (!p) return lang === 'en' ? "Afternoon" : "Mchana";
@@ -1498,6 +1705,18 @@ Karibu sana!`);
           '{13}': event.contact3Name || "",
           '{{14}}': event.contact3 || "",
           '{14}': event.contact3 || "",
+          '{ukumbi_kikao}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+          '{meetingVenue}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+          '{meeting_venue}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+          '{siku_kikao}': (meetingDay || 'Jumapili').trim(),
+          '{meetingDay}': (meetingDay || 'Jumapili').trim(),
+          '{meeting_day}': (meetingDay || 'Jumapili').trim(),
+          '{tarehe_kikao}': (meetingDate || '22/11/2026').trim(),
+          '{meetingDate}': (meetingDate || '22/11/2026').trim(),
+          '{meeting_date}': (meetingDate || '22/11/2026').trim(),
+          '{muda_kikao}': (meetingTime || 'saa 10:00 jioni').trim(),
+          '{meetingTime}': (meetingTime || 'saa 10:00 jioni').trim(),
+          '{meeting_time}': (meetingTime || 'saa 10:00 jioni').trim(),
           '{contact_3_name}': event.contact3Name || "",
           '{contact_3_phone}': event.contact3 || ""
         };
@@ -1541,7 +1760,7 @@ Karibu sana!`);
           channel,
           scheduleTime: formattedScheduleTime,
           templateParams,
-          templateName: metaTemplateName || (messageType === 'thank-you' ? 'asante_kushiriki' : (messageType === 'reminder' ? 'ukumbusho' : 'mwaliko_wa_sherehe')),
+          templateName: metaTemplateName || (messageType === 'thank-you' ? 'asante_kushiriki' : (messageType === 'meeting' ? 'kikao_cha_shughuli' : (messageType === 'reminder' ? 'ukumbusho' : 'mwaliko_wa_sherehe'))),
           imageUrl: channel === 'whatsapp' ? compatibleImageUrl : '',
           lang: language,
           msgType: messageType,
@@ -1582,7 +1801,21 @@ Karibu sana!`);
           const isSmsSent = actualChannel === 'sms';
           const isWaSent = actualChannel === 'whatsapp';
 
-          if (messageType === 'reminder') {
+          if (messageType === 'meeting') {
+            const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+            if (isSmsSent) cf.meetingSmsStatus = 'Imetumia';
+            if (isWaSent) cf.meetingWhatsappStatus = 'Imetumia';
+            return {
+              ...g,
+              customFields: cf,
+              meetingSmsStatus: isSmsSent ? ('Imetumia' as const) : ((g.meetingSmsStatus || g.customFields?.meetingSmsStatus || 'Sijatuma') as 'Sijatuma' | 'Inatuma' | 'Imetumia'),
+              meetingWhatsappStatus: isWaSent ? ('Imetumia' as const) : ((g.meetingWhatsappStatus || g.customFields?.meetingWhatsappStatus || 'Sijatuma') as 'Sijatuma' | 'Inatuma' | 'Imetumia'),
+              smsCount: isSmsSent ? currentSmsCount + 1 : currentSmsCount,
+              whatsappCount: isWaSent ? currentWhatsappCount + 1 : currentWhatsappCount,
+              lastSentChannel: actualChannel,
+              lastSentLang: language
+            };
+          } else if (messageType === 'reminder') {
             return {
               ...g,
               reminderSmsStatus: isSmsSent ? ('Imetumia' as const) : (g.reminderSmsStatus || 'Sijatuma'),
@@ -1687,10 +1920,14 @@ Karibu sana!`);
       let templateParams: string[] | undefined = undefined;
       const rawTemplate = messageType === 'thank-you' 
         ? (language === 'en' ? thankYouTemplateEn : thankYouTemplateSw)
+        : messageType === 'meeting'
+        ? (language === 'en' ? meetingTemplateEn : meetingTemplateSw)
         : (messageType === 'reminder'
             ? (language === 'en' ? reminderTemplateEn : reminderTemplateSw)
             : (language === 'en' ? invitationTemplateEn : invitationTemplateSw));
-      const contacts = [event.contact1, event.contact2, event.contact3].filter(Boolean).join('\n');
+      const contacts = messageType === 'meeting'
+        ? [event.contact1, event.contact2, event.contact3].filter(Boolean).join(', ')
+        : [event.contact1, event.contact2, event.contact3].filter(Boolean).join('\n');
 
       const translatePeriod = (p: string | null | undefined, lang: string) => {
         if (!p) return lang === 'en' ? "Afternoon" : "Mchana";
@@ -1801,6 +2038,18 @@ Karibu sana!`);
         '{13}': event.contact3Name || "",
         '{{14}}': event.contact3 || "",
         '{14}': event.contact3 || "",
+        '{ukumbi_kikao}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+        '{meetingVenue}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+        '{meeting_venue}': (meetingVenue || 'Kimara Korogwe Resort Pub').trim(),
+        '{siku_kikao}': (meetingDay || 'Jumapili').trim(),
+        '{meetingDay}': (meetingDay || 'Jumapili').trim(),
+        '{meeting_day}': (meetingDay || 'Jumapili').trim(),
+        '{tarehe_kikao}': (meetingDate || '22/11/2026').trim(),
+        '{meetingDate}': (meetingDate || '22/11/2026').trim(),
+        '{meeting_date}': (meetingDate || '22/11/2026').trim(),
+        '{muda_kikao}': (meetingTime || 'saa 10:00 jioni').trim(),
+        '{meetingTime}': (meetingTime || 'saa 10:00 jioni').trim(),
+        '{meeting_time}': (meetingTime || 'saa 10:00 jioni').trim(),
         '{contact_3_name}': event.contact3Name || "",
         '{contact_3_phone}': event.contact3 || ""
       };
@@ -1820,7 +2069,7 @@ Karibu sana!`);
         phone: guest.phone,
         text: mainText,
         templateParams: templateParams,
-        templateName: metaTemplateName || (messageType === 'thank-you' ? 'asante_kushiriki' : (messageType === 'reminder' ? 'ukumbusho' : 'mwaliko_wa_sherehe')),
+        templateName: metaTemplateName || (messageType === 'thank-you' ? 'asante_kushiriki' : (messageType === 'meeting' ? 'kikao_cha_shughuli' : (messageType === 'reminder' ? 'ukumbusho' : 'mwaliko_wa_sherehe'))),
         imageUrl: channel === 'whatsapp' ? compatibleImageUrl : '',
         lang: language,
         messageType: messageType
@@ -2086,7 +2335,11 @@ Karibu sana!`);
     const targetIds = new Set(listToReset.map(g => g.id));
     const reset = guests.map(g => {
       if (targetIds.has(g.id)) {
-        if (messageType === 'reminder') {
+        if (messageType === 'meeting') {
+          const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+          cf.meetingSmsStatus = 'Sijatuma';
+          return { ...g, customFields: cf, meetingSmsStatus: 'Sijatuma' as const };
+        } else if (messageType === 'reminder') {
           return { ...g, reminderSmsStatus: 'Sijatuma' as const };
         } else if (messageType === 'thank-you') {
           return { ...g, thankYouSmsStatus: 'Sijatuma' as const };
@@ -2118,7 +2371,11 @@ Karibu sana!`);
     const targetIds = new Set(listToReset.map(g => g.id));
     const reset = guests.map(g => {
       if (targetIds.has(g.id)) {
-        if (messageType === 'reminder') {
+        if (messageType === 'meeting') {
+          const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+          cf.meetingWhatsappStatus = 'Sijatuma';
+          return { ...g, customFields: cf, meetingWhatsappStatus: 'Sijatuma' as const };
+        } else if (messageType === 'reminder') {
           return { ...g, reminderWhatsappStatus: 'Sijatuma' as const };
         } else if (messageType === 'thank-you') {
           return { ...g, thankYouWhatsappStatus: 'Sijatuma' as const };
@@ -2150,7 +2407,12 @@ Karibu sana!`);
     const targetIds = new Set(listToReset.map(g => g.id));
     const reset = guests.map(g => {
       if (targetIds.has(g.id)) {
-        if (messageType === 'reminder') {
+        if (messageType === 'meeting') {
+          const cf = (g.customFields && typeof g.customFields === 'object') ? { ...g.customFields } : {};
+          cf.meetingSmsStatus = 'Sijatuma';
+          cf.meetingWhatsappStatus = 'Sijatuma';
+          return { ...g, customFields: cf, meetingSmsStatus: 'Sijatuma' as const, meetingWhatsappStatus: 'Sijatuma' as const };
+        } else if (messageType === 'reminder') {
           return { ...g, reminderSmsStatus: 'Sijatuma' as const, reminderWhatsappStatus: 'Sijatuma' as const };
         } else if (messageType === 'thank-you') {
           return { ...g, thankYouSmsStatus: 'Sijatuma' as const, thankYouWhatsappStatus: 'Sijatuma' as const };
@@ -2372,12 +2634,14 @@ Karibu sana!`);
             onClick={() => handleSendAll('sms')}
             disabled={isSendingAll || filteredGuests.length === 0}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 font-bold shadow-md hover:shadow-blue-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-xs cursor-pointer"
-            title={isEn ? `Send SMS ${messageType} to all guests` : `Tuma SMS za ${messageType === 'reminder' ? 'Ukumbusho' : messageType === 'thank-you' ? 'Shukrani' : 'Mialiko'} kwa wageni wote`}
+            title={isEn ? `Send SMS ${messageType} to all guests` : `Tuma SMS za ${messageType === 'meeting' ? 'Kikao cha Shughuli' : messageType === 'reminder' ? 'Ukumbusho' : messageType === 'thank-you' ? 'Shukrani' : 'Mialiko'} kwa wageni wote`}
           >
             <Smartphone className="w-3.5 h-3.5 text-blue-200" />
             <span>
               {isSendingAll 
                 ? (isEn ? 'Sending...' : 'Inatuma...') 
+                : messageType === 'meeting'
+                ? (isEn ? 'Send Meeting Reminder (SMS)' : 'Tuma Kikao kwa Wote (SMS)')
                 : messageType === 'reminder'
                 ? (isEn ? 'Send All Reminders (SMS)' : 'Tuma Ukumbusho kwa Wote (SMS)')
                 : messageType === 'thank-you'
@@ -2396,12 +2660,14 @@ Karibu sana!`);
             onClick={() => handleSendAll('whatsapp')}
             disabled={isSendingAll || filteredGuests.length === 0}
             className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 font-bold shadow-md hover:shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-xs cursor-pointer"
-            title={isEn ? `Send WhatsApp ${messageType} to all guests` : `Tuma WhatsApp za ${messageType === 'reminder' ? 'Ukumbusho' : messageType === 'thank-you' ? 'Shukrani' : 'Mialiko'} kwa wageni wote`}
+            title={isEn ? `Send WhatsApp ${messageType} to all guests` : `Tuma WhatsApp za ${messageType === 'meeting' ? 'Kikao cha Shughuli' : messageType === 'reminder' ? 'Ukumbusho' : messageType === 'thank-you' ? 'Shukrani' : 'Mialiko'} kwa wageni wote`}
           >
             <MessageSquare className="w-3.5 h-3.5 text-emerald-200" />
             <span>
               {isSendingAll 
                 ? (isEn ? 'Sending...' : 'Inatuma...') 
+                : messageType === 'meeting'
+                ? (isEn ? 'Send Meeting Reminder (WA)' : 'Tuma Kikao kwa Wote (WA)')
                 : messageType === 'reminder'
                 ? (isEn ? 'Send All Reminders (WA)' : 'Tuma Ukumbusho kwa Wote (WA)')
                 : messageType === 'thank-you'
@@ -2419,9 +2685,10 @@ Karibu sana!`);
 
       {/* Message Type Selector */}
       <div className="flex flex-col space-y-3 border-b border-white/10 pb-4">
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           {[
             { id: 'invitation', label: language === 'en' ? 'Invitations' : 'Mialiko' },
+            { id: 'meeting', label: language === 'en' ? 'Activity Meeting' : 'Kikao cha Shughuli' },
             { id: 'reminder', label: language === 'en' ? 'Day of Event Reminder' : 'Ukumbusho (Siku ya Sherehe)' },
             { id: 'thank-you', label: language === 'en' ? 'Thank You' : 'Shukrani' }
           ].map(tab => (
@@ -2430,7 +2697,7 @@ Karibu sana!`);
               onClick={() => setMessageType(tab.id as any)}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
                 messageType === tab.id 
-                  ? 'bg-blue-600 text-white shadow-lg' 
+                  ? (tab.id === 'meeting' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg')
                   : 'text-slate-400 hover:bg-white/5 border border-transparent'
               }`}
             >
@@ -2438,6 +2705,16 @@ Karibu sana!`);
             </button>
           ))}
         </div>
+
+        {messageType === 'meeting' && (
+          <div className="flex items-center justify-between gap-2 bg-indigo-500/10 px-3 py-2 rounded-xl border border-indigo-500/20 text-[11px] text-indigo-200">
+            <span>
+              {language === 'en'
+                ? `Target Audience: All ${filteredGuests.length} invited guests. Meeting variables update all previews automatically.`
+                : `Walengwa: Wageni Wote Waalikwa (${filteredGuests.length}). Badilisha Ukumbi, Siku, Tarehe au Muda hapa chini kwa kila kikao kipya.`}
+            </span>
+          </div>
+        )}
 
         {messageType === 'thank-you' && (
           <div className="flex items-center space-x-2 bg-white/5 p-2 rounded-xl border border-white/10 w-full sm:w-auto overflow-x-auto">
@@ -2702,6 +2979,8 @@ Karibu sana!`);
               <h3 className="text-sm font-bold text-white">
                 {messageType === 'thank-you' 
                   ? 'Hariri Muundo wa Shukrani (Edit Thank You Template)' 
+                  : messageType === 'meeting'
+                  ? 'Hariri Ukumbusho wa Kikao cha Shughuli (Activity Meeting Reminder)'
                   : messageType === 'reminder'
                   ? 'Hariri Ukumbusho wa Siku ya Sherehe (Day of Event Reminder)'
                   : 'Hariri Muundo wa Mwaliko (Edit Invitation Template)'}
@@ -2709,6 +2988,8 @@ Karibu sana!`);
               <p className="text-[10px] text-slate-400">
                 {messageType === 'thank-you'
                   ? 'Badilisha maandishi ya shukrani yatakayotumwa kwa kila mgeni.'
+                  : messageType === 'meeting'
+                  ? 'Weka taarifa za kikao (Ukumbi, Siku, Tarehe, Muda) na ujumbe utajazwa kiotomatiki kwa wageni wote waalikwa.'
                   : messageType === 'reminder'
                   ? 'Badilisha ujumbe wa kukumbusha wageni siku ya sherehe kutohau kadi zao.'
                   : 'Badilisha maandishi ya mwaliko yatakayotumwa kwa kila mgeni kwa kutumia mifano ya mabano dynamic.'}
@@ -2718,7 +2999,7 @@ Karibu sana!`);
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
               type="button"
-              onClick={handleSaveTemplate}
+              onClick={() => handleSaveTemplate()}
               disabled={isTemplateSaving}
               className={`text-[10px] border px-2.5 py-1.5 rounded-lg transition font-mono flex items-center gap-1 cursor-pointer font-bold ${
                 templateSavedSuccess 
@@ -2781,6 +3062,99 @@ Karibu sana!`);
                   Weka Upya Ujumbe Huu
                 </button>
               </div>
+            ) : messageType === 'meeting' ? (
+              <div className="space-y-3">
+                <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 text-indigo-300">
+                    <Clock className="w-4 h-4 shrink-0 text-indigo-400" />
+                    <span className="font-semibold text-[11.5px]">SMS ya Kukumbusha Vikao vya Shughuli (Variables za Kikao)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMeetingTemplateSw(defaultMeetingSwText);
+                      setMeetingTemplateEn(defaultMeetingEnText);
+                      handleSaveTemplate({
+                        meetingTemplateSw: defaultMeetingSwText,
+                        meetingTemplateEn: defaultMeetingEnText
+                      });
+                    }}
+                    className="text-[10px] px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition shrink-0 cursor-pointer shadow-sm"
+                  >
+                    Weka Ujumbe Rasmi wa Kikao
+                  </button>
+                </div>
+
+                {/* Editable Meeting Variables */}
+                <div className="bg-slate-950/60 border border-indigo-500/20 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-indigo-300">
+                      Taarifa za Kikao (Meeting Variables)
+                    </span>
+                    <span className="text-[9.5px] text-slate-400">
+                      Hubadilisha {'{ukumbi_kikao}'}, {'{siku_kikao}'}, {'{tarehe_kikao}'}, {'{muda_kikao}'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label htmlFor="inp-meeting-venue" className="text-[10px] text-slate-400 font-semibold block">
+                        Ukumbi wa Kikao (<span className="text-indigo-400 font-mono">{'{ukumbi_kikao}'}</span>)
+                      </label>
+                      <input
+                        id="inp-meeting-venue"
+                        type="text"
+                        value={meetingVenue}
+                        onChange={(e) => setMeetingVenue(e.target.value)}
+                        onBlur={() => handleSaveTemplate()}
+                        placeholder="Mf. Kimara Korogwe Resort Pub"
+                        className="w-full bg-[#070b13] border border-white/10 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label htmlFor="inp-meeting-day" className="text-[10px] text-slate-400 font-semibold block">
+                        Siku ya Kikao (<span className="text-indigo-400 font-mono">{'{siku_kikao}'}</span>)
+                      </label>
+                      <input
+                        id="inp-meeting-day"
+                        type="text"
+                        value={meetingDay}
+                        onChange={(e) => setMeetingDay(e.target.value)}
+                        onBlur={() => handleSaveTemplate()}
+                        placeholder="Mf. Jumapili"
+                        className="w-full bg-[#070b13] border border-white/10 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label htmlFor="inp-meeting-date" className="text-[10px] text-slate-400 font-semibold block">
+                        Tarehe ya Kikao (<span className="text-indigo-400 font-mono">{'{tarehe_kikao}'}</span>)
+                      </label>
+                      <input
+                        id="inp-meeting-date"
+                        type="text"
+                        value={meetingDate}
+                        onChange={(e) => setMeetingDate(e.target.value)}
+                        onBlur={() => handleSaveTemplate()}
+                        placeholder="Mf. 22/11/2026"
+                        className="w-full bg-[#070b13] border border-white/10 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-white text-[11px] font-mono focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label htmlFor="inp-meeting-time" className="text-[10px] text-slate-400 font-semibold block">
+                        Muda wa Kikao (<span className="text-indigo-400 font-mono">{'{muda_kikao}'}</span>)
+                      </label>
+                      <input
+                        id="inp-meeting-time"
+                        type="text"
+                        value={meetingTime}
+                        onChange={(e) => setMeetingTime(e.target.value)}
+                        onBlur={() => handleSaveTemplate()}
+                        placeholder="Mf. saa 10:00 jioni"
+                        className="w-full bg-[#070b13] border border-white/10 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : messageType === 'reminder' ? (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2 text-amber-300">
@@ -2829,7 +3203,7 @@ Asante - EVENT CARD`;
 
             <div className="flex flex-wrap justify-between items-center gap-2">
               <label htmlFor="message-template-textarea" className="text-[10px] uppercase font-mono tracking-wider font-bold text-slate-400">
-                {messageType === 'thank-you' ? 'Ujumbe wa Shukrani (Andika hapa)' : messageType === 'reminder' ? 'Ujumbe wa Ukumbusho Siku ya Sherehe (Andika hapa)' : 'Ujumbe wa Mwaliko (Andika hapa)'}
+                {messageType === 'thank-you' ? 'Ujumbe wa Shukrani (Andika hapa)' : messageType === 'meeting' ? 'Ujumbe wa Kikao cha Shughuli (Andika hapa)' : messageType === 'reminder' ? 'Ujumbe wa Ukumbusho Siku ya Sherehe (Andika hapa)' : 'Ujumbe wa Mwaliko (Andika hapa)'}
               </label>
               <div className="flex items-center gap-2">
                 <button
@@ -2853,14 +3227,14 @@ Asante - EVENT CARD`;
               id="message-template-textarea"
               value={activeTemplateValue}
               onChange={(e) => setActiveTemplateValue(e.target.value)}
-              onBlur={handleSaveTemplate}
+              onBlur={() => handleSaveTemplate()}
               rows={7}
               className={`w-full bg-[#070b13] border rounded-xl p-3 text-white font-mono text-[11px] focus:outline-none focus:ring-2 leading-relaxed resize-y scrollbar-thin select-all ${
                 activeTemplateValue.length > 1600 
                   ? 'border-amber-500/60 focus:ring-amber-500/40 focus:border-amber-500' 
                   : 'border-white/10 focus:ring-blue-500/40 focus:border-blue-500/60'
               }`}
-              placeholder={messageType === 'thank-you' ? "Andika ujumbe wa shukrani..." : "Andika mwaliko wako wa mgeni..."}
+              placeholder={messageType === 'thank-you' ? "Andika ujumbe wa shukrani..." : messageType === 'meeting' ? "Andika ujumbe wa kukumbusha kikao..." : "Andika mwaliko wako wa mgeni..."}
             />
 
             {/* SMS Length & Character Limit Counter Indicator */}
@@ -2950,6 +3324,13 @@ Asante - EVENT CARD`;
                   { tag: '{name}', label: 'Jina la Mgeni' },
                   { tag: '{hostName}', label: 'Mwenyeji' },
                   { tag: '{eventName}', label: 'Sherehe/Tukio' },
+                  ...(messageType === 'meeting' ? [
+                    { tag: '{ukumbi_kikao}', label: 'Ukumbi wa Kikao' },
+                    { tag: '{siku_kikao}', label: 'Siku ya Kikao' },
+                    { tag: '{tarehe_kikao}', label: 'Tarehe ya Kikao' },
+                    { tag: '{muda_kikao}', label: 'Muda wa Kikao' },
+                    { tag: '{mwasiliano}', label: 'Namba za Mawasiliano' },
+                  ] : []),
                   { tag: '{kiungo}', label: 'Kiungo cha Kadi' },
                   { tag: '{date}', label: 'Tarehe' },
                   { tag: '{venue}', label: 'Ukumbi' },

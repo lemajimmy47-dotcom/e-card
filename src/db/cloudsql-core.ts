@@ -654,6 +654,8 @@ export async function fetchFullStateFromDB(): Promise<any> {
       const remWa = (g as any).reminderWhatsappStatus || cf.reminderWhatsappStatus || "Sijatuma";
       const thkSms = (g as any).thankYouSmsStatus || cf.thankYouSmsStatus || "Sijatuma";
       const thkWa = (g as any).thankYouWhatsappStatus || cf.thankYouWhatsappStatus || "Sijatuma";
+      const mtgSms = (g as any).meetingSmsStatus || cf.meetingSmsStatus || "Sijatuma";
+      const mtgWa = (g as any).meetingWhatsappStatus || cf.meetingWhatsappStatus || "Sijatuma";
       const lastChannel = (g as any).lastSentChannel || cf.lastSentChannel || null;
       const lastLang = (g as any).lastSentLang || cf.lastSentLang || null;
 
@@ -672,6 +674,8 @@ export async function fetchFullStateFromDB(): Promise<any> {
         reminderWhatsappStatus: remWa,
         thankYouSmsStatus: thkSms,
         thankYouWhatsappStatus: thkWa,
+        meetingSmsStatus: mtgSms,
+        meetingWhatsappStatus: mtgWa,
         lastSentChannel: lastChannel,
         lastSentLang: lastLang,
         rsvpStatus: g.rsvpStatus || "Bado",

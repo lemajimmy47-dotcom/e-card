@@ -3349,6 +3349,8 @@ async function startServer() {
             let mergedRemWa = cg.reminderWhatsappStatus || (cg.customFields as any)?.reminderWhatsappStatus;
             let mergedThkSms = cg.thankYouSmsStatus || (cg.customFields as any)?.thankYouSmsStatus;
             let mergedThkWa = cg.thankYouWhatsappStatus || (cg.customFields as any)?.thankYouWhatsappStatus;
+            let mergedMtgSms = cg.meetingSmsStatus || (cg.customFields as any)?.meetingSmsStatus;
+            let mergedMtgWa = cg.meetingWhatsappStatus || (cg.customFields as any)?.meetingWhatsappStatus;
 
             if (!isExplicitReset) {
               if (isSent(sg.smsStatus) && !isSent(mergedSmsStatus)) mergedSmsStatus = sg.smsStatus;
@@ -3362,6 +3364,9 @@ async function startServer() {
 
               if (isSent(sg.thankYouSmsStatus) && !isSent(mergedThkSms)) mergedThkSms = sg.thankYouSmsStatus;
               if (isSent(sg.thankYouWhatsappStatus) && !isSent(mergedThkWa)) mergedThkWa = sg.thankYouWhatsappStatus;
+
+              if (isSent(sg.meetingSmsStatus) && !isSent(mergedMtgSms)) mergedMtgSms = sg.meetingSmsStatus;
+              if (isSent(sg.meetingWhatsappStatus) && !isSent(mergedMtgWa)) mergedMtgWa = sg.meetingWhatsappStatus;
             }
 
             const mergedCustomFields = {
@@ -3373,6 +3378,8 @@ async function startServer() {
               reminderWhatsappStatus: mergedRemWa || "Sijatuma",
               thankYouSmsStatus: mergedThkSms || "Sijatuma",
               thankYouWhatsappStatus: mergedThkWa || "Sijatuma",
+              meetingSmsStatus: mergedMtgSms || "Sijatuma",
+              meetingWhatsappStatus: mergedMtgWa || "Sijatuma",
               lastSentChannel: cg.lastSentChannel || sg.lastSentChannel,
               lastSentLang: cg.lastSentLang || sg.lastSentLang,
             };
@@ -3400,6 +3407,8 @@ async function startServer() {
               reminderWhatsappStatus: mergedRemWa || "Sijatuma",
               thankYouSmsStatus: mergedThkSms || "Sijatuma",
               thankYouWhatsappStatus: mergedThkWa || "Sijatuma",
+              meetingSmsStatus: mergedMtgSms || "Sijatuma",
+              meetingWhatsappStatus: mergedMtgWa || "Sijatuma",
               lastSentChannel: cg.lastSentChannel || sg.lastSentChannel,
               lastSentLang: cg.lastSentLang || sg.lastSentLang,
               hasWhatsApp: mergedHasWhatsApp,
@@ -6273,6 +6282,9 @@ Lema, Nguvu Moja!`;
                     if (msgType === 'reminder') {
                       cf.reminderWhatsappStatus = 'Imetumia';
                       return { ...g, customFields: cf, reminderWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
+                    } else if (msgType === 'meeting') {
+                      cf.meetingWhatsappStatus = 'Imetumia';
+                      return { ...g, customFields: cf, meetingWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouWhatsappStatus = 'Imetumia';
                       return { ...g, customFields: cf, thankYouWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
@@ -6285,6 +6297,9 @@ Lema, Nguvu Moja!`;
                     if (msgType === 'reminder') {
                       cf.reminderSmsStatus = 'Imetumia';
                       return { ...g, customFields: cf, reminderSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
+                    } else if (msgType === 'meeting') {
+                      cf.meetingSmsStatus = 'Imetumia';
+                      return { ...g, customFields: cf, meetingSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouSmsStatus = 'Imetumia';
                       return { ...g, customFields: cf, thankYouSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
@@ -6577,6 +6592,9 @@ Lema, Nguvu Moja!`;
                     if (msgType === 'reminder') {
                       cf.reminderWhatsappStatus = 'Imetumia';
                       return { ...g, customFields: cf, reminderWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
+                    } else if (msgType === 'meeting') {
+                      cf.meetingWhatsappStatus = 'Imetumia';
+                      return { ...g, customFields: cf, meetingWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouWhatsappStatus = 'Imetumia';
                       return { ...g, customFields: cf, thankYouWhatsappStatus: "Imetumia", whatsappCount: currentCount + 1, lastSentChannel: "whatsapp", lastSentLang: task.lang || "sw" };
@@ -6589,6 +6607,9 @@ Lema, Nguvu Moja!`;
                     if (msgType === 'reminder') {
                       cf.reminderSmsStatus = 'Imetumia';
                       return { ...g, customFields: cf, reminderSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
+                    } else if (msgType === 'meeting') {
+                      cf.meetingSmsStatus = 'Imetumia';
+                      return { ...g, customFields: cf, meetingSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
                     } else if (msgType === 'thank-you') {
                       cf.thankYouSmsStatus = 'Imetumia';
                       return { ...g, customFields: cf, thankYouSmsStatus: "Imetumia", smsCount: currentCount + 1, lastSentChannel: "sms", lastSentLang: task.lang || "sw" };
@@ -6843,6 +6864,32 @@ Lema, Nguvu Moja!`;
                   reminderSentChannel: usedChannel,
                   reminderSentLang: lang || "sw",
                   reminderSmsStatus: 'Imetumia',
+                  smsCount: currentCount + 1,
+                  lastSentChannel: 'sms',
+                  lastSentLang: lang || "sw"
+                };
+              }
+            } else if (activeMsgType === 'meeting') {
+              customFields.meeting_sent_channel = usedChannel;
+              customFields.meeting_sent_lang = lang || "sw";
+              if (usedChannel === 'whatsapp') {
+                const currentCount = typeof g.whatsappCount === 'number' ? g.whatsappCount : (g.whatsappStatus === 'Imetumia' ? 1 : 0);
+                customFields.meetingWhatsappStatus = 'Imetumia';
+                return {
+                  ...g,
+                  customFields,
+                  meetingWhatsappStatus: 'Imetumia',
+                  whatsappCount: currentCount + 1,
+                  lastSentChannel: 'whatsapp',
+                  lastSentLang: lang || "sw"
+                };
+              } else {
+                const currentCount = typeof g.smsCount === 'number' ? g.smsCount : (g.smsStatus === 'Imetumia' ? 1 : 0);
+                customFields.meetingSmsStatus = 'Imetumia';
+                return {
+                  ...g,
+                  customFields,
+                  meetingSmsStatus: 'Imetumia',
                   smsCount: currentCount + 1,
                   lastSentChannel: 'sms',
                   lastSentLang: lang || "sw"
